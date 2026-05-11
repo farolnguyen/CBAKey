@@ -1,0 +1,2 @@
+# Optional: Vietnamese word ranks (MIT) for corpus expansion
+wordfreq>=3.0

@@ -1,0 +1,32 @@
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include "cbakey/config/config.h"
+#include "cbakey/core/engine.h"
+#include "cbakey/core/types.h"
+
+namespace cbakey::adapter::fcitx5 {
+
+class Bridge {
+public:
+    explicit Bridge(const cbakey::config::RuntimeConfig& config);
+
+    cbakey::core::ProcessResult handleKey(const cbakey::core::KeyEvent& event);
+    const std::string& preedit() const;
+    std::vector<std::string> drainCommitted();
+    cbakey::core::InputMode inputMode() const;
+    void reset();
+    /// Clears composition and returns text that should be committed (IM deactivate / flush).
+    std::string takeCompositionForCommit();
+
+private:
+    cbakey::core::Engine engine_;
+    std::string preedit_;
+    std::vector<std::string> committed_;
+};
+
+Bridge createBridgeFromConfigFile(const std::string& configPath);
+
+}  // namespace cbakey::adapter::fcitx5

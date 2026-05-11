@@ -1,0 +1,3 @@
+{"corpus_schema_version": 1, "id": "FINAL-meta-000001", "tags": ["mode.toggle", "mode.english"], "config": "telex", "sequence": [{"key": "z", "ctrl": true, "alt": true}, {"key": "a"}], "expect": {"preedit": "", "commit": "a"}}
+{"corpus_schema_version": 1, "id": "FINAL-meta-000002", "tags": ["meta.forward", "navigation"], "config": "telex", "sequence": [{"key": "a"}, {"key": "a"}, {"aux": "Left"}], "expect": {"preedit": "", "commit": "â", "assert_meta": true, "consumed": true, "forward_original_key": true}}
+{"corpus_schema_version": 1, "id": "FINAL-meta-000003", "tags": ["template"], "skip": true, "skip_reason": "reserved row for future cases"}
