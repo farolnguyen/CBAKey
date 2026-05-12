@@ -42,25 +42,127 @@ int main() {
 
     // aa + s -> ấ
     assert(typeSequence(engine, "aas") == "ấ ");
+    assert(typeSequence(engine, "aas") == std::string("\xE1\xBA\xA5 "));
     engine.clearState();
 
     // aw + f -> ằ
     assert(typeSequence(engine, "awf") == "ằ ");
+    assert(typeSequence(engine, "awf") == std::string("\xE1\xBA\xB1 "));
     engine.clearState();
 
     // dd -> đ
     assert(typeSequence(engine, "dd") == "đ ");
+    assert(typeSequence(engine, "dd") == std::string("\xC4\x91 "));
     engine.clearState();
 
     // uw + j -> ự
     assert(typeSequence(engine, "uwj") == "ự ");
+    assert(typeSequence(engine, "uwj") == std::string("\xE1\xBB\xB1 "));
     engine.clearState();
 
-    // Undo transformed keypresses using backspace history.
+    // Repeating the same Telex tone key should emit it literally.
+    assert(typeSequence(engine, "herr") == "her ");
+    engine.clearState();
+
+    // Repeating the same Telex transform key should emit the literal pair.
+    assert(typeSequence(engine, "buss") == "bus ");
+    engine.clearState();
+    assert(typeSequence(engine, "xooong") == "xoong ");
+    engine.clearState();
+    assert(typeSequence(engine, "aww") == "aw ");
+    engine.clearState();
+    assert(typeSequence(engine, "aaa") == "aa ");
+    engine.clearState();
+    assert(typeSequence(engine, "eee") == "ee ");
+    engine.clearState();
+    assert(typeSequence(engine, "ooo") == "oo ");
+    engine.clearState();
+    assert(typeSequence(engine, "oww") == "ow ");
+    engine.clearState();
+    assert(typeSequence(engine, "uww") == "uw ");
+    engine.clearState();
+    assert(typeSequence(engine, "ddd") == "dd ");
+    engine.clearState();
+
+    // If multiple different tone keys are pressed, the last one wins.
+    assert(typeSequence(engine, "asf") == "à ");
+    engine.clearState();
+
+    // Telex z removes Vietnamese diacritics when there is something to erase.
+    assert(typeSequence(engine, "awz") == "a ");
+    engine.clearState();
+    assert(typeSequence(engine, "aasz") == "a ");
+    engine.clearState();
+    assert(typeSequence(engine, "ddz") == "d ");
+    engine.clearState();
+    assert(typeSequence(engine, "uowz") == "uo ");
+    engine.clearState();
+    assert(typeSequence(engine, "thieeuz") == "thieu ");
+    engine.clearState();
+    assert(typeSequence(engine, "eez") == "e ");
+    engine.clearState();
+    assert(typeSequence(engine, "ooz") == "o ");
+    engine.clearState();
+    assert(typeSequence(engine, "owz") == "o ");
+    engine.clearState();
+    assert(typeSequence(engine, "uwz") == "u ");
+    engine.clearState();
+
+    // If there is nothing to erase, z stays literal.
+    assert(typeSequence(engine, "az") == "az ");
+    engine.clearState();
+
+    // Telex backslash escapes special keys so they stay literal.
+    assert(typeSequence(engine, "a\\w") == "aw ");
+    engine.clearState();
+    assert(typeSequence(engine, "a\\s") == "as ");
+    engine.clearState();
+    assert(typeSequence(engine, "a\\z") == "az ");
+    engine.clearState();
+    assert(typeSequence(engine, "a\\a") == "aa ");
+    engine.clearState();
+    assert(typeSequence(engine, "e\\e") == "ee ");
+    engine.clearState();
+    assert(typeSequence(engine, "o\\o") == "oo ");
+    engine.clearState();
+    assert(typeSequence(engine, "o\\w") == "ow ");
+    engine.clearState();
+    assert(typeSequence(engine, "u\\w") == "uw ");
+    engine.clearState();
+    assert(typeSequence(engine, "d\\d") == "dd ");
+    engine.clearState();
+    assert(typeSequence(engine, "a\\b") == "a\\b ");
+    engine.clearState();
+    assert(typeSequence(engine, "\\\\") == "\\ ");
+    engine.clearState();
+
+    // Common Telex interaction order should work both ways on transform keys.
+    assert(typeSequence(engine, "asa") == "ấ ");
+    engine.clearState();
+    assert(typeSequence(engine, "ese") == "ế ");
+    engine.clearState();
+    assert(typeSequence(engine, "oso") == "ố ");
+    engine.clearState();
+    assert(typeSequence(engine, "asw") == "ắ ");
+    engine.clearState();
+    assert(typeSequence(engine, "usw") == "ứ ");
+    engine.clearState();
+    assert(typeSequence(engine, "awsf") == "ằ ");
+    engine.clearState();
+    assert(typeSequence(engine, "aasf") == "ầ ");
+    engine.clearState();
+
+    // `uo` should now support tone-before-transform ordering too.
+    assert(typeSequence(engine, "thuosoc") == "thuốc ");
+    engine.clearState();
+    assert(typeSequence(engine, "huoswng") == "hướng ");
+    engine.clearState();
+
+    // Backspace should delete the visible character, not roll back transform history.
     engine.processKey(KeyEvent{.key = 'a'});
     engine.processKey(KeyEvent{.key = 'a'});  // â
     auto undo1 = engine.processKey(KeyEvent{.key = '\b'});
-    assert(undo1.preedit == "a");
+    assert(undo1.preedit.empty());
     auto undo2 = engine.processKey(KeyEvent{.key = '\b'});
     assert(undo2.preedit.empty());
 
@@ -68,26 +170,98 @@ int main() {
     vniConfig.method = cbakey::core::InputMethod::Vni;
     Engine vniEngine(vniConfig);
 
+    auto ctrlPaste = vniEngine.processKey(KeyEvent{.key = 'v', .ctrl = true});
+    assert(!ctrlPaste.consumed);
+    assert(ctrlPaste.commit.empty());
+
     // a6 + 1 -> ấ
     assert(typeSequence(vniEngine, "a61") == "ấ ");
+    assert(typeSequence(vniEngine, "a61") == std::string("\xE1\xBA\xA5 "));
     vniEngine.clearState();
 
     // a8 + 2 -> ằ
     assert(typeSequence(vniEngine, "a82") == "ằ ");
+    assert(typeSequence(vniEngine, "a82") == std::string("\xE1\xBA\xB1 "));
     vniEngine.clearState();
 
     // d9 -> đ
     assert(typeSequence(vniEngine, "d9") == "đ ");
+    assert(typeSequence(vniEngine, "d9") == std::string("\xC4\x91 "));
     vniEngine.clearState();
 
     // u7 + 5 -> ự
     assert(typeSequence(vniEngine, "u75") == "ự ");
+    assert(typeSequence(vniEngine, "u75") == std::string("\xE1\xBB\xB1 "));
+    vniEngine.clearState();
+
+    // Repeating the same VNI tone key should emit it literally.
+    assert(typeSequence(vniEngine, "a11") == "a1 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a22") == "a2 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "he33") == "he3 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a44") == "a4 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a55") == "a5 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a12") == "à ");
+    vniEngine.clearState();
+
+    // VNI transform keys 6/7/8/9 currently keep the first transform and append later digits.
+    assert(typeSequence(vniEngine, "a66") == "â6 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "e66") == "ê6 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "o66") == "ô6 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a88") == "ă8 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "o77") == "ơ7 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "u77") == "ư7 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "d99") == "đ9 ");
+    vniEngine.clearState();
+
+    // VNI 0 removes Vietnamese diacritics when present.
+    assert(typeSequence(vniEngine, "a10") == "a ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a60") == "a ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a160") == "a ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "d90") == "d ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "u70") == "u ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "u750") == "u ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "thue610") == "thue ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "thue160") == "thue ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "ruou7750") == "ruou ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a0") == "a0 ");
+    vniEngine.clearState();
+
+    // VNI backslash escapes digit keys so they stay literal.
+    assert(typeSequence(vniEngine, "a\\1") == "a1 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a\\6") == "a6 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "u\\7") == "u7 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "d\\9") == "d9 ");
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "a\\16") == "a16 ");
     vniEngine.clearState();
 
     vniEngine.processKey(KeyEvent{.key = 'a'});
     vniEngine.processKey(KeyEvent{.key = '6'});  // â
     auto vniUndo = vniEngine.processKey(KeyEvent{.key = '\b'});
-    assert(vniUndo.preedit == "a");
+    assert(vniUndo.preedit.empty());
 
     engine.setInputMode(InputMode::Vietnamese);
     engine.clearState();
@@ -106,6 +280,26 @@ int main() {
     engine.processKey(KeyEvent{.key = 'a'});
     auto ent = engine.processKey(KeyEvent{.aux = KeyAux::Enter});
     assert(ent.commit == "a\n");
+
+    engine.clearState();
+    auto ctrlCopy = engine.processKey(KeyEvent{.key = 'c', .ctrl = true});
+    assert(!ctrlCopy.consumed);
+    assert(ctrlCopy.commit.empty());
+    assert(ctrlCopy.preedit.empty());
+
+    engine.clearState();
+    engine.processKey(KeyEvent{.key = 'a'});
+    ctrlCopy = engine.processKey(KeyEvent{.key = 'c', .ctrl = true});
+    assert(!ctrlCopy.consumed);
+    auto commitAfterShortcut = engine.processKey(KeyEvent{.key = ' '});
+    assert(commitAfterShortcut.commit == "a ");
+
+    engine.clearState();
+    for (const char k : {'a', 'a', 's'}) {
+        engine.processKey(KeyEvent{.key = k});
+    }
+    auto telexDelete = engine.processKey(KeyEvent{.aux = KeyAux::DeleteForward});
+    assert(telexDelete.preedit.empty());
 
     // Tone on correct vowel: "chào" → grave on **a**, not **o**
     engine.clearState();
@@ -457,6 +651,114 @@ int main() {
     }
     assert(lastTelex.preedit == "bướu");
 
+    engine.clearState();
+    for (const char k : {'h', 'u', 'y', 'r'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "huỷ");
+
+    engine.clearState();
+    for (const char k : {'l', 'a', 'a', 'u', 'r'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "lẩu");
+
+    engine.clearState();
+    for (const char k : {'b', 'a', 'a', 'y', 'x'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "bẫy");
+
+    engine.clearState();
+    for (const char k : {'d', 'd', 'e', 'e', 'u', 'f'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "đều");
+
+    engine.clearState();
+    for (const char k : {'n', 'o', 'i', 's'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "nói");
+
+    engine.clearState();
+    for (const char k : {'c', 'o', 'o', 'i', 's'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "cối");
+
+    engine.clearState();
+    for (const char k : {'m', 'o', 'w', 'i', 'f'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "mời");
+
+    engine.clearState();
+    for (const char k : {'b', 'u', 'i', 'j'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "bụi");
+
+    engine.clearState();
+    for (const char k : {'n', 'g', 'u', 'w', 'i', 'r'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "ngửi");
+
+    engine.clearState();
+    for (const char k : {'m', 'u', 'a', 's'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "múa");
+
+    engine.clearState();
+    for (const char k : {'h', 'o', 'a', 'i', 'f'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "hoài");
+
+    engine.clearState();
+    for (const char k : {'n', 'g', 'o', 'a', 'y', 's'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "ngoáy");
+
+    engine.clearState();
+    for (const char k : {'h', 'u', 'w', 'u', 'x'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "hữu");
+
+    engine.clearState();
+    for (const char k : {'t', 'h', 'i', 'e', 'e', 'u', 's'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "thiếu");
+
+    engine.clearState();
+    for (const char k : {'y', 'e', 'e', 'u', 'r'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "yểu");
+
+    engine.clearState();
+    for (const char k : {'k', 'h', 'u', 'y', 'a'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "khuya");
+
+    engine.clearState();
+    for (const char k : {'h', 'u', 'a', 'a', 'y'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "huây");
+
+    engine.clearState();
+    for (const char k : {'h', 'u', 'o', 'w'}) {
+        lastTelex = engine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastTelex.preedit == "huơ");
+
     // VNI: hiện — ê + nặng on ê; digit 6 must not leak when tone applied before circumflex
     vniEngine.clearState();
     ProcessResult lastVni;
@@ -544,6 +846,12 @@ int main() {
     assert(lastVni.preedit == "hướng");
 
     vniEngine.clearState();
+    for (const char k : {'h', 'u', '7', 'o', '1', '7', 'n', 'g'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "hướng");
+
+    vniEngine.clearState();
     for (const char k : {'g', 'i', 'a', '2'}) {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
@@ -574,6 +882,12 @@ int main() {
     assert(lastVni.preedit == "thuế");
 
     vniEngine.clearState();
+    for (const char k : {'t', 'h', 'u', 'e', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "thuế");
+
+    vniEngine.clearState();
     for (const char k : {'t', 'u', 'o', '6', 'i', '3'}) {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
@@ -584,6 +898,12 @@ int main() {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
     assert(lastVni.preedit == "cười");
+
+    vniEngine.clearState();
+    for (const char k : {'c', 'u', 'o', 'i', '7', '1', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "cưới");
 
     vniEngine.clearState();
     for (const char k : {'g', 'a', '6', 'u', '1'}) {
@@ -610,6 +930,18 @@ int main() {
     assert(lastVni.preedit == "cứu");
 
     vniEngine.clearState();
+    for (const char k : {'c', 'u', 'u', '7', '1'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "cứu");
+
+    vniEngine.clearState();
+    for (const char k : {'c', 'u', 'u', '1', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "cứu");
+
+    vniEngine.clearState();
     for (const char k : {'h', 'i', 'e', '6', 'u', '1'}) {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
@@ -628,10 +960,22 @@ int main() {
     assert(lastVni.preedit == "muối");
 
     vniEngine.clearState();
+    for (const char k : {'m', 'u', 'o', 'i', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "muối");
+
+    vniEngine.clearState();
     for (const char k : {'t', 'u', '7', 'o', '7', 'i', '1'}) {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
     assert(lastVni.preedit == "tưới");
+
+    vniEngine.clearState();
+    for (const char k : {'t', 'u', 'o', 'i', '3', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "tuổi");
 
     vniEngine.clearState();
     for (const char k : {'m', 'i', 'a', '1'}) {
@@ -664,10 +1008,137 @@ int main() {
     assert(lastVni.preedit == "khuấy");
 
     vniEngine.clearState();
+    for (const char k : {'k', 'h', 'u', 'a', 'y', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "khuấy");
+
+    vniEngine.clearState();
     for (const char k : {'r', 'u', '7', 'o', '7', 'u', '5'}) {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
     assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', '7', 'o', '5', '7', 'u'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', 'o', 'u', '7', '7', '5'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', 'o', 'u', '7', '5', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', 'o', 'u', '5', '7', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', 'o', '7', 'u', '7', '5'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', '7', 'o', 'u', '5', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', '7', 'o', 'u', '7', '5'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    vniEngine.clearState();
+    for (const char k : {'r', 'u', 'o', '7', 'u', '5', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "rượu");
+
+    // Broader representative VNI alternate-order coverage beyond the first M3 hotspot families.
+    vniEngine.clearState();
+    for (const char k : {'q', 'u', 'o', 'c', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "quốc");
+
+    vniEngine.clearState();
+    for (const char k : {'t', 'i', 'e', 'n', 'g', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "tiếng");
+
+    vniEngine.clearState();
+    for (const char k : {'t', 'h', 'u', 'y', 'e', 'n', '2', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "thuyền");
+
+    vniEngine.clearState();
+    for (const char k : {'n', 'g', 'u', 'y', 'e', 'n', '4', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "nguyễn");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'i', 'e', 'u', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "hiếu");
+
+    vniEngine.clearState();
+    for (const char k : {'y', 'e', 'u', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "yếu");
+
+    vniEngine.clearState();
+    for (const char k : {'d', '9', 'e', 'u', '2', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "đều");
+
+    vniEngine.clearState();
+    for (const char k : {'t', 'o', 'i', '1', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "tối");
+
+    vniEngine.clearState();
+    for (const char k : {'b', 'o', 'i', '3', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "bởi");
+
+    vniEngine.clearState();
+    for (const char k : {'g', 'u', 'i', '3', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "gửi");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'u', 'a', '1', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "hứa");
+
+    vniEngine.clearState();
+    for (const char k : {'b', 'u', 'o', 'u', '1', '7', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "bướu");
 
     vniEngine.clearState();
     for (const char k : {'t', 'o', '6', 'i', '1'}) {
@@ -800,6 +1271,138 @@ int main() {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
     assert(lastVni.preedit == "bướu");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'u', 'y', '3'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "huỷ");
+
+    vniEngine.clearState();
+    for (const char k : {'l', 'a', '6', 'u', '3'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "lẩu");
+
+    vniEngine.clearState();
+    for (const char k : {'b', 'a', '6', 'y', '4'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "bẫy");
+
+    vniEngine.clearState();
+    for (const char k : {'d', '9', 'e', '6', 'u', '2'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "đều");
+
+    vniEngine.clearState();
+    for (const char k : {'d', 'e', 'u', '9', '6', '2'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "đều");
+
+    vniEngine.clearState();
+    for (const char k : {'d', 'e', 'u', '2', '9', '6'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "đều");
+
+    vniEngine.clearState();
+    for (const char k : {'n', 'o', 'i', '1'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "nói");
+
+    vniEngine.clearState();
+    for (const char k : {'c', 'o', '6', 'i', '1'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "cối");
+
+    vniEngine.clearState();
+    for (const char k : {'m', 'o', '7', 'i', '2'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "mời");
+
+    vniEngine.clearState();
+    for (const char k : {'b', 'u', 'i', '5'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "bụi");
+
+    vniEngine.clearState();
+    for (const char k : {'n', 'g', 'u', '7', 'i', '3'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "ngửi");
+
+    vniEngine.clearState();
+    for (const char k : {'m', 'u', 'a', '1'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "múa");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'o', 'a', 'i', '2'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "hoài");
+
+    vniEngine.clearState();
+    for (const char k : {'n', 'g', 'o', 'a', 'y', '1'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "ngoáy");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'u', '7', 'u', '4'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "hữu");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'u', 'u', '7', '4'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "hữu");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'u', 'u', '4', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "hữu");
+
+    vniEngine.clearState();
+    for (const char k : {'t', 'h', 'i', 'e', '6', 'u', '1'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "thiếu");
+
+    vniEngine.clearState();
+    for (const char k : {'y', 'e', '6', 'u', '3'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "yểu");
+
+    vniEngine.clearState();
+    for (const char k : {'k', 'h', 'u', 'y', 'a'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "khuya");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'u', 'a', '6', 'y'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "huây");
+
+    vniEngine.clearState();
+    for (const char k : {'h', 'u', 'o', '7'}) {
+        lastVni = vniEngine.processKey(KeyEvent{.key = k});
+    }
+    assert(lastVni.preedit == "huơ");
 
     return 0;
 }

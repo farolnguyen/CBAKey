@@ -141,12 +141,13 @@ std::size_t longestCodaLength(const std::u32string& base) {
     return 0;
 }
 
-std::optional<SyllableSpan> parseSingleSyllable(const std::u32string& buffer, std::size_t begin) {
-    if (begin >= buffer.size()) {
+std::optional<SyllableSpan> parseSingleSyllableRange(const std::u32string& buffer,
+                                                     std::size_t begin,
+                                                     std::size_t end) {
+    if (begin >= end || end > buffer.size()) {
         return std::nullopt;
     }
 
-    const std::size_t end = buffer.size();
     const std::u32string base = baseSlice(buffer, begin, end);
     const std::size_t onsetLen = longestOnsetLength(base);
     const std::size_t codaLen = longestCodaLength(base);
@@ -188,6 +189,57 @@ std::optional<SyllableSpan> parseSingleSyllable(const std::u32string& buffer, st
     };
 }
 
+std::optional<std::vector<SyllableSpan>> segmentWholeBuffer(const std::u32string& buffer) {
+    if (buffer.empty()) {
+        return std::nullopt;
+    }
+
+    struct MemoEntry {
+        bool computed = false;
+        std::optional<std::vector<SyllableSpan>> value;
+    };
+
+    std::vector<MemoEntry> memo(buffer.size() + 1);
+    const auto solve = [&](auto&& self, std::size_t begin) -> std::optional<std::vector<SyllableSpan>> {
+        if (begin == buffer.size()) {
+            return std::vector<SyllableSpan>{};
+        }
+
+        MemoEntry& entry = memo[begin];
+        if (entry.computed) {
+            return entry.value;
+        }
+        entry.computed = true;
+
+        std::optional<std::vector<SyllableSpan>> best;
+        for (std::size_t end = begin + 1; end <= buffer.size(); ++end) {
+            const auto span = parseSingleSyllableRange(buffer, begin, end);
+            if (!span) {
+                continue;
+            }
+            const auto rest = self(self, end);
+            if (!rest) {
+                continue;
+            }
+
+            std::vector<SyllableSpan> candidate;
+            candidate.reserve(rest->size() + 1);
+            candidate.push_back(*span);
+            candidate.insert(candidate.end(), rest->begin(), rest->end());
+
+            if (!best || candidate.size() < best->size() ||
+                (candidate.size() == best->size() && candidate.back().begin > best->back().begin)) {
+                best = std::move(candidate);
+            }
+        }
+
+        entry.value = best;
+        return entry.value;
+    };
+
+    return solve(solve, 0);
+}
+
 std::optional<std::size_t> selectToneOffset(const std::u32string& tonePattern, bool hasCoda) {
     if (tonePattern.empty()) {
         return std::nullopt;
@@ -197,7 +249,7 @@ std::optional<std::size_t> selectToneOffset(const std::u32string& tonePattern, b
     }
 
     static constexpr TonePatternRule kToneRules[] = {
-        {U"oa", 0, 1},   {U"oe", 0, 1},   {U"uê", 1, 1},   {U"uy", 1, 1},
+        {U"oa", 0, 1},   {U"oe", 0, 1},   {U"ue", 1, 1},   {U"uê", 1, 1},   {U"uy", 1, 1},
         {U"ao", 0, 0},   {U"au", 0, 0},   {U"âu", 0, 0},   {U"ay", 0, 0},
         {U"ây", 0, 0},   {U"ai", 0, 0},   {U"eo", 0, 0},   {U"eu", 0, 0},
         {U"êu", 0, 0},   {U"oi", 0, 0},   {U"ôi", 0, 0},
@@ -205,9 +257,11 @@ std::optional<std::size_t> selectToneOffset(const std::u32string& tonePattern, b
         {U"ia", 0, 1},   {U"ie", 1, 1},   {U"iê", 1, 1},   {U"ya", 0, 1},
         {U"ye", 1, 1},
         {U"yê", 1, 1},   {U"uye", 2, 2},
-        {U"uyê", 2, 2},  {U"ưa", 0, 0},   {U"uây", 1, 1},
-        {U"uơ", 1, 1},   {U"ươ", 1, 1},   {U"uô", 1, 1},   {U"oai", 1, 1},
-        {U"oay", 1, 1},  {U"ưu", 0, 0},   {U"ieu", 1, 1},
+        {U"uyê", 2, 2},  {U"ưa", 0, 0},   {U"uay", 1, 1},  {U"uây", 1, 1},
+        {U"uơ", 1, 1},   {U"ươ", 1, 1},   {U"uo", 1, 1},   {U"ưo", 1, 1},   {U"uô", 1, 1},
+        {U"uou", 1, 1},  {U"uơu", 1, 1},  {U"ưou", 1, 1},  {U"uoi", 1, 1},  {U"uơi", 1, 1},
+        {U"oai", 1, 1},  {U"oay", 1, 1},  {U"uu", 0, 0},   {U"ưu", 0, 0},
+        {U"ieu", 1, 1},
         {U"yeu", 1, 1},  {U"iêu", 1, 1},  {U"yêu", 1, 1},  {U"ươu", 1, 1},
         {U"uôi", 1, 1},
         {U"ươi", 1, 1},  {U"uya", 1, 1},
@@ -247,12 +301,83 @@ std::optional<std::size_t> rightmostNucleusCharWithBase(const std::u32string& bu
     return std::nullopt;
 }
 
+std::optional<std::size_t> transformedSetForCombiningMark(char32_t ch, char32_t mark) {
+    switch (mark) {
+        case U'\u0306':
+            return baseChar(ch) == U'a' ? std::optional<std::size_t>(1) : std::nullopt;
+        case U'\u0302':
+            switch (baseChar(ch)) {
+                case U'a':
+                    return 2;
+                case U'e':
+                    return 4;
+                case U'o':
+                    return 7;
+                default:
+                    return std::nullopt;
+            }
+        case U'\u031b':
+            switch (baseChar(ch)) {
+                case U'o':
+                    return 8;
+                case U'u':
+                    return 10;
+                default:
+                    return std::nullopt;
+            }
+        default:
+            return std::nullopt;
+    }
+}
+
+std::optional<std::size_t> toneIndexForCombiningMark(char32_t mark) {
+    switch (mark) {
+        case U'\u0301':
+            return 1;
+        case U'\u0300':
+            return 2;
+        case U'\u0309':
+            return 3;
+        case U'\u0303':
+            return 4;
+        case U'\u0323':
+            return 5;
+        default:
+            return std::nullopt;
+    }
+}
+
+bool applyCombiningMark(char32_t& ch, char32_t mark) {
+    if (const auto setIdx = transformedSetForCombiningMark(ch, mark)) {
+        std::size_t oldSetIdx = 0;
+        std::size_t toneIdx = 0;
+        if (!locateInToneSets(ch, &oldSetIdx, &toneIdx)) {
+            return false;
+        }
+        (void)oldSetIdx;
+        ch = toneSets()[*setIdx][toneIdx];
+        return true;
+    }
+
+    if (const auto toneIdx = toneIndexForCombiningMark(mark)) {
+        std::size_t setIdx = 0;
+        std::size_t oldToneIdx = 0;
+        if (!locateInToneSets(ch, &setIdx, &oldToneIdx)) {
+            return false;
+        }
+        ch = toneSets()[setIdx][*toneIdx];
+        return true;
+    }
+
+    return false;
+}
+
 }  // namespace
 
 std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer) {
     std::optional<SyllableSpan> best;
     for (std::size_t begin = 0; begin < buffer.size(); ++begin) {
-        const auto span = parseSingleSyllable(buffer, begin);
+        const auto span = parseSingleSyllableRange(buffer, begin, buffer.size());
         if (!span) {
             continue;
         }
@@ -261,6 +386,39 @@ std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer) {
         }
     }
     return best;
+}
+
+std::optional<StableComposeSplit> findStableComposeSplit(const std::u32string& buffer) {
+    const auto segmented = segmentWholeBuffer(buffer);
+    if (!segmented || segmented->size() < 2) {
+        return std::nullopt;
+    }
+
+    const SyllableSpan& last = segmented->back();
+    if (last.begin == 0 || last.onset_end == last.begin) {
+        return std::nullopt;
+    }
+
+    return StableComposeSplit{
+        .committed_prefix_end = last.begin,
+        .active_suffix = last,
+    };
+}
+
+bool normalizeVietnameseNfc(std::u32string& buffer) {
+    std::u32string normalized;
+    normalized.reserve(buffer.size());
+    for (const char32_t ch : buffer) {
+        if (!normalized.empty() && applyCombiningMark(normalized.back(), ch)) {
+            continue;
+        }
+        normalized.push_back(ch);
+    }
+    if (normalized == buffer) {
+        return false;
+    }
+    buffer = std::move(normalized);
+    return true;
 }
 
 std::optional<std::size_t> selectToneVowelIndex(const std::u32string& buffer) {
@@ -294,6 +452,7 @@ bool applyTelexTransform(std::u32string& buffer, char key) {
     if (buffer.empty()) {
         return false;
     }
+    normalizeVietnameseNfc(buffer);
     if (key == 'd' && buffer.back() == U'd') {
         buffer.back() = U'đ';
         return true;
@@ -346,6 +505,7 @@ bool applyTelexTransform(std::u32string& buffer, char key) {
 }
 
 bool normalizeTelexBuffer(std::u32string& buffer) {
+    normalizeVietnameseNfc(buffer);
     const auto span = findLastSyllable(buffer);
     if (!span) {
         return false;
@@ -362,13 +522,66 @@ bool normalizeTelexBuffer(std::u32string& buffer) {
     return replaceWithSetPreserveTone(buffer, span->medial_end, 10);
 }
 
+bool removeVietnameseDiacritics(std::u32string& buffer) {
+    normalizeVietnameseNfc(buffer);
+    bool changed = false;
+    for (char32_t& ch : buffer) {
+        if (ch == U'đ') {
+            ch = U'd';
+            changed = true;
+            continue;
+        }
+
+        const char32_t base = baseChar(ch);
+        char32_t normalized = ch;
+        switch (base) {
+            case U'ă':
+            case U'â':
+                normalized = U'a';
+                break;
+            case U'ê':
+                normalized = U'e';
+                break;
+            case U'ô':
+            case U'ơ':
+                normalized = U'o';
+                break;
+            case U'ư':
+                normalized = U'u';
+                break;
+            default:
+                normalized = base;
+                break;
+        }
+        if (normalized != ch) {
+            ch = normalized;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool removeTelexDiacritics(std::u32string& buffer) {
+    return removeVietnameseDiacritics(buffer);
+}
+
+bool removeVniDiacritics(std::u32string& buffer) {
+    return removeVietnameseDiacritics(buffer);
+}
+
 bool applyVniTransform(std::u32string& buffer, char key) {
     if (buffer.empty()) {
         return false;
     }
+    normalizeVietnameseNfc(buffer);
     if (key == '9') {
         if (buffer.back() == U'd') {
             buffer.back() = U'đ';
+            return true;
+        }
+        const auto span = findLastSyllable(buffer);
+        if (span && span->begin < span->onset_end && buffer[span->begin] == U'd') {
+            buffer[span->begin] = U'đ';
             return true;
         }
         return false;
@@ -377,6 +590,19 @@ bool applyVniTransform(std::u32string& buffer, char key) {
     const auto span = findLastSyllable(buffer);
     if (!span) {
         return false;
+    }
+
+    const std::u32string tonePattern = baseSlice(buffer, span->medial_end, span->nucleus_end);
+    if (key == '7') {
+        if (tonePattern == U"uu") {
+            return replaceWithSetPreserveTone(buffer, span->medial_end, 10);
+        }
+        if (tonePattern == U"uou" || tonePattern == U"ưou") {
+            return replaceWithSetPreserveTone(buffer, span->medial_end + 1, 8);
+        }
+        if (tonePattern == U"uơu") {
+            return replaceWithSetPreserveTone(buffer, span->medial_end, 10);
+        }
     }
 
     std::optional<std::size_t> pos;

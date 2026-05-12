@@ -20,6 +20,14 @@ public:
     std::string takeCompositionForCommit();
 
 private:
+    struct RepeatTransformState {
+        bool active = false;
+        char key = '\0';
+        std::string buffer_before;
+    };
+
+    void clearRepeatTransformState();
+    void clearPendingLiteralEscape();
     bool isToggleHotkey(const KeyEvent& event) const;
     ProcessResult processVietnameseKey(const KeyEvent& event);
     ProcessResult processEnglishKey(const KeyEvent& event);
@@ -29,6 +37,8 @@ private:
     InputMode mode_ = InputMode::Vietnamese;
     std::string preeditBuffer_;
     std::vector<std::string> preeditHistory_;
+    RepeatTransformState repeatTransformState_;
+    bool pendingLiteralEscape_ = false;
 };
 
 }  // namespace cbakey::core

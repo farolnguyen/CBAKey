@@ -12,9 +12,11 @@
 #include <fcitx/text.h>
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/keysym.h>
+#include <fcitx-utils/capabilityflags.h>
 #include <fcitx-utils/textformatflags.h>
 
 #include "cbakey/adapter/fcitx5/bridge.h"
+#include "cbakey/adapter/fcitx5/preedit_strategy.h"
 
 namespace {
 
@@ -79,18 +81,36 @@ bool translateKeyEvent(const fcitx::Key& key, cbakey::core::KeyEvent& out) {
     return false;
 }
 
+cbakey::adapter::fcitx5::PreeditCapabilitySnapshot snapshotPreeditCapabilities(
+    fcitx::InputContext* inputContext) {
+    if (!inputContext) {
+        return {};
+    }
+    return cbakey::adapter::fcitx5::PreeditCapabilitySnapshot{
+        .supports_client_preedit =
+            inputContext->capabilityFlags().test(fcitx::CapabilityFlag::Preedit),
+    };
+}
+
 void pushPreeditToInputContext(fcitx::InputContext* inputContext,
-                               const std::string& preedit) {
+                               const std::string& preedit,
+                               cbakey::config::Fcitx5PreeditMode mode) {
     if (!inputContext) {
         return;
     }
     auto& panel = inputContext->inputPanel();
-    if (preedit.empty()) {
-        panel.setClientPreedit(fcitx::Text());
-    } else {
-        fcitx::Text clientText(preedit, fcitx::TextFormatFlag::NoFlag);
-        clientText.setCursor(static_cast<int>(preedit.size()));
-        panel.setClientPreedit(clientText);
+    panel.setClientPreedit(fcitx::Text());
+    panel.setPreedit(fcitx::Text());
+    if (!preedit.empty()) {
+        const auto capabilities = snapshotPreeditCapabilities(inputContext);
+        fcitx::Text text(preedit, fcitx::TextFormatFlag::NoFlag);
+        text.setCursor(static_cast<int>(preedit.size()));
+        if (cbakey::adapter::fcitx5::choosePreeditPresentation(mode, capabilities) ==
+            cbakey::adapter::fcitx5::PreeditPresentation::Client) {
+            panel.setClientPreedit(text);
+        } else {
+            panel.setPreedit(text);
+        }
     }
     inputContext->updatePreedit();
     inputContext->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
@@ -121,16 +141,20 @@ public:
 
         auto* inputContext = keyEvent.inputContext();
         auto& bridge = bridgeFor(inputContext);
+        const auto presentation = cbakey::adapter::fcitx5::choosePreeditPresentation(
+            bridge.config().fcitx5PreeditMode, snapshotPreeditCapabilities(inputContext));
         const auto result = bridge.handleKey(engineEvent);
         if (!result.consumed) {
             return;
         }
 
-        if (!result.commit.empty() && inputContext) {
-            inputContext->commitString(result.commit);
+        const auto dispatch =
+            cbakey::adapter::fcitx5::adjustCommitForPresentation(presentation, engineEvent.aux, result.commit);
+        if (!dispatch.commit.empty() && inputContext) {
+            inputContext->commitString(dispatch.commit);
         }
-        pushPreeditToInputContext(inputContext, bridge.preedit());
-        if (result.forwardOriginalKey && inputContext) {
+        pushPreeditToInputContext(inputContext, bridge.preedit(), bridge.config().fcitx5PreeditMode);
+        if ((result.forwardOriginalKey || dispatch.forward_original_key) && inputContext) {
             inputContext->forwardKey(keyEvent.key(), keyEvent.isRelease(), keyEvent.time());
         }
         keyEvent.filterAndAccept();
@@ -142,7 +166,7 @@ public:
         auto* inputContext = event.inputContext();
         auto& bridge = bridgeFor(inputContext);
         bridge.reset();
-        pushPreeditToInputContext(inputContext, "");
+        pushPreeditToInputContext(inputContext, "", bridge.config().fcitx5PreeditMode);
     }
 
     void deactivate(const fcitx::InputMethodEntry& entry,
@@ -158,7 +182,7 @@ public:
                 }
                 bridges_.erase(iter);
             }
-            pushPreeditToInputContext(inputContext, "");
+            pushPreeditToInputContext(inputContext, "", cbakey::config::Fcitx5PreeditMode::Auto);
         }
     }
 
@@ -173,7 +197,10 @@ public:
                 inputContext->commitString(pending);
             }
         }
-        pushPreeditToInputContext(inputContext, "");
+        pushPreeditToInputContext(
+            inputContext, "",
+            iter != bridges_.end() ? iter->second.config().fcitx5PreeditMode
+                                   : cbakey::config::Fcitx5PreeditMode::Auto);
     }
 
 private:

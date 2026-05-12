@@ -45,7 +45,14 @@ std::u32string decodeUtf8(const std::string& input) {
     return output;
 }
 
-std::string encodeUtf8(const std::u32string& input) {
+std::u32string decodeUtf8Normalized(const std::string& input) {
+    std::u32string output = decodeUtf8(input);
+    vi_syllable::normalizeVietnameseNfc(output);
+    return output;
+}
+
+std::string encodeUtf8(std::u32string input) {
+    vi_syllable::normalizeVietnameseNfc(input);
     std::string output;
     for (const char32_t cp : input) {
         if (cp <= 0x7F) {
@@ -156,9 +163,63 @@ bool applyToneVni(std::u32string& buffer, char key) {
     return applyToneAt(buffer, *pos, toneIndex);
 }
 
+bool isTelexRepeatableKey(char key) {
+    switch (key) {
+        case 'a':
+        case 'd':
+        case 'e':
+        case 'f':
+        case 'j':
+        case 'o':
+        case 'r':
+        case 's':
+        case 'w':
+        case 'x':
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool isVniRepeatableKey(char key) {
+    return key >= '1' && key <= '5';
+}
+
+bool isTelexEscapableKey(char key) {
+    switch (key) {
+        case '\\':
+        case 'a':
+        case 'd':
+        case 'e':
+        case 'f':
+        case 'j':
+        case 'o':
+        case 'r':
+        case 's':
+        case 'w':
+        case 'x':
+        case 'z':
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool isVniEscapableKey(char key) {
+    return key == '\\' || (key >= '1' && key <= '9');
+}
+
 }  // namespace
 
 Engine::Engine(cbakey::config::RuntimeConfig config) : config_(std::move(config)) {}
+
+void Engine::clearRepeatTransformState() {
+    repeatTransformState_ = RepeatTransformState{};
+}
+
+void Engine::clearPendingLiteralEscape() {
+    pendingLiteralEscape_ = false;
+}
 
 bool Engine::isAsciiSeparatorCommit(char ch) {
     const auto u = static_cast<unsigned char>(ch);
@@ -168,13 +229,23 @@ bool Engine::isAsciiSeparatorCommit(char ch) {
 std::string Engine::takeCompositionForCommit() {
     std::string out = std::move(preeditBuffer_);
     preeditHistory_.clear();
+    clearRepeatTransformState();
+    clearPendingLiteralEscape();
     return out;
 }
 
 ProcessResult Engine::processKey(const KeyEvent& event) {
     if (isToggleHotkey(event)) {
         mode_ = (mode_ == InputMode::English) ? InputMode::Vietnamese : InputMode::English;
+        clearRepeatTransformState();
+        clearPendingLiteralEscape();
         return ProcessResult{.preedit = "", .commit = "", .consumed = true};
+    }
+
+    // Common application shortcuts (copy/paste, word navigation, etc.) should
+    // bypass IME processing unless they are our explicit toggle hotkey.
+    if (event.ctrl || event.alt) {
+        return ProcessResult{};
     }
 
     return mode_ == InputMode::Vietnamese ? processVietnameseKey(event) : processEnglishKey(event);
@@ -182,6 +253,8 @@ ProcessResult Engine::processKey(const KeyEvent& event) {
 
 void Engine::setInputMode(InputMode mode) {
     mode_ = mode;
+    clearRepeatTransformState();
+    clearPendingLiteralEscape();
 }
 
 InputMode Engine::inputMode() const {
@@ -191,6 +264,8 @@ InputMode Engine::inputMode() const {
 void Engine::clearState() {
     preeditBuffer_.clear();
     preeditHistory_.clear();
+    clearRepeatTransformState();
+    clearPendingLiteralEscape();
 }
 
 bool Engine::isToggleHotkey(const KeyEvent& event) const {
@@ -206,9 +281,89 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         r.commit = preeditBuffer_ + std::move(suffix);
         preeditBuffer_.clear();
         preeditHistory_.clear();
+        clearRepeatTransformState();
+        clearPendingLiteralEscape();
         r.consumed = true;
         return r;
     };
+
+    const auto materializeLiteralChar = [this](char literal) {
+        preeditHistory_.push_back(preeditBuffer_);
+        std::u32string decoded = decodeUtf8Normalized(preeditBuffer_);
+        decoded.push_back(static_cast<unsigned char>(literal));
+        preeditBuffer_ = encodeUtf8(decoded);
+    };
+
+    const auto deleteVisibleTail = [this]() -> ProcessResult {
+        std::u32string decoded = decodeUtf8Normalized(preeditBuffer_);
+        if (decoded.empty()) {
+            clearRepeatTransformState();
+            clearPendingLiteralEscape();
+            return ProcessResult{.preedit = "", .commit = "", .consumed = false};
+        }
+        decoded.pop_back();
+        preeditBuffer_ = encodeUtf8(decoded);
+        preeditHistory_.clear();
+        clearRepeatTransformState();
+        clearPendingLiteralEscape();
+        return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
+    };
+
+    const auto maybeAutoCommitStablePrefix =
+        [this](const std::u32string& decoded) -> std::optional<ProcessResult> {
+        const auto split = vi_syllable::findStableComposeSplit(decoded);
+        if (!split) {
+            return std::nullopt;
+        }
+
+        const std::string committedPrefix =
+            encodeUtf8(decoded.substr(0, split->committed_prefix_end));
+        const std::string activeSuffix =
+            encodeUtf8(decoded.substr(split->committed_prefix_end));
+        if (committedPrefix.empty() || activeSuffix.empty()) {
+            return std::nullopt;
+        }
+
+        std::vector<std::string> rebasedHistory;
+        rebasedHistory.reserve(preeditHistory_.size());
+        for (const std::string& state : preeditHistory_) {
+            if (state.size() < committedPrefix.size() ||
+                state.compare(0, committedPrefix.size(), committedPrefix) != 0) {
+                continue;
+            }
+            rebasedHistory.push_back(state.substr(committedPrefix.size()));
+        }
+        preeditHistory_ = std::move(rebasedHistory);
+
+        if (repeatTransformState_.active) {
+            if (repeatTransformState_.buffer_before.size() >= committedPrefix.size() &&
+                repeatTransformState_.buffer_before.compare(0, committedPrefix.size(), committedPrefix) == 0) {
+                repeatTransformState_.buffer_before =
+                    repeatTransformState_.buffer_before.substr(committedPrefix.size());
+            } else {
+                clearRepeatTransformState();
+            }
+        }
+
+        preeditBuffer_ = activeSuffix;
+        return ProcessResult{.preedit = preeditBuffer_, .commit = committedPrefix, .consumed = true};
+    };
+
+    if (pendingLiteralEscape_) {
+        const char pendingRaw = event.key;
+        const char pendingKey = static_cast<char>(std::tolower(static_cast<unsigned char>(pendingRaw)));
+        clearRepeatTransformState();
+        const bool escapable =
+            config_.method == cbakey::core::InputMethod::Telex ? isTelexEscapableKey(pendingKey)
+                                                               : isVniEscapableKey(pendingKey);
+        if (event.aux == KeyAux::None && pendingRaw != '\0' && escapable) {
+            materializeLiteralChar(pendingRaw);
+            clearPendingLiteralEscape();
+            return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
+        }
+        materializeLiteralChar('\\');
+        clearPendingLiteralEscape();
+    }
 
     switch (event.aux) {
         case KeyAux::None:
@@ -222,25 +377,21 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
                 r.commit = preeditBuffer_;
                 preeditBuffer_.clear();
                 preeditHistory_.clear();
+                clearRepeatTransformState();
+                clearPendingLiteralEscape();
                 r.consumed = true;
                 r.forwardOriginalKey = true;
                 return r;
             }
+            clearRepeatTransformState();
+            clearPendingLiteralEscape();
             return ProcessResult{};
         case KeyAux::DeleteForward:
             if (!preeditBuffer_.empty()) {
-                if (!preeditHistory_.empty()) {
-                    preeditBuffer_ = preeditHistory_.back();
-                    preeditHistory_.pop_back();
-                    return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
-                }
-                std::u32string decoded = decodeUtf8(preeditBuffer_);
-                if (!decoded.empty()) {
-                    decoded.pop_back();
-                    preeditBuffer_ = encodeUtf8(decoded);
-                    return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
-                }
+                return deleteVisibleTail();
             }
+            clearRepeatTransformState();
+            clearPendingLiteralEscape();
             return ProcessResult{};
         case KeyAux::Enter:
             return commitWithSuffix("\n");
@@ -256,20 +407,19 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     }
 
     if (event.key == '\b') {
-        if (!preeditHistory_.empty()) {
-            preeditBuffer_ = preeditHistory_.back();
-            preeditHistory_.pop_back();
-            return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
+        if (!preeditBuffer_.empty()) {
+            return deleteVisibleTail();
         }
 
-        std::u32string decoded = decodeUtf8(preeditBuffer_);
-        if (!decoded.empty()) {
-            decoded.pop_back();
-            preeditBuffer_ = encodeUtf8(decoded);
-            return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
-        }
-
+        clearRepeatTransformState();
+        clearPendingLiteralEscape();
         return ProcessResult{.preedit = "", .commit = "", .consumed = false};
+    }
+
+    if (event.aux == KeyAux::None && event.key == '\\') {
+        clearRepeatTransformState();
+        pendingLiteralEscape_ = true;
+        return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
     }
 
     if (event.key == ' ') {
@@ -281,14 +431,50 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         if (!preeditBuffer_.empty()) {
             return commitWithSuffix(std::string(1, static_cast<char>(event.key)));
         }
+        clearRepeatTransformState();
+        clearPendingLiteralEscape();
         return ProcessResult{};
     }
 
     const char raw = event.key;
     const char key = static_cast<char>(std::tolower(static_cast<unsigned char>(raw)));
     preeditHistory_.push_back(preeditBuffer_);
+    const std::string bufferBefore = preeditBuffer_;
 
-    std::u32string decoded = decodeUtf8(preeditBuffer_);
+    std::u32string decoded = decodeUtf8Normalized(preeditBuffer_);
+    if ((config_.method == cbakey::core::InputMethod::Telex && key == 'z') ||
+        (config_.method == cbakey::core::InputMethod::Vni && key == '0')) {
+        clearRepeatTransformState();
+        const bool removed =
+            config_.method == cbakey::core::InputMethod::Telex ? vi_syllable::removeTelexDiacritics(decoded)
+                                                               : vi_syllable::removeVniDiacritics(decoded);
+        if (removed) {
+            preeditBuffer_ = encodeUtf8(decoded);
+            clearPendingLiteralEscape();
+            if (const auto split = maybeAutoCommitStablePrefix(decoded)) {
+                return *split;
+            }
+            return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
+        }
+        decoded = decodeUtf8Normalized(preeditBuffer_);
+    }
+
+    if (repeatTransformState_.active && repeatTransformState_.key == key &&
+        ((config_.method == cbakey::core::InputMethod::Telex && isTelexRepeatableKey(key)) ||
+         (config_.method == cbakey::core::InputMethod::Vni && isVniRepeatableKey(key)))) {
+        std::u32string reverted = decodeUtf8Normalized(repeatTransformState_.buffer_before);
+        reverted.push_back(static_cast<unsigned char>(raw));
+        if (config_.method == cbakey::core::InputMethod::Telex) {
+            vi_syllable::normalizeTelexBuffer(reverted);
+        }
+        preeditBuffer_ = encodeUtf8(reverted);
+        clearRepeatTransformState();
+        clearPendingLiteralEscape();
+        if (const auto split = maybeAutoCommitStablePrefix(reverted)) {
+            return *split;
+        }
+        return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
+    }
     bool transformed = false;
     if (config_.method == cbakey::core::InputMethod::Telex) {
         if (key == 's' || key == 'f' || key == 'r' || key == 'x' || key == 'j') {
@@ -306,18 +492,37 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
 
     if (transformed) {
         preeditBuffer_ = encodeUtf8(decoded);
+        if ((config_.method == cbakey::core::InputMethod::Telex && isTelexRepeatableKey(key)) ||
+            (config_.method == cbakey::core::InputMethod::Vni && isVniRepeatableKey(key))) {
+            repeatTransformState_.active = true;
+            repeatTransformState_.key = key;
+            repeatTransformState_.buffer_before = bufferBefore;
+        } else {
+            clearRepeatTransformState();
+        }
+        clearPendingLiteralEscape();
+        if (const auto split = maybeAutoCommitStablePrefix(decoded)) {
+            return *split;
+        }
         return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
     }
 
+    clearRepeatTransformState();
+    clearPendingLiteralEscape();
     decoded.push_back(static_cast<unsigned char>(raw));
     if (config_.method == cbakey::core::InputMethod::Telex) {
         vi_syllable::normalizeTelexBuffer(decoded);
     }
     preeditBuffer_ = encodeUtf8(decoded);
+    if (const auto split = maybeAutoCommitStablePrefix(decoded)) {
+        return *split;
+    }
     return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
 }
 
 ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
+    clearRepeatTransformState();
+    clearPendingLiteralEscape();
     if (event.aux != KeyAux::None) {
         return ProcessResult{};
     }

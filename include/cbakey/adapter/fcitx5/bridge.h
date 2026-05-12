@@ -15,6 +15,7 @@ public:
 
     cbakey::core::ProcessResult handleKey(const cbakey::core::KeyEvent& event);
     const std::string& preedit() const;
+    const cbakey::config::RuntimeConfig& config() const;
     std::vector<std::string> drainCommitted();
     cbakey::core::InputMode inputMode() const;
     void reset();
@@ -22,6 +23,7 @@ public:
     std::string takeCompositionForCommit();
 
 private:
+    cbakey::config::RuntimeConfig config_;
     cbakey::core::Engine engine_;
     std::string preedit_;
     std::vector<std::string> committed_;

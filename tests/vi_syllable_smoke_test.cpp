@@ -3,9 +3,13 @@
 #include "cbakey/core/vi_syllable.h"
 
 using cbakey::core::vi_syllable::findLastSyllable;
+using cbakey::core::vi_syllable::findStableComposeSplit;
 using cbakey::core::vi_syllable::applyTelexTransform;
 using cbakey::core::vi_syllable::applyVniTransform;
 using cbakey::core::vi_syllable::normalizeTelexBuffer;
+using cbakey::core::vi_syllable::normalizeVietnameseNfc;
+using cbakey::core::vi_syllable::removeTelexDiacritics;
+using cbakey::core::vi_syllable::removeVniDiacritics;
 using cbakey::core::vi_syllable::selectToneVowelIndex;
 
 int main() {
@@ -25,10 +29,24 @@ int main() {
     assert(gia->nucleus_end == 3);
     assert(selectToneVowelIndex(U"gia") == 2);
 
+    const auto splitXinChao = findStableComposeSplit(U"xinchao");
+    assert(splitXinChao.has_value());
+    assert(splitXinChao->committed_prefix_end == 3);
+    assert(splitXinChao->active_suffix.begin == 3);
+    assert(splitXinChao->active_suffix.onset_end == 5);
+
+    const auto splitChaoBan = findStableComposeSplit(U"chaoban");
+    assert(splitChaoBan.has_value());
+    assert(splitChaoBan->committed_prefix_end == 4);
+
+    assert(!findStableComposeSplit(U"xina").has_value());
+    assert(!findStableComposeSplit(U"tieeng").has_value());
+
     assert(selectToneVowelIndex(U"chao") == 2);
     assert(selectToneVowelIndex(U"hieu") == 2);
     assert(selectToneVowelIndex(U"giư") == 2);
     assert(selectToneVowelIndex(U"thuơ") == 3);
+    assert(selectToneVowelIndex(U"thuo") == 3);
     assert(selectToneVowelIndex(U"thuyê") == 4);
     assert(selectToneVowelIndex(U"nguyê") == 4);
     assert(selectToneVowelIndex(U"vietnam") == 5);
@@ -73,6 +91,33 @@ int main() {
     assert(selectToneVowelIndex(U"buôn") == 2);
     assert(selectToneVowelIndex(U"bưa") == 1);
     assert(selectToneVowelIndex(U"bươu") == 2);
+    assert(selectToneVowelIndex(U"huy") == 2);
+    assert(selectToneVowelIndex(U"lâu") == 1);
+    assert(selectToneVowelIndex(U"bây") == 1);
+    assert(selectToneVowelIndex(U"đều") == 1);
+    assert(selectToneVowelIndex(U"nói") == 1);
+    assert(selectToneVowelIndex(U"cối") == 1);
+    assert(selectToneVowelIndex(U"mời") == 1);
+    assert(selectToneVowelIndex(U"bụi") == 1);
+    assert(selectToneVowelIndex(U"ngửi") == 2);
+    assert(selectToneVowelIndex(U"múa") == 1);
+    assert(selectToneVowelIndex(U"hoài") == 2);
+    assert(selectToneVowelIndex(U"ngoáy") == 3);
+    assert(selectToneVowelIndex(U"hữu") == 1);
+    assert(selectToneVowelIndex(U"thiếu") == 3);
+    assert(selectToneVowelIndex(U"yểu") == 1);
+    assert(selectToneVowelIndex(U"khuya") == 3);
+    assert(selectToneVowelIndex(U"khuay") == 3);
+    assert(selectToneVowelIndex(U"huây") == 2);
+    assert(selectToneVowelIndex(U"huơ") == 2);
+    assert(selectToneVowelIndex(U"tuoi") == 2);
+    assert(selectToneVowelIndex(U"cuơi") == 2);
+    assert(selectToneVowelIndex(U"hưo") == 2);
+    assert(selectToneVowelIndex(U"ruou") == 2);
+    assert(selectToneVowelIndex(U"ruơu") == 2);
+    assert(selectToneVowelIndex(U"rưou") == 2);
+    assert(selectToneVowelIndex(U"hue") == 2);
+    assert(selectToneVowelIndex(U"huu") == 1);
 
     std::u32string huong = U"huo";
     assert(applyTelexTransform(huong, 'w'));
@@ -89,9 +134,47 @@ int main() {
     assert(applyVniTransform(huongVni, '7'));
     assert(huongVni == U"hươ");
 
+    std::u32string deuLateD = U"deu";
+    assert(applyVniTransform(deuLateD, '9'));
+    assert(deuLateD == U"đeu");
+
+    std::u32string deuLateDToned = U"dèu";
+    assert(applyVniTransform(deuLateDToned, '9'));
+    assert(deuLateDToned == U"đèu");
+
     std::u32string thuocVni = U"thuo";
     assert(applyVniTransform(thuocVni, '6'));
     assert(thuocVni == U"thuô");
+
+    std::u32string cuoiTone = U"cuói";
+    assert(applyVniTransform(cuoiTone, '7'));
+    assert(cuoiTone == U"cuới");
+
+    std::u32string huongTone = U"hưó";
+    assert(applyVniTransform(huongTone, '7'));
+    assert(huongTone == U"hướ");
+
+    std::u32string ruou = U"ruou";
+    assert(applyVniTransform(ruou, '7'));
+    assert(ruou == U"ruơu");
+    assert(applyVniTransform(ruou, '7'));
+    assert(ruou == U"rươu");
+
+    std::u32string ruouToned = U"ruợu";
+    assert(applyVniTransform(ruouToned, '7'));
+    assert(ruouToned == U"rượu");
+
+    std::u32string ruouLeading = U"rưou";
+    assert(applyVniTransform(ruouLeading, '7'));
+    assert(ruouLeading == U"rươu");
+
+    std::u32string huu = U"huu";
+    assert(applyVniTransform(huu, '7'));
+    assert(huu == U"hưu");
+
+    std::u32string huuToned = U"hũu";
+    assert(applyVniTransform(huuToned, '7'));
+    assert(huuToned == U"hữu");
 
     std::u32string thue = U"thue";
     assert(applyTelexTransform(thue, 'e'));
@@ -120,6 +203,98 @@ int main() {
     std::u32string yeu = U"ye";
     assert(applyTelexTransform(yeu, 'e'));
     assert(yeu == U"yê");
+
+    std::u32string decomposedCircumflexAcute = U"a\u0302\u0301";
+    assert(normalizeVietnameseNfc(decomposedCircumflexAcute));
+    assert(decomposedCircumflexAcute == U"ấ");
+
+    std::u32string decomposedAcuteCircumflex = U"a\u0301\u0302";
+    assert(normalizeVietnameseNfc(decomposedAcuteCircumflex));
+    assert(decomposedAcuteCircumflex == U"ấ");
+
+    std::u32string decomposedWord = U"thu" U"e\u0302\u0301";
+    assert(normalizeVietnameseNfc(decomposedWord));
+    assert(decomposedWord == U"thuế");
+
+    std::u32string decomposedHornDot = U"u\u031b\u0323";
+    assert(normalizeVietnameseNfc(decomposedHornDot));
+    assert(decomposedHornDot == U"ự");
+
+    std::u32string decomposedBreveDot = U"a\u0306\u0323";
+    assert(normalizeVietnameseNfc(decomposedBreveDot));
+    assert(decomposedBreveDot == U"ặ");
+
+    std::u32string decomposedDotBreve = U"a\u0323\u0306";
+    assert(normalizeVietnameseNfc(decomposedDotBreve));
+    assert(decomposedDotBreve == U"ặ");
+
+    std::u32string decomposedTildeCircumflex = U"o\u0303\u0302";
+    assert(normalizeVietnameseNfc(decomposedTildeCircumflex));
+    assert(decomposedTildeCircumflex == U"ỗ");
+
+    std::u32string decomposedAcuteHorn = U"u\u0301\u031b";
+    assert(normalizeVietnameseNfc(decomposedAcuteHorn));
+    assert(decomposedAcuteHorn == U"ứ");
+
+    std::u32string decomposedNguyen = U"nguye\u0302\u0303n";
+    assert(normalizeVietnameseNfc(decomposedNguyen));
+    assert(decomposedNguyen == U"nguyễn");
+
+    std::u32string alreadyNfc = U"nguyễn";
+    assert(!normalizeVietnameseNfc(alreadyNfc));
+    assert(alreadyNfc == U"nguyễn");
+
+    std::u32string toneThenAa = U"á";
+    assert(applyTelexTransform(toneThenAa, 'a'));
+    assert(toneThenAa == U"ấ");
+
+    std::u32string toneThenEe = U"é";
+    assert(applyTelexTransform(toneThenEe, 'e'));
+    assert(toneThenEe == U"ế");
+
+    std::u32string toneThenOo = U"ó";
+    assert(applyTelexTransform(toneThenOo, 'o'));
+    assert(toneThenOo == U"ố");
+
+    std::u32string toneThenOw = U"ó";
+    assert(applyTelexTransform(toneThenOw, 'w'));
+    assert(toneThenOw == U"ớ");
+
+    std::u32string toneThenUw = U"ú";
+    assert(applyTelexTransform(toneThenUw, 'w'));
+    assert(toneThenUw == U"ứ");
+
+    std::u32string erased = U"điều";
+    assert(removeTelexDiacritics(erased));
+    assert(erased == U"dieu");
+
+    std::u32string erasedUow = U"uơ";
+    assert(removeTelexDiacritics(erasedUow));
+    assert(erasedUow == U"uo");
+
+    std::u32string plain = U"abc";
+    assert(!removeTelexDiacritics(plain));
+    assert(plain == U"abc");
+
+    std::u32string erasedVni = U"điều";
+    assert(removeVniDiacritics(erasedVni));
+    assert(erasedVni == U"dieu");
+
+    std::u32string erasedDecomposedVni = U"thu" U"e\u0302\u0301";
+    assert(removeVniDiacritics(erasedDecomposedVni));
+    assert(erasedDecomposedVni == U"thue");
+
+    std::u32string erasedDecomposedTelex = U"a\u0306\u0323";
+    assert(removeTelexDiacritics(erasedDecomposedTelex));
+    assert(erasedDecomposedTelex == U"a");
+
+    std::u32string erasedDecomposedWord = U"nguye\u0302\u0303n";
+    assert(removeVniDiacritics(erasedDecomposedWord));
+    assert(erasedDecomposedWord == U"nguyen");
+
+    std::u32string plainVni = U"abc";
+    assert(!removeVniDiacritics(plainVni));
+    assert(plainVni == U"abc");
 
     return 0;
 }

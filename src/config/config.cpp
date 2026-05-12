@@ -66,6 +66,14 @@ RuntimeConfig loadConfigFile(const std::string& path) {
             config.enableStaticExpansion = parseBool(value, config.enableStaticExpansion);
         } else if (key == "toggle_hotkey") {
             config.toggleHotkey = value;
+        } else if (key == "fcitx5_preedit_mode") {
+            if (value == "auto") {
+                config.fcitx5PreeditMode = Fcitx5PreeditMode::Auto;
+            } else if (value == "client") {
+                config.fcitx5PreeditMode = Fcitx5PreeditMode::Client;
+            } else if (value == "panel") {
+                config.fcitx5PreeditMode = Fcitx5PreeditMode::Panel;
+            }
         }
     }
 

@@ -45,6 +45,7 @@ method=telex
 enable_user_dictionary=true
 enable_static_expansion=true
 toggle_hotkey=Ctrl+Alt+Z
+fcitx5_preedit_mode=auto
 EOF
 fi
 

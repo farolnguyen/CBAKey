@@ -19,6 +19,7 @@ add_library(cbakey_core
 
 add_library(cbakey_fcitx5_adapter
     src/adapter/fcitx5/bridge.cpp
+    src/adapter/fcitx5/preedit_strategy.cpp
 )
 
 target_include_directories(cbakey_core
@@ -118,6 +119,10 @@ if(CBAKEY_BUILD_TESTS)
     add_executable(cbakey_fcitx5_bridge_smoke_test tests/fcitx5_bridge_smoke_test.cpp)
     target_link_libraries(cbakey_fcitx5_bridge_smoke_test PRIVATE cbakey_fcitx5_adapter)
     add_test(NAME cbakey_fcitx5_bridge_smoke_test COMMAND cbakey_fcitx5_bridge_smoke_test)
+
+    add_executable(cbakey_fcitx5_preedit_strategy_smoke_test tests/fcitx5_preedit_strategy_smoke_test.cpp)
+    target_link_libraries(cbakey_fcitx5_preedit_strategy_smoke_test PRIVATE cbakey_fcitx5_adapter)
+    add_test(NAME cbakey_fcitx5_preedit_strategy_smoke_test COMMAND cbakey_fcitx5_preedit_strategy_smoke_test)
 
     add_executable(cbakey_corpus_test tests/corpus_gtest.cpp tests/corpus_driver.cpp)
     target_link_libraries(cbakey_corpus_test PRIVATE cbakey_core GTest::gtest_main nlohmann_json::nlohmann_json)

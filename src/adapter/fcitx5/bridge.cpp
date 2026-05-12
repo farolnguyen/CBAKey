@@ -2,7 +2,7 @@
 
 namespace cbakey::adapter::fcitx5 {
 
-Bridge::Bridge(const cbakey::config::RuntimeConfig& config) : engine_(config) {}
+Bridge::Bridge(const cbakey::config::RuntimeConfig& config) : config_(config), engine_(config) {}
 
 cbakey::core::ProcessResult Bridge::handleKey(const cbakey::core::KeyEvent& event) {
     const auto result = engine_.processKey(event);
@@ -15,6 +15,10 @@ cbakey::core::ProcessResult Bridge::handleKey(const cbakey::core::KeyEvent& even
 
 const std::string& Bridge::preedit() const {
     return preedit_;
+}
+
+const cbakey::config::RuntimeConfig& Bridge::config() const {
+    return config_;
 }
 
 std::vector<std::string> Bridge::drainCommitted() {
