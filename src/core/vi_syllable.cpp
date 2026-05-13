@@ -54,6 +54,27 @@ char32_t baseChar(char32_t ch) {
     return toneSets()[si][0];
 }
 
+/// Maps a Vietnamese vowel (possibly with diacritics) to a single Latin letter used only for
+/// \p selectToneOffset pattern matching. Without this, nucleus "oă" would become "o"+U+0103 and
+/// would not match rules keyed as U"oa" (e.g. "hoặc").
+char32_t tonePatternBucket(char32_t ch) {
+    const char32_t b = baseChar(ch);
+    switch (b) {
+        case U'ă':
+        case U'â':
+            return U'a';
+        case U'ê':
+            return U'e';
+        case U'ô':
+        case U'ơ':
+            return U'o';
+        case U'ư':
+            return U'u';
+        default:
+            return b;
+    }
+}
+
 bool isVowel(char32_t ch) {
     return locateInToneSets(ch);
 }
@@ -253,7 +274,7 @@ std::optional<std::size_t> selectToneOffset(const std::u32string& tonePattern, b
         {U"ao", 0, 0},   {U"au", 0, 0},   {U"âu", 0, 0},   {U"ay", 0, 0},
         {U"ây", 0, 0},   {U"ai", 0, 0},   {U"eo", 0, 0},   {U"eu", 0, 0},
         {U"êu", 0, 0},   {U"oi", 0, 0},   {U"ôi", 0, 0},
-        {U"ơi", 0, 0},   {U"ui", 0, 0},   {U"ưi", 0, 0},   {U"ua", 0, 0},
+        {U"ơi", 0, 0},   {U"ui", 0, 0},   {U"iu", 1, 1},   {U"ưi", 0, 0},   {U"ua", 0, 0},
         {U"ia", 0, 1},   {U"ie", 1, 1},   {U"iê", 1, 1},   {U"ya", 0, 1},
         {U"ye", 1, 1},
         {U"yê", 1, 1},   {U"uye", 2, 2},
@@ -434,7 +455,7 @@ std::optional<std::size_t> selectToneVowelIndex(const std::u32string& buffer) {
             return std::nullopt;
         }
         candidateIndices.push_back(i);
-        tonePattern.push_back(baseChar(buffer[i]));
+        tonePattern.push_back(tonePatternBucket(buffer[i]));
     }
     if (candidateIndices.empty()) {
         return std::nullopt;

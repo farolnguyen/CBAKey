@@ -22,6 +22,8 @@ enum class KeyAux : std::uint8_t {
     Tab,
     Left,
     Right,
+    Up,
+    Down,
     Home,
     End,
     DeleteForward,
@@ -33,6 +35,8 @@ struct KeyEvent {
     bool ctrl = false;
     bool alt = false;
     bool shift = false;
+    /// True when the key originated from the numeric keypad (Fcitx KP_* keysyms).
+    bool key_from_keypad = false;
 };
 
 struct ProcessResult {

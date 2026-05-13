@@ -1,3 +1,16 @@
-ấ  ề ể ễ  
-chào ní nha nhí đấu súng về nèđâudỉ
-chào ấ  ể ễ  ể 
+cd /home/derrick/Project/CBAKey
+cmake -S . -B build -DCBAKEY_BUILD_FCITX5_PLUGIN=ON
+cmake --build build
+--------------------------------
+cd /home/derrick/Project/CBAKey
+bash scripts/install_local_fcitx5.sh
+----------------------------------
+pkill fcitx5
+fcitx5 -d
+----------------------------
+
+
+
+    
+
+

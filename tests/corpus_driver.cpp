@@ -22,6 +22,8 @@ bool auxFromString(const std::string& s, KeyAux* out, std::string* err) {
         {"Tab", KeyAux::Tab},
         {"Left", KeyAux::Left},
         {"Right", KeyAux::Right},
+        {"Up", KeyAux::Up},
+        {"Down", KeyAux::Down},
         {"Home", KeyAux::Home},
         {"End", KeyAux::End},
         {"DeleteForward", KeyAux::DeleteForward},
@@ -75,6 +77,7 @@ bool parseKeyStep(const nlohmann::json& step, KeyEvent* ev, std::string* err) {
     ev->ctrl = step.value("ctrl", false);
     ev->alt = step.value("alt", false);
     ev->shift = step.value("shift", false);
+    ev->key_from_keypad = step.value("key_from_keypad", false);
     if (ev->aux == KeyAux::None && ev->key == '\0') {
         *err = "sequence step needs key or aux";
         return false;

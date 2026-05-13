@@ -19,6 +19,9 @@ struct RuntimeConfig {
     bool enableStaticExpansion = true;
     std::string toggleHotkey = "Ctrl+Alt+Z";
     Fcitx5PreeditMode fcitx5PreeditMode = Fcitx5PreeditMode::Auto;
+    /// M6.3a: rewrite syllable left of caret via SurroundingText + deleteSurroundingText. Off by
+    /// default because many clients report unreliable surrounding/cursor (Chromium, LO Writer).
+    bool fcitx5CommittedRewrite = false;
 };
 
 RuntimeConfig defaultConfig();

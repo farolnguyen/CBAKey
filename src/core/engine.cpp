@@ -1,5 +1,6 @@
 #include "cbakey/core/engine.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <optional>
@@ -45,8 +46,24 @@ std::u32string decodeUtf8(const std::string& input) {
     return output;
 }
 
+void stripComposeIgnorableCodePoints(std::u32string& s) {
+    s.erase(std::remove_if(s.begin(), s.end(), [](char32_t c) {
+                switch (c) {
+                    case U'\u200B':  // ZWSP (common in web editors / rich text)
+                    case U'\u200C':  // ZWNJ
+                    case U'\u200D':  // ZWJ
+                    case U'\uFEFF':  // BOM
+                        return true;
+                    default:
+                        return false;
+                }
+            }),
+            s.end());
+}
+
 std::u32string decodeUtf8Normalized(const std::string& input) {
     std::u32string output = decodeUtf8(input);
+    stripComposeIgnorableCodePoints(output);
     vi_syllable::normalizeVietnameseNfc(output);
     return output;
 }
@@ -349,6 +366,16 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         return ProcessResult{.preedit = preeditBuffer_, .commit = committedPrefix, .consumed = true};
     };
 
+    if (config_.method == cbakey::core::InputMethod::Vni && event.key_from_keypad &&
+        event.aux == KeyAux::None && event.key != '\0' &&
+        std::isdigit(static_cast<unsigned char>(event.key)) != 0 && !preeditBuffer_.empty()) {
+        ProcessResult r;
+        r.commit = takeCompositionForCommit();
+        r.consumed = true;
+        r.forwardOriginalKey = true;
+        return r;
+    }
+
     if (pendingLiteralEscape_) {
         const char pendingRaw = event.key;
         const char pendingKey = static_cast<char>(std::tolower(static_cast<unsigned char>(pendingRaw)));
@@ -370,6 +397,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             break;
         case KeyAux::Left:
         case KeyAux::Right:
+        case KeyAux::Up:
+        case KeyAux::Down:
         case KeyAux::Home:
         case KeyAux::End:
             if (!preeditBuffer_.empty()) {
@@ -531,6 +560,50 @@ ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
     }
 
     return ProcessResult{.preedit = "", .commit = std::string(1, event.key), .consumed = true};
+}
+
+void Engine::seedPreeditForCommittedRewrite(std::string utf8) {
+    clearState();
+    preeditBuffer_ = std::move(utf8);
+}
+
+std::optional<std::string> Engine::tryRewriteCommittedSyllable(const cbakey::config::RuntimeConfig& config,
+                                                               const std::string& token_utf8,
+                                                               const KeyEvent& event) {
+    if (token_utf8.empty() || token_utf8.size() > 96) {
+        return std::nullopt;
+    }
+    const std::u32string dec = decodeUtf8Normalized(token_utf8);
+    if (dec.empty()) {
+        return std::nullopt;
+    }
+    const auto span = vi_syllable::findLastSyllable(dec);
+    if (!span || span->begin != 0 || span->end != dec.size()) {
+        return std::nullopt;
+    }
+    Engine scratch(config);
+    scratch.seedPreeditForCommittedRewrite(token_utf8);
+    const ProcessResult r = scratch.processKey(event);
+    if (!r.consumed) {
+        return std::nullopt;
+    }
+    if (!r.commit.empty()) {
+        return std::nullopt;
+    }
+    if (r.preedit.empty()) {
+        return std::nullopt;
+    }
+    if (config.method == cbakey::core::InputMethod::Vni && event.key >= '1' && event.key <= '5') {
+        if (r.preedit.size() == token_utf8.size() + 1 &&
+            r.preedit.compare(0, token_utf8.size(), token_utf8) == 0 &&
+            r.preedit.back() == event.key) {
+            return std::nullopt;
+        }
+    }
+    if (r.preedit == token_utf8) {
+        return std::nullopt;
+    }
+    return r.preedit;
 }
 
 }  // namespace cbakey::core

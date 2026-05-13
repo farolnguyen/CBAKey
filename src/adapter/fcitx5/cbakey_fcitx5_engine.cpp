@@ -16,6 +16,8 @@
 #include <fcitx-utils/textformatflags.h>
 
 #include "cbakey/adapter/fcitx5/bridge.h"
+#include "cbakey/adapter/fcitx5/committed_rewrite_fcitx5.h"
+#include "cbakey/adapter/fcitx5/compose_anchor_fcitx5.h"
 #include "cbakey/adapter/fcitx5/preedit_strategy.h"
 
 namespace {
@@ -35,13 +37,25 @@ bool translateKeyEvent(const fcitx::Key& key, cbakey::core::KeyEvent& out) {
     out.shift = states.test(fcitx::KeyState::Shift);
     out.aux = cbakey::core::KeyAux::None;
     out.key = '\0';
+    out.key_from_keypad = false;
 
-    switch (key.sym()) {
+    const fcitx::KeySym sym = key.sym();
+    if (sym >= FcitxKey_KP_0 && sym <= FcitxKey_KP_9) {
+        out.key_from_keypad = true;
+    }
+
+    switch (sym) {
         case FcitxKey_Left:
             out.aux = cbakey::core::KeyAux::Left;
             return true;
         case FcitxKey_Right:
             out.aux = cbakey::core::KeyAux::Right;
+            return true;
+        case FcitxKey_Up:
+            out.aux = cbakey::core::KeyAux::Up;
+            return true;
+        case FcitxKey_Down:
+            out.aux = cbakey::core::KeyAux::Down;
             return true;
         case FcitxKey_Home:
             out.aux = cbakey::core::KeyAux::Home;
@@ -64,16 +78,16 @@ bool translateKeyEvent(const fcitx::Key& key, cbakey::core::KeyEvent& out) {
             break;
     }
 
-    if (key.sym() == FcitxKey_BackSpace) {
+    if (sym == FcitxKey_BackSpace) {
         out.key = '\b';
         return true;
     }
-    if (key.sym() == FcitxKey_space) {
+    if (sym == FcitxKey_space) {
         out.key = ' ';
         return true;
     }
 
-    const std::string utf8 = fcitx::Key::keySymToUTF8(key.sym());
+    const std::string utf8 = fcitx::Key::keySymToUTF8(sym);
     if (utf8.size() == 1) {
         out.key = utf8[0];
         return true;
@@ -143,6 +157,14 @@ public:
         auto& bridge = bridgeFor(inputContext);
         const auto presentation = cbakey::adapter::fcitx5::choosePreeditPresentation(
             bridge.config().fcitx5PreeditMode, snapshotPreeditCapabilities(inputContext));
+        if (bridge.inputMode() == cbakey::core::InputMode::Vietnamese && bridge.preedit().empty()) {
+            if (cbakey::adapter::fcitx5::tryApplyCommittedSyllableRewrite(inputContext, bridge.config(),
+                                                                          engineEvent)) {
+                pushPreeditToInputContext(inputContext, "", bridge.config().fcitx5PreeditMode);
+                keyEvent.filterAndAccept();
+                return;
+            }
+        }
         const auto result = bridge.handleKey(engineEvent);
         if (!result.consumed) {
             return;
@@ -154,6 +176,14 @@ public:
             inputContext->commitString(dispatch.commit);
         }
         pushPreeditToInputContext(inputContext, bridge.preedit(), bridge.config().fcitx5PreeditMode);
+        if (bridge.preedit().empty()) {
+            composeAnchors_.erase(inputContext);
+        } else {
+            cbakey::adapter::fcitx5::ComposeAnchorSnapshot snap;
+            cbakey::adapter::fcitx5::refreshComposeAnchorForPreedit(inputContext, bridge.preedit(),
+                                                                     &snap);
+            composeAnchors_[inputContext] = snap;
+        }
         if ((result.forwardOriginalKey || dispatch.forward_original_key) && inputContext) {
             inputContext->forwardKey(keyEvent.key(), keyEvent.isRelease(), keyEvent.time());
         }
@@ -166,6 +196,7 @@ public:
         auto* inputContext = event.inputContext();
         auto& bridge = bridgeFor(inputContext);
         bridge.reset();
+        composeAnchors_.erase(inputContext);
         pushPreeditToInputContext(inputContext, "", bridge.config().fcitx5PreeditMode);
     }
 
@@ -174,14 +205,21 @@ public:
         FCITX_UNUSED(entry);
         auto* inputContext = event.inputContext();
         if (inputContext) {
+            cbakey::adapter::fcitx5::ComposeAnchorSnapshot snap;
+            if (const auto ait = composeAnchors_.find(inputContext);
+                ait != composeAnchors_.end()) {
+                snap = ait->second;
+            }
             auto iter = bridges_.find(inputContext);
             if (iter != bridges_.end()) {
                 const std::string pending = iter->second.takeCompositionForCommit();
                 if (!pending.empty()) {
-                    inputContext->commitString(pending);
+                    cbakey::adapter::fcitx5::commitPendingRespectingComposeAnchor(inputContext, snap,
+                                                                                  pending);
                 }
                 bridges_.erase(iter);
             }
+            composeAnchors_.erase(inputContext);
             pushPreeditToInputContext(inputContext, "", cbakey::config::Fcitx5PreeditMode::Auto);
         }
     }
@@ -190,13 +228,20 @@ public:
                fcitx::InputContextEvent& event) override {
         FCITX_UNUSED(entry);
         auto* inputContext = event.inputContext();
+        cbakey::adapter::fcitx5::ComposeAnchorSnapshot snap;
+        if (const auto ait = composeAnchors_.find(inputContext);
+            ait != composeAnchors_.end()) {
+            snap = ait->second;
+        }
         auto iter = bridges_.find(inputContext);
         if (iter != bridges_.end()) {
             const std::string pending = iter->second.takeCompositionForCommit();
             if (!pending.empty() && inputContext) {
-                inputContext->commitString(pending);
+                cbakey::adapter::fcitx5::commitPendingRespectingComposeAnchor(inputContext, snap,
+                                                                              pending);
             }
         }
+        composeAnchors_.erase(inputContext);
         pushPreeditToInputContext(
             inputContext, "",
             iter != bridges_.end() ? iter->second.config().fcitx5PreeditMode
@@ -215,6 +260,8 @@ private:
     }
 
     std::unordered_map<fcitx::InputContext*, cbakey::adapter::fcitx5::Bridge> bridges_;
+    std::unordered_map<fcitx::InputContext*, cbakey::adapter::fcitx5::ComposeAnchorSnapshot>
+        composeAnchors_;
 };
 
 class CBAKeyFcitx5Factory final : public fcitx::AddonFactory {

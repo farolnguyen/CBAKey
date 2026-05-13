@@ -20,6 +20,7 @@ add_library(cbakey_core
 add_library(cbakey_fcitx5_adapter
     src/adapter/fcitx5/bridge.cpp
     src/adapter/fcitx5/preedit_strategy.cpp
+    src/adapter/fcitx5/surrounding_cursor_normalize.cpp
 )
 
 target_include_directories(cbakey_core
@@ -62,6 +63,8 @@ if(CBAKEY_BUILD_FCITX5_PLUGIN)
 
     add_library(cbakey_fcitx5plugin MODULE
         src/adapter/fcitx5/cbakey_fcitx5_engine.cpp
+        src/adapter/fcitx5/compose_anchor_fcitx5.cpp
+        src/adapter/fcitx5/committed_rewrite_fcitx5.cpp
     )
     target_include_directories(cbakey_fcitx5plugin
         PRIVATE
@@ -123,6 +126,20 @@ if(CBAKEY_BUILD_TESTS)
     add_executable(cbakey_fcitx5_preedit_strategy_smoke_test tests/fcitx5_preedit_strategy_smoke_test.cpp)
     target_link_libraries(cbakey_fcitx5_preedit_strategy_smoke_test PRIVATE cbakey_fcitx5_adapter)
     add_test(NAME cbakey_fcitx5_preedit_strategy_smoke_test COMMAND cbakey_fcitx5_preedit_strategy_smoke_test)
+
+    add_executable(cbakey_compose_anchor_smoke_test tests/compose_anchor_smoke_test.cpp)
+    target_include_directories(cbakey_compose_anchor_smoke_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME cbakey_compose_anchor_smoke_test COMMAND cbakey_compose_anchor_smoke_test)
+
+    add_executable(cbakey_m6_3a_rewrite_smoke_test tests/m6_3a_rewrite_smoke_test.cpp)
+    target_link_libraries(cbakey_m6_3a_rewrite_smoke_test PRIVATE cbakey_core)
+    add_test(NAME cbakey_m6_3a_rewrite_smoke_test COMMAND cbakey_m6_3a_rewrite_smoke_test)
+
+    add_executable(cbakey_surrounding_cursor_normalize_smoke_test
+                   tests/surrounding_cursor_normalize_smoke_test.cpp)
+    target_link_libraries(cbakey_surrounding_cursor_normalize_smoke_test PRIVATE cbakey_fcitx5_adapter)
+    add_test(NAME cbakey_surrounding_cursor_normalize_smoke_test
+             COMMAND cbakey_surrounding_cursor_normalize_smoke_test)
 
     add_executable(cbakey_corpus_test tests/corpus_gtest.cpp tests/corpus_driver.cpp)
     target_link_libraries(cbakey_corpus_test PRIVATE cbakey_core GTest::gtest_main nlohmann_json::nlohmann_json)

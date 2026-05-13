@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,16 @@ public:
     void clearState();
     /// Returns current composition text and clears engine state (for IM switch / flush).
     std::string takeCompositionForCommit();
+
+    /// M6.3a: load UTF-8 as the active composition (no simulated keypresses). Used for
+    /// committed-syllable rewrite; clears history/repeat state first.
+    void seedPreeditForCommittedRewrite(std::string utf8);
+
+    /// M6.3a prototype: if \p token_utf8 is one confident syllable and \p event applies a
+    /// rewrite-only transform, returns the new UTF-8 syllable. Otherwise nullopt.
+    static std::optional<std::string> tryRewriteCommittedSyllable(const cbakey::config::RuntimeConfig& config,
+                                                                  const std::string& token_utf8,
+                                                                  const KeyEvent& event);
 
 private:
     struct RepeatTransformState {

@@ -74,6 +74,8 @@ RuntimeConfig loadConfigFile(const std::string& path) {
             } else if (value == "panel") {
                 config.fcitx5PreeditMode = Fcitx5PreeditMode::Panel;
             }
+        } else if (key == "fcitx5_committed_rewrite") {
+            config.fcitx5CommittedRewrite = parseBool(value, config.fcitx5CommittedRewrite);
         }
     }
 

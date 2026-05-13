@@ -17,6 +17,16 @@ static std::string typeSequence(Engine& engine, const std::string& keys) {
     return commit.commit;  // includes trailing space when committing via space
 }
 
+/// UTF-8 for "hoặc " (U+1EB7 = a with breve + dot below).
+static std::string utf8HoacNangSpace() {
+    std::string s = "ho";
+    s.push_back(static_cast<char>(0xE1));
+    s.push_back(static_cast<char>(0xBA));
+    s.push_back(static_cast<char>(0xB7));
+    s += "c ";
+    return s;
+}
+
 int main() {
     Engine engine(cbakey::config::defaultConfig());
 
@@ -158,6 +168,10 @@ int main() {
     assert(typeSequence(engine, "huoswng") == "hướng ");
     engine.clearState();
 
+    // hoặc: o + ă nucleus must match "oa" tone rules (regression: literal j / VNI 5).
+    assert(typeSequence(engine, "hoawcj") == utf8HoacNangSpace());
+    engine.clearState();
+
     // Backspace should delete the visible character, not roll back transform history.
     engine.processKey(KeyEvent{.key = 'a'});
     engine.processKey(KeyEvent{.key = 'a'});  // â
@@ -192,6 +206,28 @@ int main() {
     // u7 + 5 -> ự
     assert(typeSequence(vniEngine, "u75") == "ự ");
     assert(typeSequence(vniEngine, "u75") == std::string("\xE1\xBB\xB1 "));
+    vniEngine.clearState();
+
+    assert(typeSequence(vniEngine, "hoac85") == utf8HoacNangSpace());
+    vniEngine.clearState();
+
+    // chao + VNI 2 -> chào (tone 2 = huyền on the nucleus per VNI mapping).
+    for (const char k : std::string("chao")) {
+        vniEngine.processKey(KeyEvent{.key = k});
+    }
+    const auto chaoSac = vniEngine.processKey(KeyEvent{.key = '2'});
+    assert(chaoSac.consumed);
+    assert(chaoSac.preedit == std::string("ch\xC3\xA0o"));
+    vniEngine.clearState();
+
+    // Numpad digit while composing: commit current buffer, then forward the digit to the client.
+    for (const char k : std::string("ab")) {
+        vniEngine.processKey(KeyEvent{.key = k});
+    }
+    const auto padAfterAb = vniEngine.processKey(KeyEvent{.key = '1', .key_from_keypad = true});
+    assert(padAfterAb.consumed);
+    assert(padAfterAb.commit == "ab");
+    assert(padAfterAb.forwardOriginalKey);
     vniEngine.clearState();
 
     // Repeating the same VNI tone key should emit it literally.
@@ -270,6 +306,12 @@ int main() {
     auto nav = engine.processKey(KeyEvent{.aux = KeyAux::Left});
     assert(nav.consumed && nav.forwardOriginalKey);
     assert(nav.commit == "â");
+
+    engine.clearState();
+    engine.processKey(KeyEvent{.key = 'b'});
+    auto navUp = engine.processKey(KeyEvent{.aux = KeyAux::Up});
+    assert(navUp.consumed && navUp.forwardOriginalKey);
+    assert(navUp.commit == "b");
 
     engine.clearState();
     engine.processKey(KeyEvent{.key = 'x'});

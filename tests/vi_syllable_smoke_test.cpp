@@ -43,6 +43,7 @@ int main() {
     assert(!findStableComposeSplit(U"tieeng").has_value());
 
     assert(selectToneVowelIndex(U"chao") == 2);
+    assert(selectToneVowelIndex(U"ho\u0103c") == 2);  // hoăc: tone on ă (oă → "oa" pattern)
     assert(selectToneVowelIndex(U"hieu") == 2);
     assert(selectToneVowelIndex(U"giư") == 2);
     assert(selectToneVowelIndex(U"thuơ") == 3);
