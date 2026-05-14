@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+# Reload fcitx5 addon list if fcitx5 is running (best-effort, non-fatal).
+if command -v fcitx5-remote >/dev/null 2>&1; then
+    if fcitx5-remote -e >/dev/null 2>&1; then
+        fcitx5-remote -e 2>/dev/null || true
+    fi
+fi
+
+echo "CBAKey installed. To activate:"
+echo "  1. Open Fcitx5 Configuration"
+echo "  2. Add input method: CBAKey Vietnamese"
+echo "  3. Restart Fcitx5: pkill fcitx5; fcitx5 -d"

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace cbakey::core::vi_syllable {
 
@@ -27,6 +28,11 @@ std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer);
 // new syllable with an onset. The prefix before `committed_prefix_end` is then
 // stable enough to auto-commit.
 std::optional<StableComposeSplit> findStableComposeSplit(const std::u32string& buffer);
+
+// Like `segmentWholeBuffer` but prefers the segmentation with the **most**
+// syllables when ambiguous (used for remove-diacritics so only the last
+// syllable is stripped, e.g. "chủân" -> "chủan" instead of "chuan").
+std::optional<std::vector<SyllableSpan>> segmentWholeBufferPreferMaxSyllables(const std::u32string& buffer);
 
 // Returns the absolute buffer index of the tone-bearing vowel when the parser is
 // confident. Returns nullopt to let callers fall back to legacy heuristics.

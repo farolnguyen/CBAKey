@@ -1,0 +1,14 @@
+Architecture: amd64
+Depends: libfcitx5core10 | libfcitx5core9 | libfcitx5core8 | libfcitx5core7 | libfcitx5core6, libstdc++6 (>= 11)
+Description: CBAKey Vietnamese Input Method Engine for Fcitx5
+ CBAKey is a production-grade Vietnamese Telex/VNI input method engine
+ ;for Fcitx5 on Linux. Supports full tone placement, syllable model,
+ ;user dictionary expansion, and C1 committed-syllable rewrite.
+Maintainer: CBAKey Maintainers <cbakey@example.com>
+Package: cbakey
+Priority: optional
+Recommends: fcitx5
+Section: utils
+Version: 0.1.0
+Installed-Size: 222
+

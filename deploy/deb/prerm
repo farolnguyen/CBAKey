@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+# Nothing special needed before removal.
+# fcitx5 will stop loading the addon on next restart.
+echo "Removing CBAKey. Restart Fcitx5 to complete removal: pkill fcitx5; fcitx5 -d"

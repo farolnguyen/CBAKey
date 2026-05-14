@@ -30,5 +30,26 @@ int main() {
     assert(*chiuTone != "chiu");
     assert(*chiuTone != "chiu2");
 
+    // C1 + "ua+coda" fix: committed token already has correct form, z strips whole syllable.
+    // "chuẩn" (c,h,u,ẩ,n) z-strip → "chuan"
+    const auto chuanZ = Engine::tryRewriteCommittedSyllable(cfg, "chu\xe1\xba\xa9n", KeyEvent{.key = 'z'});
+    assert(chuanZ.has_value());
+    assert(*chuanZ == "chuan");
+
+    // "tuần" (t,u,ầ,n) z-strip → "tuan"
+    const auto tuanZ = Engine::tryRewriteCommittedSyllable(cfg, "tu\xe1\xba\xa7n", KeyEvent{.key = 'z'});
+    assert(tuanZ.has_value());
+    assert(*tuanZ == "tuan");
+
+    // Applying tone to plain "tuan" committed: should place tone on 'a' (second vowel), not 'u'.
+    // Telex 'f' (huyền) on "tuan" → "tuàn" (à at position 2), not "tụan".
+    const auto tuanHuyen = Engine::tryRewriteCommittedSyllable(cfg, "tuan", KeyEvent{.key = 'f'});
+    assert(tuanHuyen.has_value());
+    assert(*tuanHuyen != "tuan");
+    // Tone must NOT be on 'u' (no ù or ụ at position 1).
+    assert(tuanHuyen->find('\xC3') == std::string::npos || (*tuanHuyen)[0] != 't' || (*tuanHuyen)[1] != '\xC3');
+    // Result begins with "tu" (u still toneless).
+    assert(tuanHuyen->substr(0, 2) == "tu");
+
     return 0;
 }

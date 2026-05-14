@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/cbakey_compose_anchor_smoke_test.dir/tests/compose_anchor_smoke_test.cpp.o -o cbakey_compose_anchor_smoke_test 

@@ -6,6 +6,7 @@
 
 #include "cbakey/config/config.h"
 #include "cbakey/core/types.h"
+#include "cbakey/core/user_dict.h"
 
 namespace cbakey::core {
 
@@ -45,6 +46,7 @@ private:
     static bool isAsciiSeparatorCommit(char ch);
 
     cbakey::config::RuntimeConfig config_;
+    UserDict userDict_;
     InputMode mode_ = InputMode::Vietnamese;
     std::string preeditBuffer_;
     std::vector<std::string> preeditHistory_;

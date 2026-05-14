@@ -13,6 +13,7 @@ option(CBAKEY_BUILD_CORPUS_TOOLS "Build corpus BFS sequence finder (offline gene
 add_library(cbakey_core
     src/core/engine.cpp
     src/core/vi_syllable.cpp
+    src/core/user_dict.cpp
     src/config/config.cpp
     src/common/logger.cpp
 )
@@ -135,6 +136,10 @@ if(CBAKEY_BUILD_TESTS)
     target_link_libraries(cbakey_m6_3a_rewrite_smoke_test PRIVATE cbakey_core)
     add_test(NAME cbakey_m6_3a_rewrite_smoke_test COMMAND cbakey_m6_3a_rewrite_smoke_test)
 
+    add_executable(cbakey_m8_user_dict_smoke_test tests/m8_user_dict_smoke_test.cpp)
+    target_link_libraries(cbakey_m8_user_dict_smoke_test PRIVATE cbakey_core)
+    add_test(NAME cbakey_m8_user_dict_smoke_test COMMAND cbakey_m8_user_dict_smoke_test)
+
     add_executable(cbakey_surrounding_cursor_normalize_smoke_test
                    tests/surrounding_cursor_normalize_smoke_test.cpp)
     target_link_libraries(cbakey_surrounding_cursor_normalize_smoke_test PRIVATE cbakey_fcitx5_adapter)
@@ -160,3 +165,68 @@ if(CBAKEY_BUILD_CORPUS_TOOLS)
         target_compile_options(cbakey_m1_fallback_audit PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endif()
+
+# ── M10: Install targets ──────────────────────────────────────────────────────
+
+if(CBAKEY_BUILD_FCITX5_PLUGIN)
+    # Determine Fcitx5 addon library install path (multiarch-aware).
+    # On Debian/Ubuntu: /usr/lib/x86_64-linux-gnu/fcitx5
+    # Fallback:         /usr/lib/fcitx5
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(CBAKEY_MULTIARCH_TUPLE "x86_64-linux-gnu" CACHE STRING "Multiarch tuple")
+    else()
+        set(CBAKEY_MULTIARCH_TUPLE "i386-linux-gnu" CACHE STRING "Multiarch tuple")
+    endif()
+
+    install(TARGETS cbakey_fcitx5plugin
+        LIBRARY DESTINATION "lib/${CBAKEY_MULTIARCH_TUPLE}/fcitx5"
+        COMPONENT runtime
+    )
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/deploy/fcitx5/addon/cbakey.conf"
+        DESTINATION "share/fcitx5/addon"
+        COMPONENT runtime
+    )
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/deploy/fcitx5/inputmethod/cbakey.conf"
+        DESTINATION "share/fcitx5/inputmethod"
+        COMPONENT runtime
+    )
+endif()
+
+# ── M10: CPack DEB ───────────────────────────────────────────────────────────
+
+set(CPACK_PACKAGE_NAME "cbakey")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VENDOR "CBAKey Project")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CBAKey Vietnamese Input Method Engine for Fcitx5")
+set(CPACK_PACKAGE_DESCRIPTION
+    "CBAKey is a production-grade Vietnamese Telex/VNI input method engine\n"
+    "for Fcitx5 on Linux. Supports full tone placement, syllable model,\n"
+    "user dictionary expansion, and C1 committed-syllable rewrite.")
+set(CPACK_PACKAGE_CONTACT "cbakey@example.com")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+endif()
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+# SONAME varies by distro/Ubuntu release: .so.7 (noble), .so.8–.so.10 on others.
+set(CPACK_DEBIAN_PACKAGE_DEPENDS
+    "libfcitx5core10 | libfcitx5core9 | libfcitx5core8 | libfcitx5core7 | libfcitx5core6, libstdc++6 (>= 11)")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "fcitx5")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "CBAKey Maintainers <cbakey@example.com>")
+set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+
+# Post-install: restart fcitx5 if running
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
+    "${CMAKE_CURRENT_SOURCE_DIR}/deploy/deb/postinst"
+    "${CMAKE_CURRENT_SOURCE_DIR}/deploy/deb/prerm"
+)
+
+set(CPACK_COMPONENTS_ALL runtime)
+set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "CBAKey runtime plugin")
+
+include(CPack)

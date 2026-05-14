@@ -11,6 +11,7 @@ using cbakey::core::vi_syllable::normalizeVietnameseNfc;
 using cbakey::core::vi_syllable::removeTelexDiacritics;
 using cbakey::core::vi_syllable::removeVniDiacritics;
 using cbakey::core::vi_syllable::selectToneVowelIndex;
+using cbakey::core::vi_syllable::segmentWholeBufferPreferMaxSyllables;
 
 int main() {
     const auto qua = findLastSyllable(U"qua");
@@ -67,6 +68,11 @@ int main() {
     assert(selectToneVowelIndex(U"mia") == 1);
     assert(selectToneVowelIndex(U"cua") == 1);
     assert(selectToneVowelIndex(U"hưa") == 1);
+    // "ua" with coda: tone goes on second vowel (a/â), not u.
+    // e.g. "xuân" / "tuần" / "chuẩn" all have tone on â, not u.
+    assert(selectToneVowelIndex(U"tuan") == 2);    // t-uan: tone on a(2)
+    assert(selectToneVowelIndex(U"xu\u00e2n") == 2);  // x-u-â-n: tone on â(2)
+    assert(selectToneVowelIndex(U"chu\u00e2n") == 3);  // ch-u-â-n: tone on â(3)
     assert(selectToneVowelIndex(U"thuy") == 3);
     assert(selectToneVowelIndex(U"khuây") == 3);
     assert(selectToneVowelIndex(U"rươu") == 2);
@@ -296,6 +302,34 @@ int main() {
     std::u32string plainVni = U"abc";
     assert(!removeVniDiacritics(plainVni));
     assert(plainVni == U"abc");
+
+    // Typo "chủân" / "chủần": strip only the last syllable (ân / ần -> an).
+    const auto segChuanTypo = segmentWholeBufferPreferMaxSyllables(U"ch\u1EE7\u00E2n");
+    assert(segChuanTypo.has_value() && segChuanTypo->size() == 2);
+    std::u32string chuanTypo = U"ch\u1EE7\u00E2n";
+    assert(removeTelexDiacritics(chuanTypo));
+    assert(chuanTypo == U"ch\u1EE7an");
+    chuanTypo = U"Ch\u1EE7\u00E2n";
+    assert(removeVniDiacritics(chuanTypo));
+    assert(chuanTypo == U"Ch\u1EE7an");
+
+    const auto segChuanSac = segmentWholeBufferPreferMaxSyllables(U"ch\u1EE7\u1EA7n");
+    assert(segChuanSac.has_value() && segChuanSac->size() == 2);
+    chuanTypo = U"ch\u1EE7\u1EA7n";
+    assert(removeTelexDiacritics(chuanTypo));
+    assert(chuanTypo == U"ch\u1EE7an");
+
+    // NFD (decomposed ủ + decomposed â) must NFC-merge then strip like precomposed "chủân".
+    std::u32string nfdChuan = U"ch\u0075\u0309\u0061\u0302n";
+    assert(normalizeVietnameseNfc(nfdChuan));
+    assert(nfdChuan == U"ch\u1EE7\u00E2n");
+    assert(removeTelexDiacritics(nfdChuan));
+    assert(nfdChuan == U"ch\u1EE7an");
+
+    // Uppercase G + "íup": same syllable as "giúp"; strip must not peel tone onto bare "i".
+    std::u32string giupUpper = U"G\u00edup";
+    assert(removeTelexDiacritics(giupUpper));
+    assert(giupUpper == U"Giup");
 
     return 0;
 }

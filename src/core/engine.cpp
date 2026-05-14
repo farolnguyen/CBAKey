@@ -3,9 +3,14 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdlib>
+#include <cwctype>
+#include <locale.h>
 #include <optional>
+#include <string>
 #include <vector>
 
+#include "cbakey/core/user_dict.h"
 #include "cbakey/core/vi_syllable.h"
 
 namespace cbakey::core {
@@ -13,6 +18,40 @@ namespace cbakey::core {
 namespace {
 
 constexpr std::size_t kToneCount = 6;  // ngang, sac, huyen, hoi, nga, nang
+
+locale_t utf8CTypeLocale() {
+    static locale_t loc = []() -> locale_t {
+        static const char* const kNames[] = {"C.UTF-8", "C.utf8", "en_US.UTF-8", nullptr};
+        for (std::size_t i = 0; kNames[i] != nullptr; ++i) {
+            if (locale_t l = newlocale(LC_CTYPE_MASK, kNames[i], static_cast<locale_t>(0))) {
+                return l;
+            }
+        }
+        return static_cast<locale_t>(0);
+    }();
+    return loc;
+}
+
+wint_t utf8CTypeTowupper(wint_t wc) {
+    if (locale_t loc = utf8CTypeLocale()) {
+        return towupper_l(wc, loc);
+    }
+    return towupper(wc);
+}
+
+wint_t utf8CTypeTowlower(wint_t wc) {
+    if (locale_t loc = utf8CTypeLocale()) {
+        return towlower_l(wc, loc);
+    }
+    return towlower(wc);
+}
+
+int utf8CTypeIswupper(wint_t wc) {
+    if (locale_t loc = utf8CTypeLocale()) {
+        return iswupper_l(wc, loc);
+    }
+    return iswupper(wc);
+}
 
 std::u32string decodeUtf8(const std::string& input) {
     std::u32string output;
@@ -110,12 +149,34 @@ const std::vector<std::array<char32_t, kToneCount>>& toneSets() {
 
 bool applyToneAt(std::u32string& buffer, std::size_t pos, std::size_t toneIndex) {
     char32_t& ch = buffer[pos];
+    const std::wint_t wch = static_cast<std::wint_t>(ch);
+    const bool wasUpper = utf8CTypeIswupper(wch) != 0;
     const auto& sets = toneSets();
     for (const auto& set : sets) {
         for (std::size_t k = 0; k < kToneCount; ++k) {
             if (set[k] == ch) {
-                ch = set[toneIndex];
+                char32_t repl = set[toneIndex];
+                if (wasUpper) {
+                    repl = static_cast<char32_t>(utf8CTypeTowupper(static_cast<std::wint_t>(repl)));
+                }
+                ch = repl;
                 return true;
+            }
+        }
+    }
+    if (wasUpper) {
+        const std::wint_t wl = utf8CTypeTowlower(wch);
+        if (wl != wch) {
+            const char32_t lowerCh = static_cast<char32_t>(wl);
+            for (const auto& set : sets) {
+                for (std::size_t k = 0; k < kToneCount; ++k) {
+                    if (set[k] == lowerCh) {
+                        char32_t repl = set[toneIndex];
+                        repl = static_cast<char32_t>(utf8CTypeTowupper(static_cast<std::wint_t>(repl)));
+                        ch = repl;
+                        return true;
+                    }
+                }
             }
         }
     }
@@ -228,7 +289,32 @@ bool isVniEscapableKey(char key) {
 
 }  // namespace
 
-Engine::Engine(cbakey::config::RuntimeConfig config) : config_(std::move(config)) {}
+namespace {
+
+/// Resolve the user dictionary path from config or XDG default.
+std::string resolveUserDictPath(const cbakey::config::RuntimeConfig& cfg) {
+    if (!cfg.userDictPath.empty()) {
+        return cfg.userDictPath;
+    }
+    // XDG_CONFIG_HOME / cbakey / user_dict.json
+    const char* xdg = std::getenv("XDG_CONFIG_HOME");
+    std::string base;
+    if (xdg && xdg[0] != '\0') {
+        base = xdg;
+    } else {
+        const char* home = std::getenv("HOME");
+        base = home ? std::string(home) + "/.config" : "/tmp";
+    }
+    return base + "/cbakey/user_dict.json";
+}
+
+}  // namespace
+
+Engine::Engine(cbakey::config::RuntimeConfig config)
+    : config_(std::move(config)),
+      userDict_(config_.enableUserDictionary
+                    ? UserDict::loadFromFile(resolveUserDictPath(config_))
+                    : UserDict{}) {}
 
 void Engine::clearRepeatTransformState() {
     repeatTransformState_ = RepeatTransformState{};
@@ -294,6 +380,20 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         ProcessResult r;
         if (preeditBuffer_.empty()) {
             return r;
+        }
+        // M8.2: user dict static expansion.
+        // Dict always takes priority — if the user put a trigger in the dict they want it
+        // to expand. Expansion fires on word-boundary keys (space, enter, tab).
+        if (config_.enableUserDictionary && !userDict_.empty()) {
+            if (const UserDictEntry* entry = userDict_.lookup(preeditBuffer_)) {
+                r.commit = entry->expansion + suffix;
+                preeditBuffer_.clear();
+                preeditHistory_.clear();
+                clearRepeatTransformState();
+                clearPendingLiteralEscape();
+                r.consumed = true;
+                return r;
+            }
         }
         r.commit = preeditBuffer_ + std::move(suffix);
         preeditBuffer_.clear();

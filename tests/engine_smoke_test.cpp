@@ -109,6 +109,9 @@ int main() {
     engine.clearState();
     assert(typeSequence(engine, "thieeuz") == "thieu ");
     engine.clearState();
+    // Uppercase onset + tone on medial i (same syllable as "giúp"); z must not peel onto bare "i".
+    assert(typeSequence(engine, "Gisupz") == "Giup ");
+    engine.clearState();
     assert(typeSequence(engine, "eez") == "e ");
     engine.clearState();
     assert(typeSequence(engine, "ooz") == "o ");
@@ -264,6 +267,11 @@ int main() {
     assert(typeSequence(vniEngine, "a10") == "a ");
     vniEngine.clearState();
     assert(typeSequence(vniEngine, "a60") == "a ");
+    vniEngine.clearState();
+    // Uppercase vowel + VNI tone / strip (tone tables are lowercase; uppercase must still match).
+    assert(typeSequence(vniEngine, "A1") == std::string("\xC3\x81 "));
+    vniEngine.clearState();
+    assert(typeSequence(vniEngine, "A10") == "A ");
     vniEngine.clearState();
     assert(typeSequence(vniEngine, "a160") == "a ");
     vniEngine.clearState();
@@ -1445,6 +1453,51 @@ int main() {
         lastVni = vniEngine.processKey(KeyEvent{.key = k});
     }
     assert(lastVni.preedit == "huơ");
+
+    // ---- "ua" + coda + tone: tone must land on â/a (second vowel), not u ----
+    // Telex: c-h-u-a-a-n (aa->â) then r (hỏi) -> "chuẩn"; z must strip whole syllable.
+    {
+        Engine telexEngine(cbakey::config::defaultConfig());
+        ProcessResult r;
+        for (const char k : {'c', 'h', 'u', 'a', 'a', 'n', 'r'}) {
+            r = telexEngine.processKey(KeyEvent{.key = k});
+        }
+        assert(r.preedit == "chuẩn");
+        assert(r.commit.empty());
+        auto rZ = telexEngine.processKey(KeyEvent{.key = 'z'});
+        assert(rZ.preedit == "chuan");
+        assert(rZ.commit.empty());
+    }
+
+    // Telex: t-u-a-a-n (aa->â) then f (huyền) -> "tuần"; z must strip whole syllable.
+    {
+        Engine telexEngine(cbakey::config::defaultConfig());
+        ProcessResult r;
+        for (const char k : {'t', 'u', 'a', 'a', 'n', 'f'}) {
+            r = telexEngine.processKey(KeyEvent{.key = k});
+        }
+        assert(r.preedit == "tuần");
+        assert(r.commit.empty());
+        auto rZ = telexEngine.processKey(KeyEvent{.key = 'z'});
+        assert(rZ.preedit == "tuan");
+        assert(rZ.commit.empty());
+    }
+
+    // VNI: x-u-a-6 (6->â) then n then 3 (hỏi) -> "xuẩn"
+    {
+        cbakey::config::RuntimeConfig vniCfg2 = cbakey::config::defaultConfig();
+        vniCfg2.method = cbakey::core::InputMethod::Vni;
+        Engine vniEngine2(vniCfg2);
+        ProcessResult r;
+        for (const char k : {'x', 'u', 'a', '6', 'n', '3'}) {
+            r = vniEngine2.processKey(KeyEvent{.key = k});
+        }
+        assert(r.preedit == "xuẩn");
+        assert(r.commit.empty());
+        auto rZ = vniEngine2.processKey(KeyEvent{.key = '0'});
+        assert(rZ.preedit == "xuan");
+        assert(rZ.commit.empty());
+    }
 
     return 0;
 }

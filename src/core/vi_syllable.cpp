@@ -1,12 +1,48 @@
 #include "cbakey/core/vi_syllable.h"
 
 #include <array>
+#include <cwctype>
+#include <locale.h>
 #include <optional>
 #include <string_view>
 #include <vector>
 
 namespace cbakey::core::vi_syllable {
 namespace {
+
+locale_t utf8CTypeLocale() {
+    static locale_t loc = []() -> locale_t {
+        static const char* const kNames[] = {"C.UTF-8", "C.utf8", "en_US.UTF-8", nullptr};
+        for (std::size_t i = 0; kNames[i] != nullptr; ++i) {
+            if (locale_t l = newlocale(LC_CTYPE_MASK, kNames[i], static_cast<locale_t>(0))) {
+                return l;
+            }
+        }
+        return static_cast<locale_t>(0);
+    }();
+    return loc;
+}
+
+wint_t utf8CTypeTowupper(wint_t wc) {
+    if (locale_t loc = utf8CTypeLocale()) {
+        return towupper_l(wc, loc);
+    }
+    return towupper(wc);
+}
+
+wint_t utf8CTypeTowlower(wint_t wc) {
+    if (locale_t loc = utf8CTypeLocale()) {
+        return towlower_l(wc, loc);
+    }
+    return towlower(wc);
+}
+
+int utf8CTypeIswupper(wint_t wc) {
+    if (locale_t loc = utf8CTypeLocale()) {
+        return iswupper_l(wc, loc);
+    }
+    return iswupper(wc);
+}
 
 constexpr std::size_t kToneCount = 6;
 
@@ -29,18 +65,31 @@ const std::vector<std::array<char32_t, kToneCount>>& toneSets() {
 
 bool locateInToneSets(char32_t ch, std::size_t* outSetIdx = nullptr, std::size_t* outToneIdx = nullptr) {
     const auto& sets = toneSets();
-    for (std::size_t si = 0; si < sets.size(); ++si) {
-        for (std::size_t ti = 0; ti < sets[si].size(); ++ti) {
-            const char32_t member = sets[si][ti];
-            if (member == ch) {
-                if (outSetIdx != nullptr) {
-                    *outSetIdx = si;
+    const auto tryChar = [&](char32_t c) -> bool {
+        for (std::size_t si = 0; si < sets.size(); ++si) {
+            for (std::size_t ti = 0; ti < sets[si].size(); ++ti) {
+                const char32_t member = sets[si][ti];
+                if (member == c) {
+                    if (outSetIdx != nullptr) {
+                        *outSetIdx = si;
+                    }
+                    if (outToneIdx != nullptr) {
+                        *outToneIdx = ti;
+                    }
+                    return true;
                 }
-                if (outToneIdx != nullptr) {
-                    *outToneIdx = ti;
-                }
-                return true;
             }
+        }
+        return false;
+    };
+    if (tryChar(ch)) {
+        return true;
+    }
+    const std::wint_t w = static_cast<std::wint_t>(ch);
+    if (w != static_cast<std::wint_t>(WEOF)) {
+        const std::wint_t wl = utf8CTypeTowlower(w);
+        if (wl != w) {
+            return tryChar(static_cast<char32_t>(wl));
         }
     }
     return false;
@@ -126,13 +175,37 @@ bool startsWith(const std::u32string& s, std::u32string_view prefix) {
     return true;
 }
 
-bool endsWith(const std::u32string& s, std::u32string_view suffix) {
+bool latinEq(char32_t a, char32_t b) {
+    if (a == b) {
+        return true;
+    }
+    const std::wint_t wa = static_cast<std::wint_t>(a);
+    const std::wint_t wb = static_cast<std::wint_t>(b);
+    if (wa == WEOF || wb == WEOF) {
+        return false;
+    }
+    return utf8CTypeTowlower(wa) == utf8CTypeTowlower(wb);
+}
+
+bool startsWithLatinCaseFold(const std::u32string& s, std::u32string_view prefix) {
+    if (s.size() < prefix.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < prefix.size(); ++i) {
+        if (!latinEq(s[i], prefix[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool endsWithLatinCaseFold(const std::u32string& s, std::u32string_view suffix) {
     if (s.size() < suffix.size()) {
         return false;
     }
     const std::size_t offset = s.size() - suffix.size();
     for (std::size_t i = 0; i < suffix.size(); ++i) {
-        if (s[offset + i] != suffix[i]) {
+        if (!latinEq(s[offset + i], suffix[i])) {
             return false;
         }
     }
@@ -145,7 +218,7 @@ std::size_t longestOnsetLength(const std::u32string& base) {
         U"b",   U"c",  U"d",  U"đ",  U"g",  U"h",  U"k",  U"l",  U"m",
         U"n",   U"p",  U"q",  U"r",  U"s",  U"t",  U"v",  U"x"};
     for (std::u32string_view onset : kOnsets) {
-        if (startsWith(base, onset)) {
+        if (startsWithLatinCaseFold(base, onset)) {
             return onset.size();
         }
     }
@@ -155,7 +228,7 @@ std::size_t longestOnsetLength(const std::u32string& base) {
 std::size_t longestCodaLength(const std::u32string& base) {
     static constexpr std::u32string_view kCodas[] = {U"ch", U"nh", U"ng", U"c", U"m", U"n", U"p", U"t"};
     for (std::u32string_view coda : kCodas) {
-        if (endsWith(base, coda)) {
+        if (endsWithLatinCaseFold(base, coda)) {
             return coda.size();
         }
     }
@@ -183,10 +256,10 @@ std::optional<SyllableSpan> parseSingleSyllableRange(const std::u32string& buffe
         return std::nullopt;
     }
 
-    if (onsetLen == 1 && base[0] == U'q' && coreBegin + 1 < coreEnd && base[coreBegin] == U'u' &&
+    if (onsetLen == 1 && latinEq(base[0], U'q') && coreBegin + 1 < coreEnd && latinEq(base[coreBegin], U'u') &&
         isVowelBase(base[coreBegin + 1])) {
         medialLen = 1;
-    } else if (onsetLen == 1 && base[0] == U'g' && coreBegin + 1 < coreEnd && base[coreBegin] == U'i' &&
+    } else if (onsetLen == 1 && latinEq(base[0], U'g') && coreBegin + 1 < coreEnd && latinEq(base[coreBegin], U'i') &&
                isVowelBase(base[coreBegin + 1])) {
         medialLen = 1;
     }
@@ -201,6 +274,38 @@ std::optional<SyllableSpan> parseSingleSyllableRange(const std::u32string& buffe
         }
     }
 
+    // Standard Vietnamese has at most one non-ngang tone per syllable. Reject parses that stack
+    // multiple toned vowels in the nucleus (e.g. typo "chủân" mis-read as one syllable), which
+    // would confuse strip-diacritics and segmentation.
+    std::size_t nonNgangToneCount = 0;
+    for (std::size_t i = nucleusBegin; i < coreEnd; ++i) {
+        std::size_t toneIdx = 0;
+        if (!locateInToneSets(buffer[begin + i], nullptr, &toneIdx)) {
+            continue;
+        }
+        if (toneIdx != 0) {
+            ++nonNgangToneCount;
+        }
+    }
+    if (nonNgangToneCount > 1) {
+        return std::nullopt;
+    }
+
+    // Typo "chủân" / "chủấn" / NFD "chu\u0309a\u0302n": nucleus is u-bucket vowel with tone + a letter
+    // from the **â** tone-set row (â ấ ầ …). That is not a legal single Vietnamese syllable (cf. "thuần"
+    // where the leading u is toneless). Plain "a" row (without circumflex) is still allowed (e.g. "thúa").
+    if (coreEnd - nucleusBegin == 2) {
+        const char32_t v0 = buffer[begin + nucleusBegin];
+        const char32_t v1 = buffer[begin + nucleusBegin + 1];
+        std::size_t t0 = 0;
+        if (locateInToneSets(v0, nullptr, &t0) && t0 != 0 && tonePatternBucket(v0) == U'u') {
+            std::size_t si1 = 0;
+            if (locateInToneSets(v1, &si1, nullptr) && toneSets()[si1][0] == U'â') {
+                return std::nullopt;
+            }
+        }
+    }
+
     return SyllableSpan{
         .begin = begin,
         .onset_end = begin + onsetLen,
@@ -210,7 +315,8 @@ std::optional<SyllableSpan> parseSingleSyllableRange(const std::u32string& buffe
     };
 }
 
-std::optional<std::vector<SyllableSpan>> segmentWholeBuffer(const std::u32string& buffer) {
+std::optional<std::vector<SyllableSpan>> segmentWholeBufferWithPreference(const std::u32string& buffer,
+                                                                          bool minimizeSyllableCount) {
     if (buffer.empty()) {
         return std::nullopt;
     }
@@ -248,8 +354,15 @@ std::optional<std::vector<SyllableSpan>> segmentWholeBuffer(const std::u32string
             candidate.push_back(*span);
             candidate.insert(candidate.end(), rest->begin(), rest->end());
 
-            if (!best || candidate.size() < best->size() ||
-                (candidate.size() == best->size() && candidate.back().begin > best->back().begin)) {
+            bool better = false;
+            if (minimizeSyllableCount) {
+                better = !best || candidate.size() < best->size() ||
+                         (candidate.size() == best->size() && candidate.back().begin > best->back().begin);
+            } else {
+                better = !best || candidate.size() > best->size() ||
+                         (candidate.size() == best->size() && candidate.back().begin < best->back().begin);
+            }
+            if (better) {
                 best = std::move(candidate);
             }
         }
@@ -274,7 +387,7 @@ std::optional<std::size_t> selectToneOffset(const std::u32string& tonePattern, b
         {U"ao", 0, 0},   {U"au", 0, 0},   {U"âu", 0, 0},   {U"ay", 0, 0},
         {U"ây", 0, 0},   {U"ai", 0, 0},   {U"eo", 0, 0},   {U"eu", 0, 0},
         {U"êu", 0, 0},   {U"oi", 0, 0},   {U"ôi", 0, 0},
-        {U"ơi", 0, 0},   {U"ui", 0, 0},   {U"iu", 1, 1},   {U"ưi", 0, 0},   {U"ua", 0, 0},
+        {U"ơi", 0, 0},   {U"ui", 0, 0},   {U"iu", 0, 0},   {U"ưi", 0, 0},   {U"ua", 0, 1},
         {U"ia", 0, 1},   {U"ie", 1, 1},   {U"iê", 1, 1},   {U"ya", 0, 1},
         {U"ye", 1, 1},
         {U"yê", 1, 1},   {U"uye", 2, 2},
@@ -298,13 +411,20 @@ std::optional<std::size_t> selectToneOffset(const std::u32string& tonePattern, b
 }
 
 bool replaceWithSetPreserveTone(std::u32string& buffer, std::size_t pos, std::size_t setIdx) {
+    char32_t& ch = buffer[pos];
+    const std::wint_t wch = static_cast<std::wint_t>(ch);
+    const bool wasUpper = utf8CTypeIswupper(wch) != 0;
     std::size_t oldSetIdx = 0;
     std::size_t toneIdx = 0;
-    if (!locateInToneSets(buffer[pos], &oldSetIdx, &toneIdx)) {
+    if (!locateInToneSets(ch, &oldSetIdx, &toneIdx)) {
         return false;
     }
     (void)oldSetIdx;
-    buffer[pos] = toneSets()[setIdx][toneIdx];
+    char32_t repl = toneSets()[setIdx][toneIdx];
+    if (wasUpper) {
+        repl = static_cast<char32_t>(utf8CTypeTowupper(static_cast<std::wint_t>(repl)));
+    }
+    ch = repl;
     return true;
 }
 
@@ -395,6 +515,14 @@ bool applyCombiningMark(char32_t& ch, char32_t mark) {
 
 }  // namespace
 
+std::optional<std::vector<SyllableSpan>> segmentWholeBuffer(const std::u32string& buffer) {
+    return segmentWholeBufferWithPreference(buffer, true);
+}
+
+std::optional<std::vector<SyllableSpan>> segmentWholeBufferPreferMaxSyllables(const std::u32string& buffer) {
+    return segmentWholeBufferWithPreference(buffer, false);
+}
+
 std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer) {
     std::optional<SyllableSpan> best;
     for (std::size_t begin = 0; begin < buffer.size(); ++begin) {
@@ -427,19 +555,25 @@ std::optional<StableComposeSplit> findStableComposeSplit(const std::u32string& b
 }
 
 bool normalizeVietnameseNfc(std::u32string& buffer) {
-    std::u32string normalized;
-    normalized.reserve(buffer.size());
-    for (const char32_t ch : buffer) {
-        if (!normalized.empty() && applyCombiningMark(normalized.back(), ch)) {
-            continue;
+    bool any = false;
+    // Multiple passes: one combining mark may need the previous char to already be merged
+    // (e.g. NFD "u\u0309" -> ủ, then "â" from "a\u0302") so a single forward scan is not always enough.
+    for (int pass = 0; pass < 32; ++pass) {
+        std::u32string normalized;
+        normalized.reserve(buffer.size());
+        for (const char32_t ch : buffer) {
+            if (!normalized.empty() && applyCombiningMark(normalized.back(), ch)) {
+                continue;
+            }
+            normalized.push_back(ch);
         }
-        normalized.push_back(ch);
+        if (normalized == buffer) {
+            return any;
+        }
+        buffer = std::move(normalized);
+        any = true;
     }
-    if (normalized == buffer) {
-        return false;
-    }
-    buffer = std::move(normalized);
-    return true;
+    return any;
 }
 
 std::optional<std::size_t> selectToneVowelIndex(const std::u32string& buffer) {
@@ -545,14 +679,18 @@ bool normalizeTelexBuffer(std::u32string& buffer) {
 
 bool removeVietnameseDiacritics(std::u32string& buffer) {
     normalizeVietnameseNfc(buffer);
-    bool changed = false;
-    for (char32_t& ch : buffer) {
+
+    const auto stripOne = [](char32_t& ch) -> bool {
         if (ch == U'đ') {
             ch = U'd';
-            changed = true;
-            continue;
+            return true;
         }
-
+        if (ch == U'Đ') {
+            ch = U'D';
+            return true;
+        }
+        const std::wint_t w = static_cast<std::wint_t>(ch);
+        const bool wasUpper = utf8CTypeIswupper(w) != 0;
         const char32_t base = baseChar(ch);
         char32_t normalized = ch;
         switch (base) {
@@ -574,8 +712,34 @@ bool removeVietnameseDiacritics(std::u32string& buffer) {
                 normalized = base;
                 break;
         }
-        if (normalized != ch) {
+        if (normalized == ch) {
+            return false;
+        }
+        if (wasUpper && normalized >= U'a' && normalized <= U'z') {
+            ch = static_cast<char32_t>(normalized - U'a' + U'A');
+        } else {
             ch = normalized;
+        }
+        return true;
+    };
+
+    std::optional<SyllableSpan> target;
+    if (const auto last = findLastSyllable(buffer)) {
+        target = *last;
+    }
+
+    bool changed = false;
+    if (target) {
+        for (std::size_t i = target->begin; i < target->end; ++i) {
+            if (stripOne(buffer[i])) {
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    for (char32_t& ch : buffer) {
+        if (stripOne(ch)) {
             changed = true;
         }
     }

@@ -231,7 +231,15 @@ bool tryApplyCommittedSyllableRewrite(fcitx::InputContext* ic,
         return false;
     }
     ic->deleteSurroundingText(-tokenChars, static_cast<unsigned int>(tokenChars));
-    ic->commitString(*rewritten);
+    // Use commitStringWithCursor when available so the client knows the cursor
+    // should land at the end of the newly-committed token (avoids cursor drift in
+    // VSCode/Electron where a plain commitString may leave the cursor position
+    // ambiguous after deleteSurroundingText).
+    if (ic->capabilityFlags().test(fcitx::CapabilityFlag::CommitStringWithCursor)) {
+        ic->commitStringWithCursor(*rewritten, rewritten->size());
+    } else {
+        ic->commitString(*rewritten);
+    }
     return true;
 }
 

@@ -17,6 +17,8 @@ struct RuntimeConfig {
     cbakey::core::InputMethod method = cbakey::core::InputMethod::Telex;
     bool enableUserDictionary = true;
     bool enableStaticExpansion = true;
+    /// M8.1: path to user dictionary JSON file. Empty = use default XDG path at runtime.
+    std::string userDictPath;
     std::string toggleHotkey = "Ctrl+Alt+Z";
     Fcitx5PreeditMode fcitx5PreeditMode = Fcitx5PreeditMode::Auto;
     /// M6.3a: rewrite syllable left of caret via SurroundingText + deleteSurroundingText. Off by

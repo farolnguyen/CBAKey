@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/tests/surrounding_cursor_normalize_smoke_test.cpp.o -o cbakey_surrounding_cursor_normalize_smoke_test  libcbakey_fcitx5_adapter.a libcbakey_core.a 
