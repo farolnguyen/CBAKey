@@ -1,0 +1,1 @@
+/usr/bin/c++ -O2 -O3 -DNDEBUG CMakeFiles/cbakey_abbrev.dir/tools/cbakey_abbrev_main.cpp.o -o cbakey-abbrev  libcbakey_core.a 

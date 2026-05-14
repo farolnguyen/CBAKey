@@ -18,6 +18,15 @@ public:
     void setInputMode(InputMode mode);
     InputMode inputMode() const;
     void clearState();
+
+    /// M13: disable abbreviation expansion when focused widget is a password/sensitive field.
+    void setPasswordField(bool isPassword);
+    bool isPasswordField() const;
+
+    /// M13: look up a trigger for En/Both-mode expansion (used by the adapter's
+    /// surrounding-text rewrite path in English mode). Returns nullptr if not found,
+    /// dict is disabled, or password field is active.
+    const UserDictEntry* lookupEnglishAbbrev(const std::string& trigger) const;
     /// Returns current composition text and clears engine state (for IM switch / flush).
     std::string takeCompositionForCommit();
 
@@ -52,6 +61,7 @@ private:
     std::vector<std::string> preeditHistory_;
     RepeatTransformState repeatTransformState_;
     bool pendingLiteralEscape_ = false;
+    bool passwordField_        = false;
 };
 
 }  // namespace cbakey::core

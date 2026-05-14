@@ -43,6 +43,14 @@ std::string Bridge::takeCompositionForCommit() {
     return out;
 }
 
+void Bridge::setPasswordField(bool isPassword) {
+    engine_.setPasswordField(isPassword);
+}
+
+const cbakey::core::UserDictEntry* Bridge::lookupEnglishAbbrev(const std::string& trigger) const {
+    return engine_.lookupEnglishAbbrev(trigger);
+}
+
 Bridge createBridgeFromConfigFile(const std::string& configPath) {
     const auto config = cbakey::config::loadConfigFile(configPath);
     return Bridge(config);

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcbakey_core.a CMakeFiles/cbakey_core.dir/src/core/engine.cpp.o CMakeFiles/cbakey_core.dir/src/core/vi_syllable.cpp.o CMakeFiles/cbakey_core.dir/src/core/user_dict.cpp.o CMakeFiles/cbakey_core.dir/src/config/config.cpp.o CMakeFiles/cbakey_core.dir/src/common/logger.cpp.o
+/usr/bin/ranlib libcbakey_core.a

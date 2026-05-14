@@ -1,0 +1,1 @@
+/usr/bin/c++ -O2 -O3 -DNDEBUG CMakeFiles/cbakey_corpus_bfs.dir/tools/corpus_bfs_main.cpp.o -o cbakey_corpus_bfs  libcbakey_core.a 

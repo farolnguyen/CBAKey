@@ -22,6 +22,12 @@ public:
     /// Clears composition and returns text that should be committed (IM deactivate / flush).
     std::string takeCompositionForCommit();
 
+    /// M13: propagate password-field state to the engine (disables abbreviation expansion).
+    void setPasswordField(bool isPassword);
+
+    /// M13: look up an En/Both abbreviation trigger (for English-mode surrounding-text rewrite).
+    const cbakey::core::UserDictEntry* lookupEnglishAbbrev(const std::string& trigger) const;
+
 private:
     cbakey::config::RuntimeConfig config_;
     cbakey::core::Engine engine_;

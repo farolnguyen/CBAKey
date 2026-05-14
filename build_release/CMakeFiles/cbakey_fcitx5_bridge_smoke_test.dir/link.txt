@@ -1,0 +1,1 @@
+/usr/bin/c++ -O2 -O3 -DNDEBUG CMakeFiles/cbakey_fcitx5_bridge_smoke_test.dir/tests/fcitx5_bridge_smoke_test.cpp.o -o cbakey_fcitx5_bridge_smoke_test  libcbakey_fcitx5_adapter.a libcbakey_core.a 

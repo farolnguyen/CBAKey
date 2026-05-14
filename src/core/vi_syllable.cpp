@@ -538,20 +538,44 @@ std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer) {
 }
 
 std::optional<StableComposeSplit> findStableComposeSplit(const std::u32string& buffer) {
-    const auto segmented = segmentWholeBuffer(buffer);
-    if (!segmented || segmented->size() < 2) {
+    if (buffer.size() < 2) {
         return std::nullopt;
     }
 
-    const SyllableSpan& last = segmented->back();
-    if (last.begin == 0 || last.onset_end == last.begin) {
+    // Reachability DP: reachable[i] = buffer[0..i) parses as a sequence of valid syllables.
+    // Uses vector<bool> to avoid the nested vector allocations of segmentWholeBuffer().
+    const std::size_t n = buffer.size();
+    std::vector<bool> reachable(n + 1, false);
+    reachable[0] = true;
+    for (std::size_t end = 1; end <= n; ++end) {
+        for (std::size_t begin = 0; begin < end && !reachable[end]; ++begin) {
+            if (reachable[begin] && parseSingleSyllableRange(buffer, begin, end)) {
+                reachable[end] = true;
+            }
+        }
+    }
+    if (!reachable[n]) {
         return std::nullopt;
     }
 
-    return StableComposeSplit{
-        .committed_prefix_end = last.begin,
-        .active_suffix = last,
-    };
+    // Find the latest split where [split, n) is a valid syllable.
+    // This matches minimizeSyllableCount=true with tiebreak last.begin-largest:
+    // we want the last syllable to start as late as possible (shortest suffix).
+    // If that latest split has no onset, the buffer is still ambiguous → no commit.
+    for (std::size_t split = n - 1; split > 0; --split) {
+        if (!reachable[split]) {
+            continue;
+        }
+        const auto last = parseSingleSyllableRange(buffer, split, n);
+        if (!last) {
+            continue;  // suffix not parseable from this position, try earlier
+        }
+        if (last->onset_end == last->begin) {
+            return std::nullopt;  // latest split has no onset → buffer still composing
+        }
+        return StableComposeSplit{.committed_prefix_end = split, .active_suffix = *last};
+    }
+    return std::nullopt;
 }
 
 bool normalizeVietnameseNfc(std::u32string& buffer) {

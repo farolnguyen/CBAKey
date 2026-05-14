@@ -197,6 +197,11 @@ public:
         auto& bridge = bridgeFor(inputContext);
         bridge.reset();
         composeAnchors_.erase(inputContext);
+        // M13: disable abbreviation expansion in password / sensitive fields.
+        const bool isPassword =
+            inputContext->capabilityFlags().test(fcitx::CapabilityFlag::Password) ||
+            inputContext->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive);
+        bridge.setPasswordField(isPassword);
         pushPreeditToInputContext(inputContext, "", bridge.config().fcitx5PreeditMode);
     }
 

@@ -364,6 +364,22 @@ InputMode Engine::inputMode() const {
     return mode_;
 }
 
+void Engine::setPasswordField(bool isPassword) {
+    passwordField_ = isPassword;
+}
+
+bool Engine::isPasswordField() const {
+    return passwordField_;
+}
+
+const UserDictEntry* Engine::lookupEnglishAbbrev(const std::string& trigger) const {
+    if (!config_.enableUserDictionary || userDict_.empty() || passwordField_) return nullptr;
+    const UserDictEntry* e = userDict_.lookup(trigger);
+    if (!e) return nullptr;
+    if (e->abbrev_mode != AbbrevMode::En && e->abbrev_mode != AbbrevMode::Both) return nullptr;
+    return e;
+}
+
 void Engine::clearState() {
     preeditBuffer_.clear();
     preeditHistory_.clear();
@@ -381,18 +397,22 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         if (preeditBuffer_.empty()) {
             return r;
         }
-        // M8.2: user dict static expansion.
-        // Dict always takes priority — if the user put a trigger in the dict they want it
-        // to expand. Expansion fires on word-boundary keys (space, enter, tab).
-        if (config_.enableUserDictionary && !userDict_.empty()) {
+        // M8.2/M13: user dict / abbreviation expansion.
+        // Expansion fires on word-boundary keys (space, enter, tab).
+        // In Vietnamese mode only Vi/Both entries expand; password fields are skipped.
+        if (config_.enableUserDictionary && !userDict_.empty() && !passwordField_) {
             if (const UserDictEntry* entry = userDict_.lookup(preeditBuffer_)) {
-                r.commit = entry->expansion + suffix;
-                preeditBuffer_.clear();
-                preeditHistory_.clear();
-                clearRepeatTransformState();
-                clearPendingLiteralEscape();
-                r.consumed = true;
-                return r;
+                const bool modeOk = entry->abbrev_mode == AbbrevMode::Vi ||
+                                    entry->abbrev_mode == AbbrevMode::Both;
+                if (modeOk) {
+                    r.commit = entry->expansion + suffix;
+                    preeditBuffer_.clear();
+                    preeditHistory_.clear();
+                    clearRepeatTransformState();
+                    clearPendingLiteralEscape();
+                    r.consumed = true;
+                    return r;
+                }
             }
         }
         r.commit = preeditBuffer_ + std::move(suffix);
@@ -659,6 +679,9 @@ ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
         return ProcessResult{.preedit = "", .commit = "", .consumed = false};
     }
 
+    // English mode is immediate passthrough.
+    // En/Both abbreviation expansion in English mode is handled by the adapter
+    // via surrounding-text rewrite (same mechanism as M6.3a) — not here.
     return ProcessResult{.preedit = "", .commit = std::string(1, event.key), .consumed = true};
 }
 

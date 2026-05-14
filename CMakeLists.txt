@@ -140,6 +140,10 @@ if(CBAKEY_BUILD_TESTS)
     target_link_libraries(cbakey_m8_user_dict_smoke_test PRIVATE cbakey_core)
     add_test(NAME cbakey_m8_user_dict_smoke_test COMMAND cbakey_m8_user_dict_smoke_test)
 
+    add_executable(cbakey_m13_abbrev_smoke_test tests/m13_abbrev_smoke_test.cpp)
+    target_link_libraries(cbakey_m13_abbrev_smoke_test PRIVATE cbakey_core GTest::gtest_main)
+    add_test(NAME cbakey_m13_abbrev_smoke_test COMMAND cbakey_m13_abbrev_smoke_test)
+
     add_executable(cbakey_surrounding_cursor_normalize_smoke_test
                    tests/surrounding_cursor_normalize_smoke_test.cpp)
     target_link_libraries(cbakey_surrounding_cursor_normalize_smoke_test PRIVATE cbakey_fcitx5_adapter)
@@ -157,6 +161,13 @@ if(CBAKEY_BUILD_CORPUS_TOOLS)
     target_link_libraries(cbakey_corpus_bfs PRIVATE cbakey_core)
     target_include_directories(cbakey_corpus_bfs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_options(cbakey_corpus_bfs PRIVATE -Wall -Wextra -Wpedantic)
+
+    # M13.4: cbakey-abbrev CLI management tool
+    add_executable(cbakey_abbrev tools/cbakey_abbrev_main.cpp)
+    target_link_libraries(cbakey_abbrev PRIVATE cbakey_core)
+    target_include_directories(cbakey_abbrev PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_options(cbakey_abbrev PRIVATE -Wall -Wextra -Wpedantic)
+    set_target_properties(cbakey_abbrev PROPERTIES OUTPUT_NAME "cbakey-abbrev")
 
     if(CBAKEY_BUILD_TESTS)
         add_executable(cbakey_m1_fallback_audit tools/m1_fallback_audit.cpp)
