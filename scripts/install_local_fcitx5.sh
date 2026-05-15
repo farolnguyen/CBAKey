@@ -16,8 +16,18 @@ IM_DIR="${HOME}/.local/share/fcitx5/inputmethod"
 LIB_DIR="${HOME}/.local/lib/fcitx5"
 LIB_DIR_MULTIARCH="${HOME}/.local/lib/x86_64-linux-gnu/fcitx5"
 CONF_DIR="${HOME}/.config/cbakey"
+ICON_DIR="${HOME}/.local/share/cbakey/icons"
+BIN_DIR="${HOME}/.local/bin"
 
-mkdir -p "${ADDON_DIR}" "${IM_DIR}" "${LIB_DIR}" "${LIB_DIR_MULTIARCH}" "${CONF_DIR}"
+mkdir -p "${ADDON_DIR}" "${IM_DIR}" "${LIB_DIR}" "${LIB_DIR_MULTIARCH}" "${CONF_DIR}" "${ICON_DIR}" "${BIN_DIR}"
+
+# Mode indicator icons (VI/EN badge SVGs).
+cp "${ROOT_DIR}/deploy/icons/mode_vi.svg" "${ICON_DIR}/mode_vi.svg"
+cp "${ROOT_DIR}/deploy/icons/mode_en.svg" "${ICON_DIR}/mode_en.svg"
+
+# Dictionary Manager GUI
+cp "${ROOT_DIR}/src/gui/cbakey-dict-gui" "${BIN_DIR}/cbakey-dict-gui"
+chmod +x "${BIN_DIR}/cbakey-dict-gui"
 
 cp "${ROOT_DIR}/deploy/fcitx5/inputmethod/cbakey.conf" "${IM_DIR}/cbakey.conf"
 cp "${PLUGIN_PATH}" "${LIB_DIR}/libcbakey.so"

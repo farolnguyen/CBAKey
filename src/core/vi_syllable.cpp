@@ -632,9 +632,12 @@ bool applyTelexTransform(std::u32string& buffer, char key) {
         return false;
     }
     normalizeVietnameseNfc(buffer);
-    if (key == 'd' && buffer.back() == U'd') {
-        buffer.back() = U'đ';
-        return true;
+    if (key == 'd') {
+        const char32_t back = buffer.back();
+        if (back == U'd' || back == U'D') {
+            buffer.back() = (back == U'D') ? U'Đ' : U'đ';
+            return true;
+        }
     }
 
     const auto span = findLastSyllable(buffer);
@@ -643,9 +646,35 @@ bool applyTelexTransform(std::u32string& buffer, char key) {
     }
 
     const std::u32string tonePattern = baseSlice(buffer, span->medial_end, span->nucleus_end);
-    if (key == 'w' && tonePattern == U"uo" && span->nucleus_end - span->medial_end == 2) {
-        return replaceWithSetPreserveTone(buffer, span->medial_end + 1, 8);
+    // ── Diphthong 'ươ'/'uô' toggle (Telex, size-2 nucleus) ──────────────────────
+    if (span->nucleus_end - span->medial_end == 2) {
+        if (key == 'w') {
+            if (tonePattern == U"uo") {
+                // 'uo' + 'w' → 'uơ' (step 1; normalizeTelexBuffer completes when coda added).
+                return replaceWithSetPreserveTone(buffer, span->medial_end + 1, 8);
+            }
+            if (tonePattern == U"ươ") {
+                // 'ươ' + 'w' → revert to plain 'uo' (strip both diacritics + tone).
+                buffer[span->medial_end]     = U'u';
+                buffer[span->medial_end + 1] = U'o';
+                return true;
+            }
+            if (tonePattern == U"uô") {
+                // 'uô' + 'w' → 'ươ' (u→ư, ô→ơ, preserve tone).
+                bool c = replaceWithSetPreserveTone(buffer, span->medial_end,     10);
+                c     |= replaceWithSetPreserveTone(buffer, span->medial_end + 1,  8);
+                return c;
+            }
+        }
+        if (key == 'o' && tonePattern == U"ươ") {
+            // 'ươ' + 'o' → swap to 'uô' (ư→u, ơ→ô, preserve tone).
+            // e.g. 'đượ c' + 'o' → 'đuộ c'; user then presses 's' → 'đuốc'.
+            bool c = replaceWithSetPreserveTone(buffer, span->medial_end,     9); // ư → u
+            c     |= replaceWithSetPreserveTone(buffer, span->medial_end + 1, 7); // ơ → ô
+            return c;
+        }
     }
+    // ─────────────────────────────────────────────────────────────────────────────
 
     std::optional<std::size_t> pos;
     std::size_t newSetIdx = 0;
@@ -699,6 +728,26 @@ bool normalizeTelexBuffer(std::u32string& buffer) {
         return false;
     }
     return replaceWithSetPreserveTone(buffer, span->medial_end, 10);
+}
+
+bool normalizeVniUoTransform(std::u32string& buffer) {
+    // After VNI '7' transforms 'uo' → 'uơ' (only 'o' → 'ơ'), this function
+    // completes the transform by converting 'u' → 'ư' — but ONLY when:
+    //   • the nucleus is exactly "uơ" (size == 2, NOT "uơi"/"uơu"/etc.), AND
+    //   • there is a coda (i.e. not an open syllable like "thuơ" → "thuở").
+    // This avoids breaking "cuoi717" → "cưới" (nucleus "uơi", size 3)
+    // and "thuơ" → "thuở" (no coda).
+    normalizeVietnameseNfc(buffer);
+    const auto span = findLastSyllable(buffer);
+    if (!span) return false;
+
+    const std::u32string tonePattern = baseSlice(buffer, span->medial_end, span->nucleus_end);
+    const bool hasCoda = span->nucleus_end < span->end;
+
+    if (tonePattern.size() != 2 || !hasCoda) return false;
+    if (!startsWith(tonePattern, U"uơ")) return false;
+
+    return replaceWithSetPreserveTone(buffer, span->medial_end, 10);  // u → ư
 }
 
 bool removeVietnameseDiacritics(std::u32string& buffer) {
@@ -784,14 +833,18 @@ bool applyVniTransform(std::u32string& buffer, char key) {
     }
     normalizeVietnameseNfc(buffer);
     if (key == '9') {
-        if (buffer.back() == U'd') {
-            buffer.back() = U'đ';
+        const char32_t back = buffer.back();
+        if (back == U'd' || back == U'D') {
+            buffer.back() = (back == U'D') ? U'Đ' : U'đ';
             return true;
         }
         const auto span = findLastSyllable(buffer);
-        if (span && span->begin < span->onset_end && buffer[span->begin] == U'd') {
-            buffer[span->begin] = U'đ';
-            return true;
+        if (span && span->begin < span->onset_end) {
+            const char32_t onset = buffer[span->begin];
+            if (onset == U'd' || onset == U'D') {
+                buffer[span->begin] = (onset == U'D') ? U'Đ' : U'đ';
+                return true;
+            }
         }
         return false;
     }
@@ -802,6 +855,36 @@ bool applyVniTransform(std::u32string& buffer, char key) {
     }
 
     const std::u32string tonePattern = baseSlice(buffer, span->medial_end, span->nucleus_end);
+    const std::size_t nucleusLen = span->nucleus_end - span->medial_end;
+
+    // ── Diphthong 'ươ'/'uô' toggle (size-2 nucleus only) ────────────────────────
+    if (nucleusLen == 2) {
+        if (tonePattern == U"uô") {
+            if (key == '7') {
+                // 'uô' + '7' → 'ươ': swap diacritic (ô→ơ) AND convert u→ư (preserve tone).
+                bool c = replaceWithSetPreserveTone(buffer, span->medial_end,     10); // u  → ư
+                c     |= replaceWithSetPreserveTone(buffer, span->medial_end + 1,  8); // ô → ơ
+                return c;
+            }
+        }
+        if (tonePattern == U"ươ") {
+            if (key == '7') {
+                // 'ươ' + '7' → revert to plain 'uo' (strip both diacritics + tone).
+                buffer[span->medial_end]     = U'u';
+                buffer[span->medial_end + 1] = U'o';
+                return true;
+            }
+            if (key == '6') {
+                // 'ươ' + '6' → swap to 'uô' (ư→u, ơ→ô, preserve tone).
+                // e.g. 'đượ c' + '6' → 'đuộ c'; user then presses '1' → 'đuốc'.
+                bool c = replaceWithSetPreserveTone(buffer, span->medial_end,     9); // ư → u
+                c     |= replaceWithSetPreserveTone(buffer, span->medial_end + 1, 7); // ơ → ô
+                return c;
+            }
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────────
+
     if (key == '7') {
         if (tonePattern == U"uu") {
             return replaceWithSetPreserveTone(buffer, span->medial_end, 10);

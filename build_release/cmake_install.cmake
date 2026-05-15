@@ -76,6 +76,13 @@ if(CMAKE_INSTALL_COMPONENT STREQUAL "runtime" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/fcitx5/inputmethod" TYPE FILE FILES "/home/derrick/Project/CBAKey/deploy/fcitx5/inputmethod/cbakey.conf")
 endif()
 
+if(CMAKE_INSTALL_COMPONENT STREQUAL "runtime" OR NOT CMAKE_INSTALL_COMPONENT)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/cbakey/icons" TYPE FILE FILES
+    "/home/derrick/Project/CBAKey/deploy/icons/mode_vi.svg"
+    "/home/derrick/Project/CBAKey/deploy/icons/mode_en.svg"
+    )
+endif()
+
 if(CMAKE_INSTALL_COMPONENT)
   set(CMAKE_INSTALL_MANIFEST "install_manifest_${CMAKE_INSTALL_COMPONENT}.txt")
 else()

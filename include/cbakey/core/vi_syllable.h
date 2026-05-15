@@ -47,6 +47,10 @@ bool applyTelexTransform(std::u32string& buffer, char key);
 // extra vowel.
 bool normalizeTelexBuffer(std::u32string& buffer);
 
+// VNI: completes 'uơ'→'ươ' (u→ư) only when nucleus is exactly "uơ" + has coda.
+// Safe to call after any VNI vowel-transform; no-ops for "uơi", "uơu", open syllables.
+bool normalizeVniUoTransform(std::u32string& buffer);
+
 // Normalizes Vietnamese text into an NFC-like precomposed form for the rows
 // the engine handles (`ă â ê ô ơ ư` plus tone marks).
 bool normalizeVietnameseNfc(std::u32string& buffer);

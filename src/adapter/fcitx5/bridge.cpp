@@ -31,6 +31,17 @@ cbakey::core::InputMode Bridge::inputMode() const {
     return engine_.inputMode();
 }
 
+void Bridge::setInputMode(cbakey::core::InputMode mode) {
+    engine_.setInputMode(mode);
+}
+
+void Bridge::reloadConfig(const cbakey::config::RuntimeConfig& config) {
+    config_ = config;
+    engine_ = cbakey::core::Engine(config_);
+    preedit_.clear();
+    committed_.clear();
+}
+
 void Bridge::reset() {
     engine_.clearState();
     preedit_.clear();

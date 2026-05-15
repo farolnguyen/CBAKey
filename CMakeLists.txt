@@ -62,19 +62,43 @@ if(CBAKEY_BUILD_FCITX5_PLUGIN)
         Fcitx5Module
     )
 
+    # Optional X11/XCB support for click-away pre-interception (X11 sessions only).
+    # Requires: libxcb1-dev (headers) + fcitx5-modules-dev (Fcitx5ModuleXCB).
+    set(CBAKEY_X11_SOURCES src/adapter/fcitx5/x11_click_interceptor.cpp)
+    set(CBAKEY_X11_DEFINITIONS "")
+    set(CBAKEY_X11_LIBRARIES "")
+    set(CBAKEY_X11_INCLUDE_DIRS "")
+
+    find_package(Fcitx5ModuleXCB QUIET)
+    find_path(XCB_INCLUDE_DIR xcb/xcb.h)
+    find_library(XCB_LIBRARY xcb)
+
+    if(Fcitx5ModuleXCB_FOUND AND XCB_INCLUDE_DIR AND XCB_LIBRARY)
+        message(STATUS "CBAKey: X11 click-away interception ENABLED")
+        set(CBAKEY_X11_DEFINITIONS CBAKEY_ENABLE_X11)
+        set(CBAKEY_X11_LIBRARIES Fcitx5::Module::XCB ${XCB_LIBRARY})
+        set(CBAKEY_X11_INCLUDE_DIRS ${XCB_INCLUDE_DIR})
+    else()
+        message(STATUS "CBAKey: X11 click-away interception DISABLED (run: sudo apt install libxcb1-dev)")
+    endif()
+
     add_library(cbakey_fcitx5plugin MODULE
         src/adapter/fcitx5/cbakey_fcitx5_engine.cpp
         src/adapter/fcitx5/compose_anchor_fcitx5.cpp
         src/adapter/fcitx5/committed_rewrite_fcitx5.cpp
+        ${CBAKEY_X11_SOURCES}
     )
     target_include_directories(cbakey_fcitx5plugin
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CBAKEY_X11_INCLUDE_DIRS}
     )
+    target_compile_definitions(cbakey_fcitx5plugin PRIVATE ${CBAKEY_X11_DEFINITIONS})
     target_link_libraries(cbakey_fcitx5plugin
         PRIVATE
             cbakey_fcitx5_adapter
             PkgConfig::FCITX5
+            ${CBAKEY_X11_LIBRARIES}
     )
     target_compile_options(cbakey_fcitx5plugin
         PRIVATE
@@ -201,6 +225,21 @@ if(CBAKEY_BUILD_FCITX5_PLUGIN)
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/deploy/fcitx5/inputmethod/cbakey.conf"
         DESTINATION "share/fcitx5/inputmethod"
+        COMPONENT runtime
+    )
+    # Mode indicator icons — installed to /usr/share/cbakey/icons/
+    # The engine looks here first before falling back to ~/.cache/cbakey/.
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/deploy/icons/mode_vi.svg"
+        "${CMAKE_CURRENT_SOURCE_DIR}/deploy/icons/mode_en.svg"
+        DESTINATION "share/cbakey/icons"
+        COMPONENT runtime
+    )
+
+    # Dictionary Manager GUI (Python + GTK3)
+    install(PROGRAMS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/cbakey-dict-gui"
+        DESTINATION "bin"
         COMPONENT runtime
     )
 endif()

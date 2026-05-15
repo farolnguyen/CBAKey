@@ -24,6 +24,12 @@ struct RuntimeConfig {
     /// M6.3a: rewrite syllable left of caret via SurroundingText + deleteSurroundingText. Off by
     /// default because many clients report unreliable surrounding/cursor (Chromium, LO Writer).
     bool fcitx5CommittedRewrite = false;
+    /// Click-away policy when anchor fails (cursor moved to different line/context):
+    /// false (default) — commit at new cursor position, then attempt rescue via
+    ///   deleteSurroundingText if the preedit text is detected at the wrong place.
+    /// true — do NOT commit; text is silently dropped so it never appears at the
+    ///   wrong position. User must retype the word.
+    bool fcitx5ClickAwayDropOnFail = false;
 };
 
 RuntimeConfig defaultConfig();

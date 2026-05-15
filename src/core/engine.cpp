@@ -640,6 +640,13 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     }
 
     if (transformed) {
+        // VNI: when '7' turns 'uo' → 'uơ' and there is already a coda in the syllable,
+        // complete the transform by converting 'u' → 'ư' (giving 'ươ').
+        // Uses normalizeVniUoTransform instead of normalizeTelexBuffer to avoid
+        // incorrectly transforming triple-vowel nuclei like "uơi" (needed for "cưới").
+        if (config_.method == cbakey::core::InputMethod::Vni) {
+            vi_syllable::normalizeVniUoTransform(decoded);
+        }
         preeditBuffer_ = encodeUtf8(decoded);
         if ((config_.method == cbakey::core::InputMethod::Telex && isTelexRepeatableKey(key)) ||
             (config_.method == cbakey::core::InputMethod::Vni && isVniRepeatableKey(key))) {
@@ -673,15 +680,20 @@ ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
     clearRepeatTransformState();
     clearPendingLiteralEscape();
     if (event.aux != KeyAux::None) {
-        return ProcessResult{};
+        return ProcessResult{};  // not consumed → forwarded by the adapter
     }
     if (event.key == '\0') {
         return ProcessResult{.preedit = "", .commit = "", .consumed = false};
     }
+    // Control characters (BackSpace, Escape, etc.) must NOT be committed as text —
+    // the app needs them as key events, not as commit strings.
+    // Return consumed=false so the adapter forwards the original key.
+    const auto uc = static_cast<unsigned char>(event.key);
+    if (uc < 0x20 || event.key == '\x7F') {
+        return ProcessResult{.preedit = "", .commit = "", .consumed = false};
+    }
 
-    // English mode is immediate passthrough.
-    // En/Both abbreviation expansion in English mode is handled by the adapter
-    // via surrounding-text rewrite (same mechanism as M6.3a) — not here.
+    // English mode: pass printable characters through as committed text.
     return ProcessResult{.preedit = "", .commit = std::string(1, event.key), .consumed = true};
 }
 

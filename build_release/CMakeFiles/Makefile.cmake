@@ -24,6 +24,8 @@ set(CMAKE_MAKEFILE_DEPENDS
   "_deps/json-src/cmake/config.cmake.in"
   "_deps/json-src/cmake/nlohmann_jsonConfigVersion.cmake.in"
   "_deps/json-src/cmake/pkg-config.pc.in"
+  "/usr/lib/x86_64-linux-gnu/cmake/Fcitx5ModuleXCB/Fcitx5ModuleXCBConfig.cmake"
+  "/usr/lib/x86_64-linux-gnu/cmake/Fcitx5ModuleXCB/Fcitx5ModuleXCBConfigVersion.cmake"
   "/usr/share/cmake-3.28/Modules/BasicConfigVersion-AnyNewerVersion.cmake.in"
   "/usr/share/cmake-3.28/Modules/CMakeCInformation.cmake"
   "/usr/share/cmake-3.28/Modules/CMakeCXXInformation.cmake"

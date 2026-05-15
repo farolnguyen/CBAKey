@@ -18,7 +18,10 @@ public:
     const cbakey::config::RuntimeConfig& config() const;
     std::vector<std::string> drainCommitted();
     cbakey::core::InputMode inputMode() const;
+    void setInputMode(cbakey::core::InputMode mode);
     void reset();
+    /// Reload the bridge with a new RuntimeConfig (called when user changes settings).
+    void reloadConfig(const cbakey::config::RuntimeConfig& config);
     /// Clears composition and returns text that should be committed (IM deactivate / flush).
     std::string takeCompositionForCommit();
 

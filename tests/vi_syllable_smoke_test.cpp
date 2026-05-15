@@ -331,5 +331,43 @@ int main() {
     assert(removeTelexDiacritics(giupUpper));
     assert(giupUpper == U"Giup");
 
+    // --- Uppercase Đ: VNI D+9 → Đ ---
+    {
+        std::u32string buf = U"D";  // user typed Shift+D
+        assert(applyVniTransform(buf, '9'));
+        assert(buf == U"Đ");
+    }
+    {
+        // Uppercase onset in full syllable: "Dau" + 9 → "Đau"
+        std::u32string buf = U"Dau";
+        assert(applyVniTransform(buf, '9'));
+        assert(buf == U"Đau");
+    }
+    {
+        // Lowercase still works
+        std::u32string buf = U"d";
+        assert(applyVniTransform(buf, '9'));
+        assert(buf == U"đ");
+    }
+
+    // --- Uppercase Đ: Telex D+d → Đ (second key lowercase) ---
+    {
+        std::u32string buf = U"D";  // user typed Shift+D
+        assert(applyTelexTransform(buf, 'd'));  // second key d
+        assert(buf == U"Đ");
+    }
+    {
+        // D+D (both uppercase, key lowercased by engine to 'd')
+        std::u32string buf = U"D";
+        assert(applyTelexTransform(buf, 'd'));
+        assert(buf == U"Đ");
+    }
+    {
+        // Lowercase still works
+        std::u32string buf = U"d";
+        assert(applyTelexTransform(buf, 'd'));
+        assert(buf == U"đ");
+    }
+
     return 0;
 }

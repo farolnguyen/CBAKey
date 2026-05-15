@@ -1499,5 +1499,133 @@ int main() {
         assert(rZ.commit.empty());
     }
 
+    // --- 'uo' diphthong: Telex 'w' + coda → 'ươ', VNI '7' + coda → 'ươ' ---
+    // Bug: VNI only transformed 'o'→'ơ' but not 'u'→'ư', giving 'đuợc' instead of 'được'.
+    // Fix: VNI now calls normalizeTelexBuffer after vowel transforms, same as Telex.
+    {
+        cbakey::config::RuntimeConfig uoTelexCfg = cbakey::config::defaultConfig();
+        cbakey::config::RuntimeConfig uoVniCfg   = cbakey::config::defaultConfig();
+        uoVniCfg.method = cbakey::core::InputMethod::Vni;
+
+        // Telex: dduowcj + Space → "được "
+        // Intermediate "đuơ" after 'w' is expected; 'c' triggers normalization to "đươc".
+        Engine e1(uoTelexCfg);
+        assert(typeSequence(e1, "dduowcj ") == "\xC4\x91\xC6\xB0\xe1\xbb\xa3\x63 "); // "được "
+        e1.clearState();
+
+        // Telex: vuowjt + Space → "vượt "
+        Engine e2(uoTelexCfg);
+        assert(typeSequence(e2, "vuowjt ") == "v\xC6\xB0\xe1\xbb\xa3t ");  // "vượt "
+        e2.clearState();
+
+        // Telex: truowjt + Space → "trượt "
+        Engine e3(uoTelexCfg);
+        assert(typeSequence(e3, "truowjt ") == "tr\xC6\xB0\xe1\xbb\xa3t ");  // "trượt "
+        e3.clearState();
+
+        // Telex: thuowf + Space → "thuở " (u stays as u, NOT ư, because no coda)
+        Engine e4(uoTelexCfg);
+        assert(typeSequence(e4, "thuowf ") == "thu\xe1\xbb\x9f ");  // "thuở "
+        e4.clearState();
+
+        // VNI: dduoc75 + Space → "được " (7 normalizes uơ→ươ because coda present)
+        Engine e5(uoVniCfg);
+        assert(typeSequence(e5, "dduoc75 ") == "\xC4\x91\xC6\xB0\xe1\xbb\xa3\x63 ");  // "được "
+        e5.clearState();
+
+        // VNI: vuot75 + Space → "vượt "
+        Engine e6(uoVniCfg);
+        assert(typeSequence(e6, "vuot75 ") == "v\xC6\xB0\xe1\xbb\xa3t ");  // "vượt "
+        e6.clearState();
+
+        // VNI: thuo73 + Space → "thuở " (u stays as u, no coda → no normalization)
+        Engine e7(uoVniCfg);
+        assert(typeSequence(e7, "thuo73 ") == "thu\xe1\xbb\x9f ");  // "thuở "
+        e7.clearState();
+    }
+
+    // --- Uppercase Đ regression (bug: uppercase D + VNI 9 was producing "D9") ---
+    {
+        cbakey::config::RuntimeConfig uVniCfg = cbakey::config::defaultConfig();
+        uVniCfg.method = cbakey::core::InputMethod::Vni;
+        cbakey::config::RuntimeConfig uTelCfg = cbakey::config::defaultConfig();
+
+        // VNI: D + 9 → preedit "Đ"
+        Engine vniU(uVniCfg);
+        auto rD = vniU.processKey(KeyEvent{.key = 'D'});
+        assert(rD.preedit == "D");
+        auto r9 = vniU.processKey(KeyEvent{.key = '9'});
+        assert(r9.preedit == "\xC4\x90");  // U+0110 = Đ
+        assert(r9.commit.empty());
+
+        // VNI: D + 9 + space → commit "Đ "
+        Engine vniU2(uVniCfg);
+        assert(typeSequence(vniU2, "D9") == "");  // space not typed yet, preedit only
+        vniU2.clearState();
+
+        // Telex: Shift+D then d → "Đ" (engine lowercases key to 'd')
+        Engine telU(uTelCfg);
+        auto rT1 = telU.processKey(KeyEvent{.key = 'D'});
+        assert(rT1.preedit == "D");
+        auto rT2 = telU.processKey(KeyEvent{.key = 'D'});  // key lowercased to 'd' by engine
+        assert(rT2.preedit == "\xC4\x90");  // Đ
+        assert(rT2.commit.empty());
+    }
+
+    // --- 'ươ'↔'uô' toggle bugs (Bug 1 + Bug 2) ---
+    {
+        cbakey::config::RuntimeConfig telCfg = cbakey::config::defaultConfig();
+        cbakey::config::RuntimeConfig vniCfg_ = cbakey::config::defaultConfig();
+        vniCfg_.method = cbakey::core::InputMethod::Vni;
+
+        // Bug 1 fix: Telex 'ươ' + 'w' → revert to 'uo' (strip diacritics + tone)
+        // User can then re-apply whatever transform they want.
+        {
+            Engine e(telCfg);
+            // Type 'đượ c' then press 'w' to strip ươ → 'đuoc'
+            e.processKey(KeyEvent{.key = 'd'});
+            e.processKey(KeyEvent{.key = 'd'});  // → đ
+            e.processKey(KeyEvent{.key = 'u'});
+            e.processKey(KeyEvent{.key = 'o'});
+            e.processKey(KeyEvent{.key = 'c'});  // → đuoc (after normalize: đươc)
+            e.processKey(KeyEvent{.key = 'j'});  // → đượ c
+            auto rW = e.processKey(KeyEvent{.key = 'w'});  // strip ươ → đuoc
+            assert(rW.preedit == "\xC4\x91uoc");  // "đuoc"
+        }
+
+        // Bug 2 fix: VNI 'uô' + '7' → 'ươ' (transform BOTH, preserve tone)
+        {
+            Engine e(vniCfg_);
+            e.processKey(KeyEvent{.key = 'd'});
+            e.processKey(KeyEvent{.key = 'd'});
+            e.processKey(KeyEvent{.key = '9'});  // → đ
+            e.processKey(KeyEvent{.key = 'u'});
+            e.processKey(KeyEvent{.key = 'o'});
+            e.processKey(KeyEvent{.key = 'c'});  // → đuoc
+            e.processKey(KeyEvent{.key = '6'});  // o → ô → đuôc
+            e.processKey(KeyEvent{.key = '1'});  // sắc → đuốc
+            // Now press '7': uô → ươ (both transform, sắc preserved → ớ)
+            auto r7 = e.processKey(KeyEvent{.key = '7'});  // → đướ c
+            // ư = U+01B0 = 0xC6 0xB0, ớ = U+1EDB = 0xE1 0xBB 0x9B
+            assert(r7.preedit == "\xC4\x91\xC6\xB0\xE1\xBB\x9B\x63");  // "đướ c"
+        }
+
+        // Bonus: Telex 'uô' + 'w' → 'ươ' (symmetric with VNI Bug 2 fix)
+        {
+            Engine e(telCfg);
+            e.processKey(KeyEvent{.key = 'd'}); e.processKey(KeyEvent{.key = 'd'});
+            e.processKey(KeyEvent{.key = 'u'});
+            e.processKey(KeyEvent{.key = 'o'}); e.processKey(KeyEvent{.key = 'c'});
+            // After 'c', normalizeTelexBuffer fires: đuoc → đuoc (nucleus "uo", no coda yet?)
+            // Actually: 'đ' + 'u' + 'o' + 'c', nucleus "uo", coda "c".
+            // normalizeTelexBuffer: tonePattern "uo" → startsWith "uơ"? NO. → no change.
+            e.processKey(KeyEvent{.key = 'o'});  // o → ô → đuôc
+            // Now press 'w': uô + 'w' → ươ (both transform, tone 0)
+            auto rW = e.processKey(KeyEvent{.key = 'w'});
+            // ư = 0xC6 0xB0, ơ = 0xC6 0xA1
+            assert(rW.preedit == "\xC4\x91\xC6\xB0\xC6\xA1\x63");  // "đươc"
+        }
+    }
+
     return 0;
 }

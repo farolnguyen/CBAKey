@@ -76,6 +76,8 @@ RuntimeConfig loadConfigFile(const std::string& path) {
             }
         } else if (key == "fcitx5_committed_rewrite") {
             config.fcitx5CommittedRewrite = parseBool(value, config.fcitx5CommittedRewrite);
+        } else if (key == "fcitx5_click_away_drop_on_fail") {
+            config.fcitx5ClickAwayDropOnFail = parseBool(value, config.fcitx5ClickAwayDropOnFail);
         }
     }
 

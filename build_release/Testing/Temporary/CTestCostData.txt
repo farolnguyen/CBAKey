@@ -1,12 +1,12 @@
-cbakey_engine_smoke_test 9 0.000367215
-cbakey_config_smoke_test 9 0.000188441
-cbakey_vi_syllable_smoke_test 9 0.000175154
-cbakey_fcitx5_bridge_smoke_test 9 0.000158904
-cbakey_fcitx5_preedit_strategy_smoke_test 9 0.000164211
-cbakey_compose_anchor_smoke_test 9 0.000167922
-cbakey_m6_3a_rewrite_smoke_test 9 0.000190525
-cbakey_m8_user_dict_smoke_test 9 0.000247461
-cbakey_surrounding_cursor_normalize_smoke_test 9 0.000167389
-cbakey_corpus_test 8 0.00196555
-cbakey_m13_abbrev_smoke_test 6 0.000402639
+cbakey_engine_smoke_test 27 0.00013665
+cbakey_config_smoke_test 27 6.63196e-05
+cbakey_vi_syllable_smoke_test 27 5.77216e-05
+cbakey_fcitx5_bridge_smoke_test 27 6.0746e-05
+cbakey_fcitx5_preedit_strategy_smoke_test 27 5.66823e-05
+cbakey_compose_anchor_smoke_test 27 5.78941e-05
+cbakey_m6_3a_rewrite_smoke_test 27 5.33994e-05
+cbakey_m8_user_dict_smoke_test 27 7.6665e-05
+cbakey_surrounding_cursor_normalize_smoke_test 27 5.69619e-05
+cbakey_corpus_test 24 0.000665082
+cbakey_m13_abbrev_smoke_test 24 9.95693e-05
 ---

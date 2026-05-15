@@ -239,12 +239,12 @@ CMakeFiles/cbakey_fcitx5plugin.dir/all: CMakeFiles/cbakey_core.dir/all
 CMakeFiles/cbakey_fcitx5plugin.dir/all: CMakeFiles/cbakey_fcitx5_adapter.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_fcitx5plugin.dir/build.make CMakeFiles/cbakey_fcitx5plugin.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_fcitx5plugin.dir/build.make CMakeFiles/cbakey_fcitx5plugin.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=28,29,30,31 "Built target cbakey_fcitx5plugin"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=28,29,30,31,32 "Built target cbakey_fcitx5plugin"
 .PHONY : CMakeFiles/cbakey_fcitx5plugin.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/cbakey_fcitx5plugin.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/derrick/Project/CBAKey/build_release/CMakeFiles 14
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/derrick/Project/CBAKey/build_release/CMakeFiles 15
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/cbakey_fcitx5plugin.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/derrick/Project/CBAKey/build_release/CMakeFiles 0
 .PHONY : CMakeFiles/cbakey_fcitx5plugin.dir/rule
@@ -317,7 +317,7 @@ CMakeFiles/cbakey_config_smoke_test.dir/clean:
 CMakeFiles/cbakey_vi_syllable_smoke_test.dir/all: CMakeFiles/cbakey_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_vi_syllable_smoke_test.dir/build.make CMakeFiles/cbakey_vi_syllable_smoke_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_vi_syllable_smoke_test.dir/build.make CMakeFiles/cbakey_vi_syllable_smoke_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=44,45 "Built target cbakey_vi_syllable_smoke_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=45,46 "Built target cbakey_vi_syllable_smoke_test"
 .PHONY : CMakeFiles/cbakey_vi_syllable_smoke_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -343,7 +343,7 @@ CMakeFiles/cbakey_vi_syllable_smoke_test.dir/clean:
 CMakeFiles/cbakey_keypress_benchmark.dir/all: CMakeFiles/cbakey_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_keypress_benchmark.dir/build.make CMakeFiles/cbakey_keypress_benchmark.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_keypress_benchmark.dir/build.make CMakeFiles/cbakey_keypress_benchmark.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=32,33 "Built target cbakey_keypress_benchmark"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=33,34 "Built target cbakey_keypress_benchmark"
 .PHONY : CMakeFiles/cbakey_keypress_benchmark.dir/all
 
 # Build rule for subdir invocation for target.
@@ -449,7 +449,7 @@ CMakeFiles/cbakey_compose_anchor_smoke_test.dir/clean:
 CMakeFiles/cbakey_m6_3a_rewrite_smoke_test.dir/all: CMakeFiles/cbakey_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m6_3a_rewrite_smoke_test.dir/build.make CMakeFiles/cbakey_m6_3a_rewrite_smoke_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m6_3a_rewrite_smoke_test.dir/build.make CMakeFiles/cbakey_m6_3a_rewrite_smoke_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=38,39 "Built target cbakey_m6_3a_rewrite_smoke_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=39,40 "Built target cbakey_m6_3a_rewrite_smoke_test"
 .PHONY : CMakeFiles/cbakey_m6_3a_rewrite_smoke_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -475,7 +475,7 @@ CMakeFiles/cbakey_m6_3a_rewrite_smoke_test.dir/clean:
 CMakeFiles/cbakey_m8_user_dict_smoke_test.dir/all: CMakeFiles/cbakey_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m8_user_dict_smoke_test.dir/build.make CMakeFiles/cbakey_m8_user_dict_smoke_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m8_user_dict_smoke_test.dir/build.make CMakeFiles/cbakey_m8_user_dict_smoke_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=40,41 "Built target cbakey_m8_user_dict_smoke_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=41,42 "Built target cbakey_m8_user_dict_smoke_test"
 .PHONY : CMakeFiles/cbakey_m8_user_dict_smoke_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -503,7 +503,7 @@ CMakeFiles/cbakey_m13_abbrev_smoke_test.dir/all: _deps/googletest-build/googlete
 CMakeFiles/cbakey_m13_abbrev_smoke_test.dir/all: _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m13_abbrev_smoke_test.dir/build.make CMakeFiles/cbakey_m13_abbrev_smoke_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m13_abbrev_smoke_test.dir/build.make CMakeFiles/cbakey_m13_abbrev_smoke_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=34,35 "Built target cbakey_m13_abbrev_smoke_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=35,36 "Built target cbakey_m13_abbrev_smoke_test"
 .PHONY : CMakeFiles/cbakey_m13_abbrev_smoke_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -530,7 +530,7 @@ CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/all: CMakeFiles/cb
 CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/all: CMakeFiles/cbakey_fcitx5_adapter.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/build.make CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/build.make CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=42,43 "Built target cbakey_surrounding_cursor_normalize_smoke_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=43,44 "Built target cbakey_surrounding_cursor_normalize_smoke_test"
 .PHONY : CMakeFiles/cbakey_surrounding_cursor_normalize_smoke_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -636,7 +636,7 @@ CMakeFiles/cbakey_abbrev.dir/clean:
 CMakeFiles/cbakey_m1_fallback_audit.dir/all: CMakeFiles/cbakey_core.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m1_fallback_audit.dir/build.make CMakeFiles/cbakey_m1_fallback_audit.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_m1_fallback_audit.dir/build.make CMakeFiles/cbakey_m1_fallback_audit.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=36,37 "Built target cbakey_m1_fallback_audit"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=37,38 "Built target cbakey_m1_fallback_audit"
 .PHONY : CMakeFiles/cbakey_m1_fallback_audit.dir/all
 
 # Build rule for subdir invocation for target.
@@ -662,7 +662,7 @@ CMakeFiles/cbakey_m1_fallback_audit.dir/clean:
 _deps/googletest-build/googlemock/CMakeFiles/gmock.dir/all: _deps/googletest-build/googletest/CMakeFiles/gtest.dir/all
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googlemock/CMakeFiles/gmock.dir/build.make _deps/googletest-build/googlemock/CMakeFiles/gmock.dir/depend
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googlemock/CMakeFiles/gmock.dir/build.make _deps/googletest-build/googlemock/CMakeFiles/gmock.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=46,47 "Built target gmock"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=47,48 "Built target gmock"
 .PHONY : _deps/googletest-build/googlemock/CMakeFiles/gmock.dir/all
 
 # Build rule for subdir invocation for target.
@@ -689,7 +689,7 @@ _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/all: _deps/googletes
 _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/all: _deps/googletest-build/googletest/CMakeFiles/gtest.dir/all
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/build.make _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/depend
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/build.make _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=48,49 "Built target gmock_main"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=49,50 "Built target gmock_main"
 .PHONY : _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/all
 
 # Build rule for subdir invocation for target.
@@ -715,7 +715,7 @@ _deps/googletest-build/googlemock/CMakeFiles/gmock_main.dir/clean:
 _deps/googletest-build/googletest/CMakeFiles/gtest.dir/all:
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googletest/CMakeFiles/gtest.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest.dir/depend
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googletest/CMakeFiles/gtest.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=50,51 "Built target gtest"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=51,52 "Built target gtest"
 .PHONY : _deps/googletest-build/googletest/CMakeFiles/gtest.dir/all
 
 # Build rule for subdir invocation for target.
@@ -741,7 +741,7 @@ _deps/googletest-build/googletest/CMakeFiles/gtest.dir/clean:
 _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/all: _deps/googletest-build/googletest/CMakeFiles/gtest.dir/all
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/depend
 	$(MAKE) $(MAKESILENT) -f _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=52,53 "Built target gtest_main"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/derrick/Project/CBAKey/build_release/CMakeFiles --progress-num=53,54 "Built target gtest_main"
 .PHONY : _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/all
 
 # Build rule for subdir invocation for target.
