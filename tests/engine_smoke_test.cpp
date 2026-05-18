@@ -43,9 +43,17 @@ int main() {
     assert(toggle.consumed);
     assert(engine.inputMode() == InputMode::English);
 
+    // EN mode now buffers chars as preedit (like VI mode) so abbreviations with
+    // abbrev_mode="en" or "both" can be expanded on word boundary.
     auto englishKey = engine.processKey(KeyEvent{.key = 'a'});
     assert(englishKey.consumed);
-    assert(englishKey.commit == "a");
+    assert(englishKey.preedit == "a");   // buffered as preedit, not committed yet
+    assert(englishKey.commit.empty());
+    // Space flushes the buffer (no dict entry → commit "a ")
+    auto englishSpace = engine.processKey(KeyEvent{.key = ' '});
+    assert(englishSpace.consumed);
+    assert(englishSpace.commit == "a ");
+    assert(englishSpace.preedit.empty());
 
     engine.setInputMode(InputMode::Vietnamese);
     engine.clearState();
@@ -1510,37 +1518,37 @@ int main() {
         // Telex: dduowcj + Space → "được "
         // Intermediate "đuơ" after 'w' is expected; 'c' triggers normalization to "đươc".
         Engine e1(uoTelexCfg);
-        assert(typeSequence(e1, "dduowcj ") == "\xC4\x91\xC6\xB0\xe1\xbb\xa3\x63 "); // "được "
+        assert(typeSequence(e1, "dduowcj") == "\xC4\x91\xC6\xB0\xe1\xbb\xa3\x63 "); // "được "
         e1.clearState();
 
         // Telex: vuowjt + Space → "vượt "
         Engine e2(uoTelexCfg);
-        assert(typeSequence(e2, "vuowjt ") == "v\xC6\xB0\xe1\xbb\xa3t ");  // "vượt "
+        assert(typeSequence(e2, "vuowjt") == "v\xC6\xB0\xe1\xbb\xa3t ");  // "vượt "
         e2.clearState();
 
         // Telex: truowjt + Space → "trượt "
         Engine e3(uoTelexCfg);
-        assert(typeSequence(e3, "truowjt ") == "tr\xC6\xB0\xe1\xbb\xa3t ");  // "trượt "
+        assert(typeSequence(e3, "truowjt") == "tr\xC6\xB0\xe1\xbb\xa3t ");  // "trượt "
         e3.clearState();
 
-        // Telex: thuowf + Space → "thuở " (u stays as u, NOT ư, because no coda)
+        // Telex: thuowr + Space → "thuở " (u stays as u, NOT ư, because no coda)
         Engine e4(uoTelexCfg);
-        assert(typeSequence(e4, "thuowf ") == "thu\xe1\xbb\x9f ");  // "thuở "
+        assert(typeSequence(e4, "thuowr") == "thu\xe1\xbb\x9f ");  // "thuở "
         e4.clearState();
 
-        // VNI: dduoc75 + Space → "được " (7 normalizes uơ→ươ because coda present)
+        // VNI: d9uoc75 + Space → "được " (7 normalizes uơ→ươ because coda present)
         Engine e5(uoVniCfg);
-        assert(typeSequence(e5, "dduoc75 ") == "\xC4\x91\xC6\xB0\xe1\xbb\xa3\x63 ");  // "được "
+        assert(typeSequence(e5, "d9uoc75") == "\xC4\x91\xC6\xB0\xe1\xbb\xa3\x63 ");  // "được "
         e5.clearState();
 
         // VNI: vuot75 + Space → "vượt "
         Engine e6(uoVniCfg);
-        assert(typeSequence(e6, "vuot75 ") == "v\xC6\xB0\xe1\xbb\xa3t ");  // "vượt "
+        assert(typeSequence(e6, "vuot75") == "v\xC6\xB0\xe1\xbb\xa3t ");  // "vượt "
         e6.clearState();
 
         // VNI: thuo73 + Space → "thuở " (u stays as u, no coda → no normalization)
         Engine e7(uoVniCfg);
-        assert(typeSequence(e7, "thuo73 ") == "thu\xe1\xbb\x9f ");  // "thuở "
+        assert(typeSequence(e7, "thuo73") == "thu\xe1\xbb\x9f ");  // "thuở "
         e7.clearState();
     }
 
@@ -1560,7 +1568,7 @@ int main() {
 
         // VNI: D + 9 + space → commit "Đ "
         Engine vniU2(uVniCfg);
-        assert(typeSequence(vniU2, "D9") == "");  // space not typed yet, preedit only
+        assert(typeSequence(vniU2, "D9") == "\xC4\x90 ");  // "Đ "
         vniU2.clearState();
 
         // Telex: Shift+D then d → "Đ" (engine lowercases key to 'd')
@@ -1582,13 +1590,14 @@ int main() {
         // User can then re-apply whatever transform they want.
         {
             Engine e(telCfg);
-            // Type 'đượ c' then press 'w' to strip ươ → 'đuoc'
+            // Type 'được' (dduowcj) then press 'w' to strip ươ → 'đuoc'
             e.processKey(KeyEvent{.key = 'd'});
             e.processKey(KeyEvent{.key = 'd'});  // → đ
             e.processKey(KeyEvent{.key = 'u'});
             e.processKey(KeyEvent{.key = 'o'});
-            e.processKey(KeyEvent{.key = 'c'});  // → đuoc (after normalize: đươc)
-            e.processKey(KeyEvent{.key = 'j'});  // → đượ c
+            e.processKey(KeyEvent{.key = 'w'});  // ow → ơ → đuơ
+            e.processKey(KeyEvent{.key = 'c'});  // normalize: đươc
+            e.processKey(KeyEvent{.key = 'j'});  // nặng → được
             auto rW = e.processKey(KeyEvent{.key = 'w'});  // strip ươ → đuoc
             assert(rW.preedit == "\xC4\x91uoc");  // "đuoc"
         }
@@ -1597,8 +1606,7 @@ int main() {
         {
             Engine e(vniCfg_);
             e.processKey(KeyEvent{.key = 'd'});
-            e.processKey(KeyEvent{.key = 'd'});
-            e.processKey(KeyEvent{.key = '9'});  // → đ
+            e.processKey(KeyEvent{.key = '9'});  // d9 → đ (VNI)
             e.processKey(KeyEvent{.key = 'u'});
             e.processKey(KeyEvent{.key = 'o'});
             e.processKey(KeyEvent{.key = 'c'});  // → đuoc
@@ -1607,7 +1615,7 @@ int main() {
             // Now press '7': uô → ươ (both transform, sắc preserved → ớ)
             auto r7 = e.processKey(KeyEvent{.key = '7'});  // → đướ c
             // ư = U+01B0 = 0xC6 0xB0, ớ = U+1EDB = 0xE1 0xBB 0x9B
-            assert(r7.preedit == "\xC4\x91\xC6\xB0\xE1\xBB\x9B\x63");  // "đướ c"
+            assert(r7.preedit == "\xC4\x91\xC6\xB0\xE1\xBB\x9B\x63");  // "đước"
         }
 
         // Bonus: Telex 'uô' + 'w' → 'ươ' (symmetric with VNI Bug 2 fix)

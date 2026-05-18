@@ -242,6 +242,20 @@ if(CBAKEY_BUILD_FCITX5_PLUGIN)
         DESTINATION "bin"
         COMPONENT runtime
     )
+
+    # Clipboard History daemon + UI (Python + GTK3)
+    install(PROGRAMS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/clipboard/cbakey-clipboard"
+        DESTINATION "bin"
+        COMPONENT runtime
+    )
+
+    # Smart Templates CLI (Python + Jinja2)
+    install(PROGRAMS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/template/cbakey-template"
+        DESTINATION "bin"
+        COMPONENT runtime
+    )
 endif()
 
 # ── M10: CPack DEB ───────────────────────────────────────────────────────────

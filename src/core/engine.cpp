@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cwctype>
 #include <locale.h>
@@ -16,6 +17,50 @@
 namespace cbakey::core {
 
 namespace {
+
+// ---------------------------------------------------------------------------
+// M15: Smart Templates — parametric expansion via cbakey-template subprocess
+// ---------------------------------------------------------------------------
+
+/// Shell-escape a string for single-quote wrapping: ' → '\''
+static std::string shellEscape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 4);
+    for (char c : s) {
+        if (c == '\'') {
+            out += "'\\''";
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
+/// Call `cbakey-template expand --mode <mode> '<input>'`.
+/// Returns the rendered template text, or empty string if no match / error.
+static std::string tryParametricExpand(const std::string& input, const std::string& mode) {
+    if (input.empty()) return {};
+
+    const std::string cmd =
+        "cbakey-template expand --mode " + mode +
+        " '" + shellEscape(input) + "' 2>/dev/null";
+
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) return {};
+
+    std::string result;
+    char buf[512];
+    while (std::fgets(buf, sizeof(buf), pipe)) {
+        result += buf;
+    }
+
+    const int ret = pclose(pipe);
+    if (ret != 0) return {};  // exit 1 = no matching template
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
 
 constexpr std::size_t kToneCount = 6;  // ngang, sac, huyen, hoi, nga, nang
 
@@ -355,6 +400,11 @@ ProcessResult Engine::processKey(const KeyEvent& event) {
 }
 
 void Engine::setInputMode(InputMode mode) {
+    if (mode != mode_) {
+        // Clear any pending preedit so it doesn't leak into the new mode.
+        preeditBuffer_.clear();
+        preeditHistory_.clear();
+    }
     mode_ = mode;
     clearRepeatTransformState();
     clearPendingLiteralEscape();
@@ -413,6 +463,20 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
                     r.consumed = true;
                     return r;
                 }
+            }
+        }
+        // M15: Smart Templates — try parametric expansion after exact-match fails.
+        if (config_.enableSmartTemplates && !passwordField_) {
+            const std::string expanded = tryParametricExpand(preeditBuffer_, "vi");
+            if (!expanded.empty()) {
+                r.commit = expanded;  // template defines its own output; no suffix
+                preeditBuffer_.clear();
+                preeditHistory_.clear();
+                clearRepeatTransformState();
+                clearPendingLiteralEscape();
+                r.consumed = true;
+                r.smartTemplateExpansion = true;
+                return r;
             }
         }
         r.commit = preeditBuffer_ + std::move(suffix);
@@ -679,22 +743,75 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
 ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
     clearRepeatTransformState();
     clearPendingLiteralEscape();
+
+    // Flush the EN word buffer: check EN/Both dict entries, then commit.
+    auto flushEnBuffer = [this](std::string suffix) -> ProcessResult {
+        ProcessResult r;
+        if (!preeditBuffer_.empty()) {
+            if (config_.enableUserDictionary && !userDict_.empty() && !passwordField_) {
+                if (const UserDictEntry* e = userDict_.lookup(preeditBuffer_)) {
+                    if (e->abbrev_mode == AbbrevMode::En || e->abbrev_mode == AbbrevMode::Both) {
+                        r.commit = e->expansion + suffix;
+                        preeditBuffer_.clear();
+                        r.consumed = true;
+                        return r;
+                    }
+                }
+            }
+            // M15: Smart Templates — try parametric expansion after exact-match fails.
+            if (config_.enableSmartTemplates && !passwordField_) {
+                const std::string expanded = tryParametricExpand(preeditBuffer_, "en");
+                if (!expanded.empty()) {
+                    r.commit = expanded;  // template defines its own output; no suffix
+                    preeditBuffer_.clear();
+                    r.consumed = true;
+                    r.smartTemplateExpansion = true;
+                    return r;
+                }
+            }
+            r.commit = std::move(preeditBuffer_) + suffix;
+            preeditBuffer_.clear();
+        } else if (!suffix.empty()) {
+            r.commit = std::move(suffix);
+        }
+        r.consumed = true;
+        return r;
+    };
+
     if (event.aux != KeyAux::None) {
-        return ProcessResult{};  // not consumed → forwarded by the adapter
+        // Non-printable key (Tab, Enter, arrow, etc.): flush buffer without
+        // consuming the key so the app still receives it.
+        if (!preeditBuffer_.empty()) {
+            auto r = flushEnBuffer("");
+            r.forwardOriginalKey = true;
+            return r;
+        }
+        return ProcessResult{};  // nothing pending → forward key normally
     }
+
     if (event.key == '\0') {
         return ProcessResult{.preedit = "", .commit = "", .consumed = false};
     }
-    // Control characters (BackSpace, Escape, etc.) must NOT be committed as text —
-    // the app needs them as key events, not as commit strings.
-    // Return consumed=false so the adapter forwards the original key.
+
     const auto uc = static_cast<unsigned char>(event.key);
     if (uc < 0x20 || event.key == '\x7F') {
+        // Backspace: remove last char from the EN word buffer.
+        if (event.key == '\b' && !preeditBuffer_.empty()) {
+            preeditBuffer_.pop_back();
+            return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
+        }
         return ProcessResult{.preedit = "", .commit = "", .consumed = false};
     }
 
-    // English mode: pass printable characters through as committed text.
-    return ProcessResult{.preedit = "", .commit = std::string(1, event.key), .consumed = true};
+    // Space (and any non-letter word boundary) flushes the buffer.
+    if (event.key == ' ') {
+        return flushEnBuffer(" ");
+    }
+
+    // Printable non-space: accumulate in buffer, show as preedit so the user
+    // can see what they are typing before the word boundary fires.
+    preeditBuffer_ += event.key;
+    return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
 }
 
 void Engine::seedPreeditForCommittedRewrite(std::string utf8) {

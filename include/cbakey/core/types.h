@@ -45,6 +45,9 @@ struct ProcessResult {
     bool consumed = false;
     /// If true, frontend should forward the original key event after applying commit/preedit.
     bool forwardOriginalKey = false;
+    /// M15: commit came from a Smart Template expansion (may be multi-line).
+    /// Adapter should prefer wl-copy + auto-paste over inline commitString.
+    bool smartTemplateExpansion = false;
 };
 
 }  // namespace cbakey::core

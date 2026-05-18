@@ -17,12 +17,8 @@ std::string trim(std::string value) {
 }
 
 bool parseBool(const std::string& value, bool defaultValue) {
-    if (value == "true" || value == "1") {
-        return true;
-    }
-    if (value == "false" || value == "0") {
-        return false;
-    }
+    if (value == "true"  || value == "True"  || value == "1") return true;
+    if (value == "false" || value == "False" || value == "0") return false;
     return defaultValue;
 }
 
@@ -60,7 +56,7 @@ RuntimeConfig loadConfigFile(const std::string& path) {
             } else if (value == "vni") {
                 config.method = cbakey::core::InputMethod::Vni;
             }
-        } else if (key == "enable_user_dictionary") {
+        } else if (key == "enable_user_dictionary" || key == "EnableUserDictionary") {
             config.enableUserDictionary = parseBool(value, config.enableUserDictionary);
         } else if (key == "enable_static_expansion") {
             config.enableStaticExpansion = parseBool(value, config.enableStaticExpansion);
@@ -78,6 +74,8 @@ RuntimeConfig loadConfigFile(const std::string& path) {
             config.fcitx5CommittedRewrite = parseBool(value, config.fcitx5CommittedRewrite);
         } else if (key == "fcitx5_click_away_drop_on_fail") {
             config.fcitx5ClickAwayDropOnFail = parseBool(value, config.fcitx5ClickAwayDropOnFail);
+        } else if (key == "enable_smart_templates") {
+            config.enableSmartTemplates = parseBool(value, config.enableSmartTemplates);
         }
     }
 

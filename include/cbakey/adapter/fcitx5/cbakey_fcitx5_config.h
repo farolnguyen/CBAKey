@@ -24,10 +24,6 @@ FCITX_CONFIGURATION(
         this, "ToggleKey", N_("Switch EN/VI"),
         fcitx::Key("Control+Alt+z")};
 
-    fcitx::Option<bool> enableUserDictionary{
-        this, "EnableUserDictionary", N_("Enable abbreviations / user dictionary"),
-        true};
-
     fcitx::Option<bool> showPreeditUnderline{
         this, "ShowPreeditUnderline", N_("Show underline while composing"),
         true};

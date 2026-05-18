@@ -121,13 +121,21 @@ std::string defaultConfigPath() {
     return home ? std::string(home) + "/.config/cbakey/cbakey.conf" : "cbakey.conf";
 }
 
+std::string defaultDictPath() {
+    const char* xdg  = std::getenv("XDG_CONFIG_HOME");
+    const char* home = std::getenv("HOME");
+    const std::string base = (xdg && xdg[0]) ? std::string(xdg)
+                                              : std::string(home ? home : ".") + "/.config";
+    return base + "/cbakey/user_dict.json";
+}
+
 cbakey::config::RuntimeConfig toRuntimeConfig(
-    const cbakey::adapter::fcitx5::CBAKeyConfig& cfg) {
+    const cbakey::adapter::fcitx5::CBAKeyConfig& cfg, bool enableUserDict) {
     cbakey::config::RuntimeConfig rc = cbakey::config::defaultConfig();
     rc.method = (cfg.method.value() == cbakey::adapter::fcitx5::CBAKeyMethod::Telex)
                     ? cbakey::core::InputMethod::Telex
                     : cbakey::core::InputMethod::Vni;
-    rc.enableUserDictionary   = cfg.enableUserDictionary.value();
+    rc.enableUserDictionary   = enableUserDict;
     rc.fcitx5CommittedRewrite = cfg.committedRewrite.value();
     return rc;
 }
@@ -181,8 +189,8 @@ public:
         ui.unregisterAction(&telexAction_);
         ui.unregisterAction(&vniAction_);
         ui.unregisterAction(&dictAction_);
+        ui.unregisterAction(&clipboardAction_);
         ui.unregisterAction(&underlineAction_);
-        ui.unregisterAction(&macroAction_);
     }
 
     // ── Fcitx5 config framework ─────────────────────────────────────────────
@@ -237,6 +245,8 @@ public:
                   fcitx::KeyEvent& keyEvent) override {
         FCITX_UNUSED(entry);
         if (keyEvent.isRelease()) return;
+
+        maybeHotReloadConfig();
 
         // ── Check configured toggle hotkey FIRST ────────────────────────────
         // The engine has a hardcoded Ctrl+Alt+Z check, but the user may have
@@ -307,9 +317,12 @@ public:
                 interceptor_->startIntercepting([this, ic]() {
                     auto it = bridges_.find(ic);
                     if (it == bridges_.end()) return;
-                    const std::string pending = it->second.takeCompositionForCommit();
-                    if (pending.empty()) return;
-                    ic->commitString(pending);
+                    // Take (and discard) the composition to clear engine state.
+                    // Do NOT call ic->commitString() here: fcitx5-gtk already
+                    // commits the preedit to the GTK entry when focus-out fires
+                    // (before telling the daemon).  If we also commit here we
+                    // produce a double commit ("koko" instead of "ko").
+                    it->second.takeCompositionForCommit();
                     pushPreedit(ic, "", it->second.config().fcitx5PreeditMode,
                                 config_.showPreeditUnderline.value());
                     composeAnchors_.erase(ic);
@@ -349,7 +362,7 @@ public:
         sa.addAction(fcitx::StatusGroup::InputMethod, &modeAction_);
         sa.addAction(fcitx::StatusGroup::InputMethod, &methodMenuAction_);
         sa.addAction(fcitx::StatusGroup::InputMethod, &dictAction_);
-        sa.addAction(fcitx::StatusGroup::InputMethod, &macroAction_);
+        sa.addAction(fcitx::StatusGroup::InputMethod, &clipboardAction_);
 
         refreshModeAction(ic);
     }
@@ -366,19 +379,12 @@ public:
     void reset(const fcitx::InputMethodEntry& entry,
                fcitx::InputContextEvent& event) override {
         FCITX_UNUSED(entry);
-        auto* ic  = event.inputContext();
-        auto  it  = bridges_.find(ic);
-        cbakey::adapter::fcitx5::ComposeAnchorSnapshot snap;
-        if (const auto ait = composeAnchors_.find(ic); ait != composeAnchors_.end())
-            snap = ait->second;
-        if (it != bridges_.end()) {
-            const std::string pending = it->second.takeCompositionForCommit();
-            if (!pending.empty()) {
-                const bool drop = it->second.config().fcitx5ClickAwayDropOnFail;
-                cbakey::adapter::fcitx5::commitPendingRespectingComposeAnchor(
-                    ic, snap, pending, drop);
-            }
-        }
+        auto* ic = event.inputContext();
+        auto  it = bridges_.find(ic);
+        // Clear engine state without committing.  fcitx5-gtk commits the preedit
+        // to the GTK entry on focus-out before calling reset/deactivate on the
+        // daemon; committing here too produces a double commit ("koko" bug).
+        if (it != bridges_.end()) it->second.takeCompositionForCommit();
         composeAnchors_.erase(ic);
         interceptor_->stopIntercepting();
         pushPreedit(ic, "",
@@ -489,6 +495,18 @@ private:
         });
         ui.registerAction("cbakey-dict", &dictAction_);
 
+        // Clipboard History — launches cbakey-clipboard --show as a detached process.
+        clipboardAction_.setShortText("Clipboard History (Ctrl + Win + V)");
+        clipboardAction_.setLongText("Show Clipboard History (cbakey-clipboard)");
+        clipboardAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
+            FCITX_UNUSED(ic);
+            if (const pid_t pid = fork(); pid == 0) {
+                execlp("cbakey-clipboard", "cbakey-clipboard", "--show", nullptr);
+                _exit(1);
+            }
+        });
+        ui.registerAction("cbakey-clipboard", &clipboardAction_);
+
         // Preedit underline — config only, NOT shown in systray menu.
         underlineAction_.setShortText("Underline while composing");
         underlineAction_.setChecked(config_.showPreeditUnderline.value());
@@ -502,10 +520,6 @@ private:
         ui.registerAction("cbakey-underline", &underlineAction_);
         // underlineAction_ is registered but NOT added to statusArea (config-only).
 
-        // Smart Templates placeholder (M15 — not yet implemented).
-        macroAction_.setShortText("Smart Templates (coming soon)");
-        macroAction_.setChecked(false);
-        ui.registerAction("cbakey-macro", &macroAction_);
     }
 
     // ── Config helpers ───────────────────────────────────────────────────────
@@ -516,19 +530,51 @@ private:
         if (raw.hasSubItems()) {
             config_.load(raw);
         } else {
-            // Import legacy custom-format config.
             const auto legacy = cbakey::config::loadConfigFile(defaultConfigPath());
             *config_.method.mutableValue() =
                 (legacy.method == cbakey::core::InputMethod::Telex)
                     ? cbakey::adapter::fcitx5::CBAKeyMethod::Telex
                     : cbakey::adapter::fcitx5::CBAKeyMethod::VNI;
-            *config_.enableUserDictionary.mutableValue() = legacy.enableUserDictionary;
-            *config_.committedRewrite.mutableValue()     = legacy.fcitx5CommittedRewrite;
+            *config_.committedRewrite.mutableValue() = legacy.fcitx5CommittedRewrite;
         }
+        // enableUserDictionary is managed exclusively by Dictionary Manager, not
+        // by configtool.  Read it separately via the legacy parser so changes
+        // from cbakey-dict-gui are always picked up.
+        const auto legacyCfg   = cbakey::config::loadConfigFile(defaultConfigPath());
+        enableUserDict_        = legacyCfg.enableUserDictionary;
+        enableSmartTemplates_  = legacyCfg.enableSmartTemplates;
+        try { lastConfigMtime_ = std::filesystem::last_write_time(defaultConfigPath()); } catch (...) {}
+        try { lastDictMtime_   = std::filesystem::last_write_time(defaultDictPath());   } catch (...) {}
+    }
+
+    // Called at the start of every keyEvent. Detects external writes to the
+    // config file (cbakey.conf) or user dictionary (user_dict.json) and reloads
+    // without restart — used by cbakey-dict-gui for live updates.
+    void maybeHotReloadConfig() {
+        bool configChanged = false;
+        bool dictChanged   = false;
+        try {
+            const auto m = std::filesystem::last_write_time(defaultConfigPath());
+            if (m != lastConfigMtime_) { lastConfigMtime_ = m; configChanged = true; }
+        } catch (...) {}
+        try {
+            const auto m = std::filesystem::last_write_time(defaultDictPath());
+            if (m != lastDictMtime_)   { lastDictMtime_ = m;   dictChanged   = true; }
+        } catch (...) {}
+
+        if (!configChanged && !dictChanged) return;
+        if (configChanged) loadConfig();
+        applyConfigToAllBridges();   // reloads user dict inside new Bridge/Engine
+        if (configChanged) { refreshActionStates(); refreshAllStatusAreas(); }
     }
 
     void saveConfig() {
         fcitx::safeSaveAsIni(config_, defaultConfigPath());
+        // enableUserDictionary is not in CBAKeyConfig so safeSaveAsIni drops it.
+        // Append it so loadConfigFile() always finds it after a configtool save.
+        std::ofstream f(defaultConfigPath(), std::ios::app);
+        f << "enable_user_dictionary="  << (enableUserDict_       ? "true" : "false") << "\n";
+        f << "enable_smart_templates="  << (enableSmartTemplates_ ? "true" : "false") << "\n";
     }
 
     // Show active method in the parent menu label: "Input Method: Telex" or "Input Method: VNI".
@@ -548,7 +594,8 @@ private:
     }
 
     void applyConfigToAllBridges() {
-        const auto rc = toRuntimeConfig(config_);
+        auto rc = toRuntimeConfig(config_, enableUserDict_);
+        rc.enableSmartTemplates = enableSmartTemplates_;
         for (auto& [ic, br] : bridges_) br.reloadConfig(rc);
     }
 
@@ -579,17 +626,13 @@ private:
     // ── Flush & cleanup on deactivate ────────────────────────────────────────
 
     void flushAndCleanup(fcitx::InputContext* ic) {
-        cbakey::adapter::fcitx5::ComposeAnchorSnapshot snap;
-        if (const auto ait = composeAnchors_.find(ic); ait != composeAnchors_.end())
-            snap = ait->second;
         auto iter = bridges_.find(ic);
         if (iter != bridges_.end()) {
-            const std::string pending = iter->second.takeCompositionForCommit();
-            if (!pending.empty()) {
-                const bool drop = iter->second.config().fcitx5ClickAwayDropOnFail;
-                cbakey::adapter::fcitx5::commitPendingRespectingComposeAnchor(
-                    ic, snap, pending, drop);
-            }
+            // Clear engine state without committing.  fcitx5-gtk (the GTK IM
+            // module in the app process) already commits preedit to the GTK entry
+            // on focus-out before notifying the daemon.  Committing again here
+            // produces a double commit ("koko" instead of "ko").
+            iter->second.takeCompositionForCommit();
             bridges_.erase(iter);
         }
         composeAnchors_.erase(ic);
@@ -601,8 +644,10 @@ private:
     cbakey::adapter::fcitx5::Bridge& bridgeFor(fcitx::InputContext* ic) {
         auto it = bridges_.find(ic);
         if (it != bridges_.end()) return it->second;
+        auto initRc = toRuntimeConfig(config_, enableUserDict_);
+        initRc.enableSmartTemplates = enableSmartTemplates_;
         const auto [created, _] = bridges_.emplace(
-            ic, cbakey::adapter::fcitx5::Bridge(toRuntimeConfig(config_)));
+            ic, cbakey::adapter::fcitx5::Bridge(std::move(initRc)));
         // Apply the engine-level global mode so EN mode survives context switches.
         created->second.setInputMode(globalMode_);
         return created->second;
@@ -616,6 +661,12 @@ private:
     // Global input mode — shared across all input contexts so toggling EN/VI
     // in one window persists when focus moves to another window.
     cbakey::core::InputMode globalMode_ = cbakey::core::InputMode::Vietnamese;
+
+    // Managed by Dictionary Manager (not configtool); read from cbakey.conf.
+    bool enableUserDict_       = true;
+    bool enableSmartTemplates_ = true;
+    std::filesystem::file_time_type lastConfigMtime_{};
+    std::filesystem::file_time_type lastDictMtime_{};
 
     std::unordered_map<fcitx::InputContext*, cbakey::adapter::fcitx5::Bridge>       bridges_;
     std::unordered_map<fcitx::InputContext*, cbakey::adapter::fcitx5::ComposeAnchorSnapshot>
@@ -633,8 +684,8 @@ private:
     fcitx::SimpleAction telexAction_;
     fcitx::SimpleAction vniAction_;
     fcitx::SimpleAction dictAction_;
+    fcitx::SimpleAction clipboardAction_;
     fcitx::SimpleAction underlineAction_;
-    fcitx::SimpleAction macroAction_;
 };
 
 // ── Factory ───────────────────────────────────────────────────────────────────

@@ -29,6 +29,48 @@ cp "${ROOT_DIR}/deploy/icons/mode_en.svg" "${ICON_DIR}/mode_en.svg"
 cp "${ROOT_DIR}/src/gui/cbakey-dict-gui" "${BIN_DIR}/cbakey-dict-gui"
 chmod +x "${BIN_DIR}/cbakey-dict-gui"
 
+# Smart Templates CLI
+cp "${ROOT_DIR}/src/template/cbakey-template" "${BIN_DIR}/cbakey-template"
+chmod +x "${BIN_DIR}/cbakey-template"
+
+# Clipboard History daemon + autostart
+cp "${ROOT_DIR}/src/clipboard/cbakey-clipboard" "${BIN_DIR}/cbakey-clipboard"
+chmod +x "${BIN_DIR}/cbakey-clipboard"
+
+AUTOSTART_DIR="${HOME}/.config/autostart"
+mkdir -p "${AUTOSTART_DIR}"
+cp "${ROOT_DIR}/deploy/autostart/cbakey-clipboard.desktop" "${AUTOSTART_DIR}/cbakey-clipboard.desktop"
+echo "  - Autostart registered: ${AUTOSTART_DIR}/cbakey-clipboard.desktop"
+
+# Start daemon now (if not already running) so clipboard history begins immediately
+if ! pgrep -f "cbakey-clipboard --daemon" > /dev/null 2>&1; then
+  nohup "${BIN_DIR}/cbakey-clipboard" --daemon > /dev/null 2>&1 &
+  echo "  - Clipboard daemon started (PID $!)"
+else
+  echo "  - Clipboard daemon already running"
+fi
+
+# Register GNOME custom keybinding: Ctrl+Super+V → cbakey-clipboard --show
+# Works on GNOME Wayland (and GNOME X11). Silent no-op on other desktops.
+if command -v gsettings >/dev/null 2>&1; then
+  _SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
+  _PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/cbakey-clipboard/"
+  _EXISTING="$(gsettings get "${_SCHEMA}" custom-keybindings 2>/dev/null || echo '@as []')"
+  if ! echo "${_EXISTING}" | grep -q "cbakey-clipboard"; then
+    if [ "${_EXISTING}" = "@as []" ] || [ "${_EXISTING}" = "[]" ]; then
+      _NEW="['${_PATH}']"
+    else
+      # Insert before closing ']'
+      _NEW="$(echo "${_EXISTING}" | sed "s|]$|, '${_PATH}']|")"
+    fi
+    gsettings set "${_SCHEMA}" custom-keybindings "${_NEW}" 2>/dev/null || true
+  fi
+  gsettings set "${_SCHEMA}.custom-keybinding:${_PATH}" name    'CBAKey Clipboard History'  2>/dev/null || true
+  gsettings set "${_SCHEMA}.custom-keybinding:${_PATH}" command 'cbakey-clipboard --show'   2>/dev/null || true
+  gsettings set "${_SCHEMA}.custom-keybinding:${_PATH}" binding '<Control><Super>v'         2>/dev/null || true
+  echo "  - GNOME keybinding registered: Ctrl+Super+V → cbakey-clipboard --show"
+fi
+
 cp "${ROOT_DIR}/deploy/fcitx5/inputmethod/cbakey.conf" "${IM_DIR}/cbakey.conf"
 cp "${PLUGIN_PATH}" "${LIB_DIR}/libcbakey.so"
 cp "${PLUGIN_PATH}" "${LIB_DIR_MULTIARCH}/libcbakey.so"

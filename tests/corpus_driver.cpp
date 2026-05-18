@@ -176,6 +176,7 @@ CorpusOutcome runCorpusCase(const nlohmann::json& c, CorpusRunStats* stats) {
     }
 
     cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+    cfg.enableUserDictionary = false;  // corpus tests must not load the user's personal dict
     const std::string cfgName = c.value("config", "default");
     if (cfgName == "vni") {
         cfg.method = InputMethod::Vni;

@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
-"""CBAKey Dictionary Manager — GTK3 GUI for managing user abbreviations."""
+"""CBAKey Dictionary Manager — GTK3 GUI for abbreviations + Smart Templates."""
+
+import os
+
+# Save the session IM module BEFORE any override so per-field focus handlers
+# can restore it for the expansion entry (which needs CBAKey for Vietnamese input).
+_ORIG_IM_MODULE = os.environ.get('GTK_IM_MODULE', '')
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, GObject, Pango
+from gi.repository import Gtk, GLib, GObject, Pango
 
+import csv
+import io
 import json
-import os
+import re
 import shutil
+import subprocess
 import sys
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -22,36 +31,85 @@ def get_conf_path():
     base = xdg if xdg else os.path.join(os.path.expanduser('~'), '.config')
     return os.path.join(base, 'cbakey', 'cbakey.conf')
 
-# ── Config helpers ─────────────────────────────────────────────────────────────
+def get_template_path():
+    xdg = os.environ.get('XDG_CONFIG_HOME', '')
+    base = xdg if xdg else os.path.join(os.path.expanduser('~'), '.config')
+    return os.path.join(base, 'cbakey', 'templates.json')
 
-def read_enable_setting(conf_path):
-    """Return True if EnableUserDictionary=True in cbakey.conf (default True)."""
+# ── Smart Templates config toggle ─────────────────────────────────────────────
+
+def read_smart_templates_setting(conf_path):
+    """Return True if enable_smart_templates is 'true' in cbakey.conf (default True)."""
     try:
         with open(conf_path) as f:
             for line in f:
-                line = line.strip()
-                if line.lower().startswith('enableuserdictionary='):
-                    return line.split('=', 1)[1].strip().lower() == 'true'
+                ls = line.strip().lower()
+                if ls.startswith('enable_smart_templates='):
+                    return ls.split('=', 1)[1].strip() == 'true'
     except FileNotFoundError:
         pass
     return True
 
-def write_enable_setting(conf_path, enabled):
-    """Write EnableUserDictionary to cbakey.conf, preserving other settings."""
+def write_smart_templates_setting(conf_path, enabled):
+    """Write enable_smart_templates to cbakey.conf."""
+    val = 'true' if enabled else 'false'
     lines = []
     found = False
     try:
         with open(conf_path) as f:
             for line in f:
-                if line.strip().lower().startswith('enableuserdictionary='):
-                    lines.append(f'EnableUserDictionary={'true' if enabled else 'false'}\n')
+                if line.strip().lower().startswith('enable_smart_templates='):
+                    lines.append(f'enable_smart_templates={val}\n')
                     found = True
                 else:
                     lines.append(line)
     except FileNotFoundError:
         pass
     if not found:
-        lines.append(f'EnableUserDictionary={'true' if enabled else 'false'}\n')
+        lines.append(f'enable_smart_templates={val}\n')
+    os.makedirs(os.path.dirname(conf_path), exist_ok=True)
+    tmp = conf_path + '.tmp'
+    with open(tmp, 'w') as f:
+        f.writelines(lines)
+    os.replace(tmp, conf_path)
+
+# ── Config helpers ─────────────────────────────────────────────────────────────
+
+def _is_enable_key(stripped_lower):
+    return (stripped_lower.startswith('enable_user_dictionary=') or
+            stripped_lower.startswith('enableuserdictionary='))
+
+def read_enable_setting(conf_path):
+    """Return True if the enable-user-dictionary key is 'true' (default True)."""
+    try:
+        with open(conf_path) as f:
+            for line in f:
+                ls = line.strip().lower()
+                if _is_enable_key(ls):
+                    return ls.split('=', 1)[1].strip() == 'true'
+    except FileNotFoundError:
+        pass
+    return True
+
+def write_enable_setting(conf_path, enabled):
+    """Write the enable setting to cbakey.conf, preserving the original key style."""
+    val = 'true' if enabled else 'false'
+    lines = []
+    found = False
+    try:
+        with open(conf_path) as f:
+            for line in f:
+                ls = line.strip().lower()
+                if _is_enable_key(ls):
+                    orig_key = line.split('=', 1)[0]
+                    lines.append(f'{orig_key}={val}\n')
+                    found = True
+                else:
+                    lines.append(line)
+    except FileNotFoundError:
+        pass
+    if not found:
+        lines.append(f'EnableUserDictionary={val}\n')
     os.makedirs(os.path.dirname(conf_path), exist_ok=True)
     tmp = conf_path + '.tmp'
     with open(tmp, 'w') as f:
@@ -110,6 +168,316 @@ def save_entries(path, entries):
             }, ensure_ascii=False) + '\n')
     os.replace(tmp, path)
 
+# ── CSV I/O ────────────────────────────────────────────────────────────────────
+
+CSV_HEADER = ['trigger', 'expansion', 'abbrev_mode']
+VALID_MODES = {'vi', 'en', 'both'}
+
+def entries_to_csv(entries):
+    """Return CSV string for all entries."""
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=CSV_HEADER, lineterminator='\n')
+    w.writeheader()
+    w.writerows(entries)
+    return buf.getvalue()
+
+def csv_to_entries(text):
+    """Parse CSV text into list of entry dicts. Raises on bad format."""
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames and set(CSV_HEADER) - set(reader.fieldnames):
+        raise ValueError(f'CSV must have columns: {CSV_HEADER}')
+    result = []
+    for row in reader:
+        t = row.get('trigger', '').strip()
+        e = row.get('expansion', '').strip()
+        m = row.get('abbrev_mode', 'vi').strip().lower()
+        if not t or not e:
+            continue
+        if m not in VALID_MODES:
+            m = 'vi'
+        result.append({'trigger': t, 'expansion': e, 'abbrev_mode': m})
+    return result
+
+# ── Template I/O ──────────────────────────────────────────────────────────────
+
+def load_templates(path):
+    """Load templates from JSONL. Returns list of dicts {pattern, expansion, mode}."""
+    templates = []
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                    if 'pattern' in obj and 'expansion' in obj:
+                        templates.append({
+                            'pattern':   obj['pattern'],
+                            'expansion': obj['expansion'],
+                            'mode':      obj.get('mode', 'both'),
+                        })
+                except json.JSONDecodeError:
+                    pass
+    except FileNotFoundError:
+        pass
+    return templates
+
+def save_templates(path, templates):
+    """Save templates to JSONL with atomic write + backup."""
+    bak = path + '.bak'
+    if os.path.exists(path):
+        shutil.copy2(path, bak)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        for t in templates:
+            f.write(json.dumps({
+                'pattern':   t['pattern'],
+                'expansion': t['expansion'],
+                'mode':      t['mode'],
+            }, ensure_ascii=False) + '\n')
+    os.replace(tmp, path)
+
+# ── Template preview via cbakey-template subprocess ───────────────────────────
+
+def _cbakey_template_bin():
+    """Find cbakey-template binary path."""
+    b = shutil.which('cbakey-template')
+    if b:
+        return b
+    local = os.path.join(os.path.expanduser('~'), '.local', 'bin', 'cbakey-template')
+    return local if os.path.isfile(local) else None
+
+def _inline_expand(pattern: str, expansion: str, mode: str, test_input: str) -> tuple[bool, str]:
+    """Inline preview: match test_input against pattern and render with Jinja2."""
+    # Build regex from pattern ({varname} → named group)
+    _VAR = re.compile(r'\{(\w+)\}')
+    regex_parts = []
+    last = 0
+    for m in _VAR.finditer(pattern):
+        regex_parts.append(re.escape(pattern[last:m.start()]))
+        regex_parts.append(f'(?P<{m.group(1)}>.+)')
+        last = m.end()
+    regex_parts.append(re.escape(pattern[last:]))
+    if not regex_parts:
+        return False, 'Empty pattern.'
+    try:
+        rx = re.compile('^' + ''.join(regex_parts) + '$')
+    except re.error as e:
+        return False, f'Pattern error: {e}'
+
+    m = rx.match(test_input)
+    if not m:
+        return False, f'No match for "{test_input}" with pattern "{pattern}"'
+
+    captures = m.groupdict()
+    try:
+        from jinja2.sandbox import SandboxedEnvironment
+        from datetime import datetime
+        env = SandboxedEnvironment(keep_trailing_newline=True)
+        env.globals.update({
+            'numbered': lambda n, start=1, sep='\n': sep.join(str(i) for i in range(int(start), int(n)+1)),
+            'today':    lambda fmt='%d/%m/%Y': datetime.now().strftime(fmt),
+            'now':      lambda fmt='%H:%M:%S': datetime.now().strftime(fmt),
+            'repeat':   lambda text, n, sep='': sep.join([str(text)] * int(n)),
+        })
+        tmpl = env.from_string(expansion)
+        return True, tmpl.render(**captures)
+    except ImportError:
+        return False, 'jinja2 not installed. Run: pip3 install jinja2'
+    except Exception as e:
+        return False, f'Jinja2 error: {e}'
+
+def expand_template_preview(test_input: str) -> tuple[bool, str]:
+    """Call cbakey-template expand on test_input. Returns (ok, output_or_error)."""
+    bin_path = _cbakey_template_bin()
+    if not bin_path:
+        return False, 'cbakey-template not found in PATH.'
+    try:
+        result = subprocess.run(
+            [bin_path, 'expand', test_input],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            return True, result.stdout
+        return False, f'No template matched "{test_input}"'
+    except subprocess.TimeoutExpired:
+        return False, 'Timeout: template took too long to render.'
+    except Exception as e:
+        return False, f'Error: {e}'
+
+# ── Template Add/Edit Dialog ───────────────────────────────────────────────────
+
+class TemplateDialog(Gtk.Dialog):
+    """Popup dialog for adding or editing a Smart Template."""
+
+    def __init__(self, parent, title, tmpl=None):
+        super().__init__(title=title, transient_for=parent, modal=True)
+        self.set_default_size(560, 480)
+        self.add_buttons('Cancel', Gtk.ResponseType.CANCEL,
+                         'Save',   Gtk.ResponseType.OK)
+        self.set_default_response(Gtk.ResponseType.OK)
+
+        box = self.get_content_area()
+        box.set_margin_top(12)
+        box.set_margin_bottom(8)
+        box.set_margin_start(16)
+        box.set_margin_end(16)
+        box.set_spacing(10)
+
+        grid = Gtk.Grid(row_spacing=8, column_spacing=10)
+
+        # Pattern
+        lbl_pat = Gtk.Label(label='Pattern:', xalign=1.0)
+        lbl_pat.set_tooltip_text('Use {varname} as capture placeholder. E.g.: {n}++')
+        grid.attach(lbl_pat, 0, 0, 1, 1)
+        self.pattern_entry = Gtk.Entry()
+        self.pattern_entry.set_hexpand(True)
+        self.pattern_entry.set_placeholder_text('e.g.  {n}++   for{n}   hello{name}')
+        self._disable_im(self.pattern_entry)
+        grid.attach(self.pattern_entry, 1, 0, 2, 1)
+
+        # Expansion (multi-line)
+        exp_label_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_exp = Gtk.Label(label='Expansion\n(Jinja2):', xalign=1.0, yalign=0.0)
+        lbl_exp.set_tooltip_text(
+            'Jinja2 template. Available: {{ varname }}, {% for %}, {% if %},\n'
+            'numbered(n), today(), now(), repeat(text, n)')
+        exp_docs_btn = Gtk.LinkButton.new_with_label(
+            'https://jinja.palletsprojects.com/', '📖 docs')
+        exp_docs_btn.set_tooltip_text('Jinja2 documentation')
+        exp_label_box.pack_start(lbl_exp,       False, False, 0)
+        exp_label_box.pack_start(exp_docs_btn,  False, False, 0)
+        grid.attach(exp_label_box, 0, 1, 1, 1)
+
+        exp_scroll = Gtk.ScrolledWindow()
+        exp_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        exp_scroll.set_min_content_height(120)
+        exp_scroll.set_hexpand(True)
+        self.expansion_view = Gtk.TextView()
+        self.expansion_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.expansion_view.set_monospace(True)
+        self.expansion_view.set_left_margin(6)
+        self._disable_im_widget(self.expansion_view)
+        exp_scroll.add(self.expansion_view)
+        grid.attach(exp_scroll, 1, 1, 2, 1)
+
+        # Mode
+        grid.attach(Gtk.Label(label='Mode:', xalign=1.0), 0, 2, 1, 1)
+        mode_box = Gtk.Box(spacing=16)
+        self.mode_en   = Gtk.RadioButton.new_with_label(None, 'EN')
+        self.mode_vi   = Gtk.RadioButton.new_with_label_from_widget(self.mode_en, 'VI')
+        self.mode_both = Gtk.RadioButton.new_with_label_from_widget(self.mode_en, 'Both')
+        for rb in (self.mode_en, self.mode_vi, self.mode_both):
+            mode_box.pack_start(rb, False, False, 0)
+        self.mode_en.set_tooltip_text('Expand only in English mode')
+        self.mode_vi.set_tooltip_text('Expand only in Vietnamese mode')
+        self.mode_both.set_tooltip_text('Expand in both modes')
+        grid.attach(mode_box, 1, 2, 2, 1)
+
+        # Preview / Test panel
+        sep = Gtk.Separator()
+        grid.attach(sep, 0, 3, 3, 1)
+
+        lbl_test = Gtk.Label(label='<b>Live Preview</b>', use_markup=True, xalign=0)
+        grid.attach(lbl_test, 0, 4, 3, 1)
+
+        grid.attach(Gtk.Label(label='Test input:', xalign=1.0), 0, 5, 1, 1)
+        test_box = Gtk.Box(spacing=6)
+        self.test_entry = Gtk.Entry()
+        self.test_entry.set_hexpand(True)
+        self.test_entry.set_placeholder_text('Type a sample trigger, e.g. 5++')
+        self._disable_im(self.test_entry)
+        self.test_btn = Gtk.Button(label='▶ Run')
+        self.test_btn.connect('clicked', self._on_test)
+        self.test_entry.connect('activate', self._on_test)
+        test_box.pack_start(self.test_entry, True, True, 0)
+        test_box.pack_start(self.test_btn, False, False, 0)
+        grid.attach(test_box, 1, 5, 2, 1)
+
+        preview_scroll = Gtk.ScrolledWindow()
+        preview_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        preview_scroll.set_min_content_height(80)
+        preview_scroll.set_hexpand(True)
+        self.preview_view = Gtk.TextView()
+        self.preview_view.set_editable(False)
+        self.preview_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.preview_view.set_monospace(True)
+        self.preview_view.set_left_margin(6)
+        preview_scroll.add(self.preview_view)
+        grid.attach(preview_scroll, 0, 6, 3, 1)
+
+        self.preview_status = Gtk.Label(label='', xalign=0)
+        self.preview_status.set_use_markup(True)
+        grid.attach(self.preview_status, 0, 7, 3, 1)
+
+        box.pack_start(grid, True, True, 0)
+
+        # Populate if editing
+        if tmpl:
+            self.pattern_entry.set_text(tmpl['pattern'])
+            buf = self.expansion_view.get_buffer()
+            buf.set_text(tmpl['expansion'])
+            m = tmpl.get('mode', 'both')
+            if m == 'vi':   self.mode_vi.set_active(True)
+            elif m == 'en': self.mode_en.set_active(True)
+            else:           self.mode_both.set_active(True)
+        else:
+            self.mode_both.set_active(True)
+
+        self.show_all()
+
+    def _disable_im(self, entry):
+        entry.connect('focus-in-event', lambda *_: (
+            Gtk.Settings.get_default().set_property(
+                'gtk-im-module', 'gtk-im-context-simple'), False)[1])
+
+    def _disable_im_widget(self, widget):
+        widget.connect('focus-in-event', lambda *_: (
+            Gtk.Settings.get_default().set_property(
+                'gtk-im-module', 'gtk-im-context-simple'), False)[1])
+
+    def _on_test(self, *_):
+        test_input = self.test_entry.get_text().strip()
+        if not test_input:
+            self.preview_status.set_markup('<i>Enter a test input above.</i>')
+            return
+
+        pattern = self.pattern_entry.get_text().strip()
+        buf = self.expansion_view.get_buffer()
+        expansion = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        mode = self._get_mode()
+
+        if not pattern or not expansion:
+            self.preview_status.set_markup('<span foreground="red">Fill in Pattern and Expansion first.</span>')
+            return
+
+        # Inline preview using the same pattern/Jinja2 logic as cbakey-template
+        ok, out = _inline_expand(pattern, expansion, mode, test_input)
+        if ok:
+            self.preview_view.get_buffer().set_text(out)
+            lines = out.count('\n') + (1 if out and not out.endswith('\n') else 0)
+            self.preview_status.set_markup(
+                f'<span foreground="#27AE60">✓ Matched — {lines} line{"s" if lines != 1 else ""}</span>')
+        else:
+            self.preview_view.get_buffer().set_text('')
+            self.preview_status.set_markup(
+                f'<span foreground="orange">{out}</span>')
+
+    def _get_mode(self):
+        if self.mode_vi.get_active():   return 'vi'
+        if self.mode_en.get_active():   return 'en'
+        return 'both'
+
+    def get_template(self):
+        buf = self.expansion_view.get_buffer()
+        return {
+            'pattern':   self.pattern_entry.get_text().strip(),
+            'expansion': buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip(),
+            'mode':      self._get_mode(),
+        }
+
 # ── Add/Edit Dialog ────────────────────────────────────────────────────────────
 
 class EntryDialog(Gtk.Dialog):
@@ -131,14 +499,14 @@ class EntryDialog(Gtk.Dialog):
 
         grid = Gtk.Grid(row_spacing=8, column_spacing=12)
 
-        # Trigger
+        # Trigger — bypass the IM context so CBAKey never sees these keystrokes.
         grid.attach(Gtk.Label(label='Trigger:', xalign=1.0), 0, 0, 1, 1)
         self.trigger_entry = Gtk.Entry()
         self.trigger_entry.set_hexpand(True)
         self.trigger_entry.set_placeholder_text('e.g.  ko  btv  gc')
         grid.attach(self.trigger_entry, 1, 0, 2, 1)
 
-        # Expansion
+        # Expansion — restore session IM (fcitx5/CBAKey) on focus for Vietnamese.
         grid.attach(Gtk.Label(label='Expansion:', xalign=1.0), 0, 1, 1, 1)
         self.expansion_entry = Gtk.Entry()
         self.expansion_entry.set_hexpand(True)
@@ -158,6 +526,12 @@ class EntryDialog(Gtk.Dialog):
 
         box.pack_start(grid, True, True, 0)
 
+        # Per-field IM isolation.
+        self._gtk_settings = Gtk.Settings.get_default()
+        self.trigger_entry.connect('focus-in-event',   self._on_trigger_focus_in)
+        self.expansion_entry.connect('focus-in-event', self._on_expansion_focus_in)
+        self.connect('destroy', lambda _: self._restore_im())
+
         # Populate if editing
         if entry:
             self.trigger_entry.set_text(entry['trigger'])
@@ -171,6 +545,17 @@ class EntryDialog(Gtk.Dialog):
                 self.mode_vi.set_active(True)
 
         self.show_all()
+
+    def _on_trigger_focus_in(self, _widget, _event):
+        self._gtk_settings.set_property('gtk-im-module', 'gtk-im-context-simple')
+        return False
+
+    def _on_expansion_focus_in(self, _widget, _event):
+        self._gtk_settings.set_property('gtk-im-module', _ORIG_IM_MODULE)
+        return False
+
+    def _restore_im(self):
+        self._gtk_settings.set_property('gtk-im-module', _ORIG_IM_MODULE)
 
     def get_entry(self):
         trigger   = self.trigger_entry.get_text().strip()
@@ -188,23 +573,39 @@ class EntryDialog(Gtk.Dialog):
 class DictManagerWindow(Gtk.Window):
 
     def __init__(self):
-        super().__init__(title='CBAKey — Dictionary Manager')
-        self.set_default_size(580, 440)
+        super().__init__(title='CBAKey — Dictionary & Smart Templates')
+        self.set_default_size(680, 540)
         self.set_border_width(0)
         self.connect('destroy', Gtk.main_quit)
 
-        self.dict_path = get_dict_path()
-        self.conf_path = get_conf_path()
-        self.entries   = load_entries(self.dict_path)
+        self.dict_path  = get_dict_path()
+        self.conf_path  = get_conf_path()
+        self.tmpl_path  = get_template_path()
+        self.entries    = load_entries(self.dict_path)
+        self.templates  = load_templates(self.tmpl_path)
 
         self._build_ui()
         self._refresh_table()
+        self._refresh_template_table()
 
     # ── UI construction ────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        notebook = Gtk.Notebook()
+        notebook.set_tab_pos(Gtk.PositionType.TOP)
+        self.add(notebook)
+
+        # Tab 1: Abbreviations
+        abbrev_page = self._build_abbreviations_page()
+        notebook.append_page(abbrev_page, Gtk.Label(label='📖 Abbreviations'))
+
+        # Tab 2: Smart Templates
+        tmpl_page = self._build_templates_page()
+        notebook.append_page(tmpl_page, Gtk.Label(label='⚡ Smart Templates'))
+
+    def _build_abbreviations_page(self):
+        """Build the abbreviations tab content. Returns a widget."""
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.add(vbox)
 
         # ── Top bar: enable toggle + entry count ──
         top_bar = Gtk.Box(spacing=12)
@@ -214,6 +615,7 @@ class DictManagerWindow(Gtk.Window):
         top_bar.set_margin_end(12)
 
         self.enable_switch = Gtk.Switch()
+        self.enable_switch.set_valign(Gtk.Align.CENTER)
         self.enable_switch.set_active(read_enable_setting(self.conf_path))
         self.enable_switch.connect('notify::active', self._on_enable_toggled)
         enable_label = Gtk.Label(label='Enable user dictionary')
@@ -230,16 +632,36 @@ class DictManagerWindow(Gtk.Window):
         sep1 = Gtk.Separator()
         vbox.pack_start(sep1, False, False, 0)
 
+        # ── Search bar ─────────────────────────────────────────────────────────
+        search_bar = Gtk.Box(spacing=0)
+        search_bar.set_margin_top(6)
+        search_bar.set_margin_bottom(2)
+        search_bar.set_margin_start(12)
+        search_bar.set_margin_end(12)
+
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.set_placeholder_text('Search trigger or expansion…')
+        self.search_entry.set_hexpand(True)
+        self.search_entry.connect('search-changed', self._on_search_changed)
+        search_bar.pack_start(self.search_entry, True, True, 0)
+
+        vbox.pack_start(search_bar, False, False, 0)
+
         # ── Table ──────────────────────────────────────────────────────────────
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_margin_top(8)
+        scroll.set_margin_top(6)
         scroll.set_margin_start(12)
         scroll.set_margin_end(12)
 
-        # ListStore: trigger, expansion, mode (display), row index
+        # ListStore: trigger, expansion, mode_display
         self.store = Gtk.ListStore(str, str, str)
-        self.tree  = Gtk.TreeView(model=self.store)
+
+        # TreeModelFilter wraps the store for search filtering
+        self.filter_model = self.store.filter_new()
+        self.filter_model.set_visible_func(self._filter_func)
+
+        self.tree = Gtk.TreeView(model=self.filter_model)
         self.tree.set_headers_visible(True)
         self.tree.set_grid_lines(Gtk.TreeViewGridLines.HORIZONTAL)
         self.tree.connect('row-activated', self._on_row_activated)
@@ -274,6 +696,8 @@ class DictManagerWindow(Gtk.Window):
         self.btn_add    = Gtk.Button(label='+ Add')
         self.btn_edit   = Gtk.Button(label='✏ Edit')
         self.btn_delete = Gtk.Button(label='🗑 Delete')
+        btn_import      = Gtk.Button(label='⬆ Import CSV')
+        btn_export      = Gtk.Button(label='⬇ Export CSV')
         btn_close       = Gtk.Button(label='Close')
 
         self.btn_edit.set_sensitive(False)
@@ -282,22 +706,267 @@ class DictManagerWindow(Gtk.Window):
         self.btn_add.connect('clicked',    self._on_add)
         self.btn_edit.connect('clicked',   self._on_edit)
         self.btn_delete.connect('clicked', self._on_delete)
+        btn_import.connect('clicked',      self._on_import)
+        btn_export.connect('clicked',      self._on_export)
         btn_close.connect('clicked',       lambda _: self.destroy())
 
         btn_bar.pack_start(self.btn_add,    False, False, 0)
         btn_bar.pack_start(self.btn_edit,   False, False, 0)
         btn_bar.pack_start(self.btn_delete, False, False, 0)
+        btn_bar.pack_start(btn_import,      False, False, 0)
+        btn_bar.pack_start(btn_export,      False, False, 0)
         btn_bar.pack_end(btn_close,         False, False, 0)
 
-        # Status label (reload hint)
-        self.status_label = Gtk.Label()
-        self.status_label.set_halign(Gtk.Align.CENTER)
-        self.status_label.set_markup(
-            '<small><i>Changes are saved immediately. '
-            'Refocus a window for CBAKey to pick them up.</i></small>')
-        btn_bar.pack_start(self.status_label, True, True, 0)
+        vbox.pack_start(btn_bar, False, False, 0)
+        return vbox
+
+    # ── Smart Templates tab ────────────────────────────────────────────────────
+
+    def _build_templates_page(self):
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Top bar: enable toggle + info + count
+        top_bar = Gtk.Box(spacing=12)
+        top_bar.set_margin_top(10)
+        top_bar.set_margin_bottom(6)
+        top_bar.set_margin_start(12)
+        top_bar.set_margin_end(12)
+
+        enable_lbl = Gtk.Label(label='Enable Smart Templates')
+        self.tmpl_enable_switch = Gtk.Switch()
+        self.tmpl_enable_switch.set_valign(Gtk.Align.CENTER)
+        self.tmpl_enable_switch.set_active(read_smart_templates_setting(self.conf_path))
+        self.tmpl_enable_switch.connect('notify::active', self._on_tmpl_enable_toggled)
+        top_bar.pack_start(enable_lbl,               False, False, 0)
+        top_bar.pack_start(self.tmpl_enable_switch,  False, False, 0)
+
+        info_lbl = Gtk.Label(
+            label=' — Custom function patterns with Jinja2 expansions.',
+            use_markup=True, xalign=0)
+        top_bar.pack_start(info_lbl, True, True, 0)
+
+        self.tmpl_count_label = Gtk.Label()
+        self.tmpl_count_label.set_halign(Gtk.Align.END)
+        top_bar.pack_end(self.tmpl_count_label, False, False, 0)
+
+        docs_btn = Gtk.LinkButton.new_with_label(
+            'https://jinja.palletsprojects.com/', '📖 Jinja2 📖')
+        docs_btn.set_tooltip_text('Open Jinja2 template language documentation')
+        top_bar.pack_end(docs_btn, False, False, 0)
+        vbox.pack_start(top_bar, False, False, 0)
+        vbox.pack_start(Gtk.Separator(), False, False, 0)
+
+        # Search
+        tsearch_bar = Gtk.Box(spacing=0)
+        tsearch_bar.set_margin_top(6)
+        tsearch_bar.set_margin_bottom(2)
+        tsearch_bar.set_margin_start(12)
+        tsearch_bar.set_margin_end(12)
+        self.tmpl_search = Gtk.SearchEntry()
+        self.tmpl_search.set_placeholder_text('Search pattern or expansion…')
+        self.tmpl_search.set_hexpand(True)
+        self.tmpl_search.connect('search-changed', self._on_tmpl_search_changed)
+        tsearch_bar.pack_start(self.tmpl_search, True, True, 0)
+        vbox.pack_start(tsearch_bar, False, False, 0)
+
+        # Table: Pattern | Expansion | Mode
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_margin_top(6)
+        scroll.set_margin_start(12)
+        scroll.set_margin_end(12)
+
+        self.tmpl_store = Gtk.ListStore(str, str, str)  # pattern, expansion_preview, mode
+        self.tmpl_filter = self.tmpl_store.filter_new()
+        self.tmpl_filter.set_visible_func(self._tmpl_filter_func)
+        self.tmpl_tree = Gtk.TreeView(model=self.tmpl_filter)
+        self.tmpl_tree.set_headers_visible(True)
+        self.tmpl_tree.set_grid_lines(Gtk.TreeViewGridLines.HORIZONTAL)
+        self.tmpl_tree.connect('row-activated', self._on_tmpl_row_activated)
+
+        for i, (title, expand, min_w) in enumerate([
+            ('Pattern', False, 160), ('Expansion (Jinja2)', True, 0), ('Mode', False, 60)
+        ]):
+            renderer = Gtk.CellRendererText()
+            renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
+            if i == 1:
+                renderer.set_property('font', 'monospace')
+            col = Gtk.TreeViewColumn(title, renderer, text=i)
+            col.set_resizable(True)
+            col.set_expand(expand)
+            if min_w:
+                col.set_min_width(min_w)
+            self.tmpl_tree.append_column(col)
+
+        self.tmpl_selection = self.tmpl_tree.get_selection()
+        self.tmpl_selection.connect('changed', self._on_tmpl_selection_changed)
+        scroll.add(self.tmpl_tree)
+        vbox.pack_start(scroll, True, True, 0)
+
+        # Button bar
+        vbox.pack_start(Gtk.Separator(), False, False, 8)
+        btn_bar = Gtk.Box(spacing=8)
+        btn_bar.set_margin_bottom(12)
+        btn_bar.set_margin_start(12)
+        btn_bar.set_margin_end(12)
+
+        self.tmpl_btn_add    = Gtk.Button(label='+ Add')
+        self.tmpl_btn_edit   = Gtk.Button(label='✏ Edit')
+        self.tmpl_btn_delete = Gtk.Button(label='🗑 Delete')
+
+        self.tmpl_btn_edit.set_sensitive(False)
+        self.tmpl_btn_delete.set_sensitive(False)
+
+        self.tmpl_btn_add.connect('clicked',    self._on_tmpl_add)
+        self.tmpl_btn_edit.connect('clicked',   self._on_tmpl_edit)
+        self.tmpl_btn_delete.connect('clicked', self._on_tmpl_delete)
+
+        btn_bar.pack_start(self.tmpl_btn_add,    False, False, 0)
+        btn_bar.pack_start(self.tmpl_btn_edit,   False, False, 0)
+        btn_bar.pack_start(self.tmpl_btn_delete, False, False, 0)
+
+        # Quick test area (right side)
+        test_lbl = Gtk.Label(label='Quick test:')
+        self.tmpl_quick_entry = Gtk.Entry()
+        self.tmpl_quick_entry.set_width_chars(18)
+        self.tmpl_quick_entry.set_placeholder_text('e.g. 5++')
+        self.tmpl_quick_entry.connect('activate', self._on_tmpl_quick_test)
+        tmpl_quick_btn = Gtk.Button(label='▶')
+        tmpl_quick_btn.connect('clicked', self._on_tmpl_quick_test)
+        btn_bar.pack_end(tmpl_quick_btn,         False, False, 0)
+        btn_bar.pack_end(self.tmpl_quick_entry,  False, False, 0)
+        btn_bar.pack_end(test_lbl,               False, False, 0)
 
         vbox.pack_start(btn_bar, False, False, 0)
+        return vbox
+
+    # ── Templates: filter ─────────────────────────────────────────────────────
+
+    def _tmpl_filter_func(self, model, it, _data):
+        q = self.tmpl_search.get_text().strip().lower()
+        if not q:
+            return True
+        return (q in (model.get_value(it, 0) or '').lower() or
+                q in (model.get_value(it, 1) or '').lower())
+
+    def _on_tmpl_search_changed(self, _entry):
+        self.tmpl_filter.refilter()
+        self._update_tmpl_count()
+
+    # ── Templates: table refresh ───────────────────────────────────────────────
+
+    def _refresh_template_table(self):
+        self.tmpl_store.clear()
+        for t in self.templates:
+            exp_preview = t['expansion'][:80].replace('\n', '↵')
+            if len(t['expansion']) > 80:
+                exp_preview += '…'
+            self.tmpl_store.append([t['pattern'], exp_preview, t['mode']])
+        self._update_tmpl_count()
+
+    def _update_tmpl_count(self):
+        n = len(self.templates)
+        q = self.tmpl_search.get_text().strip()
+        if q:
+            shown = self.tmpl_filter.iter_n_children(None)
+            self.tmpl_count_label.set_text(f'{shown}/{n}')
+        else:
+            self.tmpl_count_label.set_text(f'{n} template{"s" if n != 1 else ""}')
+
+    def _tmpl_selected_index(self):
+        model, it = self.tmpl_selection.get_selected()
+        if it is None:
+            return -1
+        child_it = self.tmpl_filter.convert_iter_to_child_iter(it)
+        path = self.tmpl_store.get_path(child_it)
+        return path.get_indices()[0]
+
+    # ── Templates: signal handlers ─────────────────────────────────────────────
+
+    def _on_tmpl_enable_toggled(self, switch, _param):
+        write_smart_templates_setting(self.conf_path, switch.get_active())
+
+    def _on_tmpl_selection_changed(self, _sel):
+        has = self._tmpl_selected_index() >= 0
+        self.tmpl_btn_edit.set_sensitive(has)
+        self.tmpl_btn_delete.set_sensitive(has)
+
+    def _on_tmpl_row_activated(self, *_):
+        self._on_tmpl_edit(None)
+
+    def _on_tmpl_add(self, _btn):
+        dlg = TemplateDialog(self, 'Add Smart Template')
+        if dlg.run() == Gtk.ResponseType.OK:
+            t = dlg.get_template()
+            if not t['pattern'] or not t['expansion']:
+                self._show_error('Pattern and Expansion cannot be empty.')
+            elif any(x['pattern'] == t['pattern'] for x in self.templates):
+                self._show_error(f'Pattern "{t["pattern"]}" already exists.')
+            else:
+                self.templates.append(t)
+                save_templates(self.tmpl_path, self.templates)
+                self._refresh_template_table()
+        dlg.destroy()
+
+    def _on_tmpl_edit(self, _btn):
+        idx = self._tmpl_selected_index()
+        if idx < 0:
+            return
+        dlg = TemplateDialog(self, 'Edit Smart Template', self.templates[idx])
+        if dlg.run() == Gtk.ResponseType.OK:
+            t = dlg.get_template()
+            if not t['pattern'] or not t['expansion']:
+                self._show_error('Pattern and Expansion cannot be empty.')
+            else:
+                self.templates[idx] = t
+                save_templates(self.tmpl_path, self.templates)
+                self._refresh_template_table()
+                child_path = Gtk.TreePath(idx)
+                filter_path = self.tmpl_filter.convert_child_path_to_path(child_path)
+                if filter_path:
+                    self.tmpl_tree.get_selection().select_path(filter_path)
+        dlg.destroy()
+
+    def _on_tmpl_delete(self, _btn):
+        idx = self._tmpl_selected_index()
+        if idx < 0:
+            return
+        pattern = self.templates[idx]['pattern']
+        dlg = Gtk.MessageDialog(
+            transient_for=self, modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text=f'Delete template "{pattern}"?')
+        dlg.format_secondary_text('A backup is kept as templates.json.bak')
+        if dlg.run() == Gtk.ResponseType.OK:
+            del self.templates[idx]
+            save_templates(self.tmpl_path, self.templates)
+            self._refresh_template_table()
+        dlg.destroy()
+
+    def _on_tmpl_quick_test(self, *_):
+        test_input = self.tmpl_quick_entry.get_text().strip()
+        if not test_input:
+            return
+        ok, output = expand_template_preview(test_input)
+        if ok:
+            self._show_info(f'Input: {test_input}\n\nOutput:\n{output}')
+        else:
+            self._show_error(output)
+
+    # ── Filter ─────────────────────────────────────────────────────────────────
+
+    def _filter_func(self, model, it, _data):
+        query = self.search_entry.get_text().strip().lower()
+        if not query:
+            return True
+        trigger   = (model.get_value(it, 0) or '').lower()
+        expansion = (model.get_value(it, 1) or '').lower()
+        return query in trigger or query in expansion
+
+    def _on_search_changed(self, _entry):
+        self.filter_model.refilter()
+        self._update_count()
 
     # ── Table refresh ─────────────────────────────────────────────────────────
 
@@ -310,14 +979,25 @@ class DictManagerWindow(Gtk.Window):
                 e['expansion'],
                 mode_display.get(e['abbrev_mode'], 'VI'),
             ])
-        n = len(self.entries)
-        self.count_label.set_text(f'{n} entr{"y" if n == 1 else "ies"}')
+        self._update_count()
+
+    def _update_count(self):
+        n_total = len(self.entries)
+        query   = self.search_entry.get_text().strip()
+        if query:
+            n_shown = self.filter_model.iter_n_children(None)
+            self.count_label.set_text(f'{n_shown}/{n_total} entr{"y" if n_total == 1 else "ies"}')
+        else:
+            self.count_label.set_text(f'{n_total} entr{"y" if n_total == 1 else "ies"}')
 
     def _selected_index(self):
+        """Return the index into self.entries for the currently selected row, or -1."""
         model, it = self.selection.get_selected()
         if it is None:
             return -1
-        path = model.get_path(it)
+        # Convert from filter model iterator to child (store) iterator
+        child_it = self.filter_model.convert_iter_to_child_iter(it)
+        path = self.store.get_path(child_it)
         return path.get_indices()[0]
 
     # ── Signal handlers ───────────────────────────────────────────────────────
@@ -360,9 +1040,11 @@ class DictManagerWindow(Gtk.Window):
                 self.entries[idx] = e
                 save_entries(self.dict_path, self.entries)
                 self._refresh_table()
-                # Re-select same row
-                if idx < len(self.entries):
-                    self.tree.get_selection().select_path(Gtk.TreePath(idx))
+                # Re-select the same row through the filter model
+                child_path = Gtk.TreePath(idx)
+                filter_path = self.filter_model.convert_child_path_to_path(child_path)
+                if filter_path:
+                    self.tree.get_selection().select_path(filter_path)
         dlg.destroy()
 
     def _on_delete(self, _btn):
@@ -383,10 +1065,91 @@ class DictManagerWindow(Gtk.Window):
             self._refresh_table()
         dlg.destroy()
 
+    # ── Import / Export ────────────────────────────────────────────────────────
+
+    def _on_export(self, _btn):
+        dlg = Gtk.FileChooserDialog(
+            title='Export Dictionary as CSV',
+            transient_for=self,
+            action=Gtk.FileChooserAction.SAVE,
+        )
+        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
+        dlg.set_current_name('cbakey_dict.csv')
+        dlg.set_do_overwrite_confirmation(True)
+
+        ff = Gtk.FileFilter()
+        ff.set_name('CSV files (*.csv)')
+        ff.add_mime_type('text/csv')
+        ff.add_pattern('*.csv')
+        dlg.add_filter(ff)
+
+        if dlg.run() == Gtk.ResponseType.OK:
+            path = dlg.get_filename()
+            if not path.endswith('.csv'):
+                path += '.csv'
+            try:
+                with open(path, 'w', encoding='utf-8', newline='') as f:
+                    f.write(entries_to_csv(self.entries))
+                self._show_info(f'Exported {len(self.entries)} entries to:\n{path}')
+            except OSError as ex:
+                self._show_error(f'Export failed: {ex}')
+        dlg.destroy()
+
+    def _on_import(self, _btn):
+        dlg = Gtk.FileChooserDialog(
+            title='Import Dictionary from CSV',
+            transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Import', Gtk.ResponseType.OK)
+
+        ff = Gtk.FileFilter()
+        ff.set_name('CSV files (*.csv)')
+        ff.add_mime_type('text/csv')
+        ff.add_pattern('*.csv')
+        dlg.add_filter(ff)
+
+        if dlg.run() == Gtk.ResponseType.OK:
+            path = dlg.get_filename()
+            try:
+                with open(path, encoding='utf-8') as f:
+                    text = f.read()
+                imported = csv_to_entries(text)
+                existing = {e['trigger'] for e in self.entries}
+                added, skipped = 0, 0
+                for e in imported:
+                    if e['trigger'] in existing:
+                        skipped += 1
+                    else:
+                        self.entries.append(e)
+                        existing.add(e['trigger'])
+                        added += 1
+                if added:
+                    save_entries(self.dict_path, self.entries)
+                    self._refresh_table()
+                msg = f'Imported {added} new entr{"y" if added == 1 else "ies"}.'
+                if skipped:
+                    msg += f'\n{skipped} skipped (trigger already exists).'
+                self._show_info(msg)
+            except Exception as ex:
+                self._show_error(f'Import failed: {ex}')
+        dlg.destroy()
+
+    # ── Helpers ────────────────────────────────────────────────────────────────
+
     def _show_error(self, msg):
         dlg = Gtk.MessageDialog(
             transient_for=self, modal=True,
             message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text=msg)
+        dlg.run()
+        dlg.destroy()
+
+    def _show_info(self, msg):
+        dlg = Gtk.MessageDialog(
+            transient_for=self, modal=True,
+            message_type=Gtk.MessageType.INFO,
             buttons=Gtk.ButtonsType.OK,
             text=msg)
         dlg.run()

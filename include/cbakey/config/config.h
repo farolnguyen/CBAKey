@@ -30,6 +30,8 @@ struct RuntimeConfig {
     /// true — do NOT commit; text is silently dropped so it never appears at the
     ///   wrong position. User must retype the word.
     bool fcitx5ClickAwayDropOnFail = false;
+    /// M15: enable Smart Templates (parametric macro) via cbakey-template subprocess.
+    bool enableSmartTemplates = true;
 };
 
 RuntimeConfig defaultConfig();
