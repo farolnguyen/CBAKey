@@ -9,7 +9,7 @@ set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Update GITHUB_REPO and VERSION when releasing a new version.
-GITHUB_REPO="FarolNguyen/CBAKey"           # <--- update with your GitHub repo
+GITHUB_REPO="farolnguyen/CBAKey"           # <--- update with your GitHub repo
 VERSION="0.1.0"
 DEB_NAME="cbakey_${VERSION}_amd64.deb"
 DEB_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/${DEB_NAME}"
