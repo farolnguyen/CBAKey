@@ -243,11 +243,20 @@ CPACK_SOURCE_TZ:BOOL=ON
 //Enable to build ZIP source packages
 CPACK_SOURCE_ZIP:BOOL=OFF
 
+//The directory containing a CMake configuration file for Fcitx5ModuleXCB.
+Fcitx5ModuleXCB_DIR:PATH=/usr/lib/x86_64-linux-gnu/cmake/Fcitx5ModuleXCB
+
 //Arguments to supply to pkg-config
 PKG_CONFIG_ARGN:STRING=
 
 //pkg-config executable
 PKG_CONFIG_EXECUTABLE:FILEPATH=/usr/bin/pkg-config
+
+//Path to a file.
+XCB_INCLUDE_DIR:PATH=/usr/include
+
+//Path to a library.
+XCB_LIBRARY:FILEPATH=/usr/lib/x86_64-linux-gnu/libxcb.so
 
 //Path to a library.
 pkgcfg_lib_FCITX5_Fcitx5Config:FILEPATH=/usr/lib/x86_64-linux-gnu/libFcitx5Config.so

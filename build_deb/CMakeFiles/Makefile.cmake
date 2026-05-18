@@ -10,6 +10,8 @@ set(CMAKE_MAKEFILE_DEPENDS
   "/home/derrick/Project/CBAKey/CMakeLists.txt"
   "CMakeFiles/3.28.3/CMakeCXXCompiler.cmake"
   "CMakeFiles/3.28.3/CMakeSystem.cmake"
+  "/usr/lib/x86_64-linux-gnu/cmake/Fcitx5ModuleXCB/Fcitx5ModuleXCBConfig.cmake"
+  "/usr/lib/x86_64-linux-gnu/cmake/Fcitx5ModuleXCB/Fcitx5ModuleXCBConfigVersion.cmake"
   "/usr/share/cmake-3.28/Modules/CMakeCXXInformation.cmake"
   "/usr/share/cmake-3.28/Modules/CMakeCommonLanguageInclude.cmake"
   "/usr/share/cmake-3.28/Modules/CMakeGenericSystem.cmake"

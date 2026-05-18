@@ -250,14 +250,7 @@ def _cbakey_template_bin():
     return local if os.path.isfile(local) else None
 
 def _inline_expand(pattern: str, expansion: str, mode: str, test_input: str) -> tuple[bool, str]:
-    """Inline preview: match test_input against pattern and render with Jinja2.
-    Accepts test_input with or without the '**' activation prefix.
-    """
-    # Strip [brackets] if present (user may type [trigger] in the test box)
-    if test_input.startswith('[') and test_input.endswith(']') and len(test_input) > 2:
-        test_input = test_input[1:-1]
-    if not test_input:
-        return False, 'Empty trigger after stripping [] brackets.'
+    """Inline preview: match test_input against pattern and render with Jinja2."""
     # Build regex from pattern ({varname} → named group)
     _VAR = re.compile(r'\{(\w+)\}')
     regex_parts = []
@@ -394,7 +387,7 @@ class TemplateDialog(Gtk.Dialog):
         test_box = Gtk.Box(spacing=6)
         self.test_entry = Gtk.Entry()
         self.test_entry.set_hexpand(True)
-        self.test_entry.set_placeholder_text('Wrap trigger in brackets, e.g. [5++] or [date]')
+        self.test_entry.set_placeholder_text('Type a sample trigger, e.g. 5++')
         self._disable_im(self.test_entry)
         self.test_btn = Gtk.Button(label='▶ Run')
         self.test_btn.connect('clicked', self._on_test)
@@ -748,7 +741,7 @@ class DictManagerWindow(Gtk.Window):
         top_bar.pack_start(self.tmpl_enable_switch,  False, False, 0)
 
         info_lbl = Gtk.Label(
-            label=' — Type <tt>[trigger]</tt> + Space to activate (e.g. <tt>[5++]</tt>, <tt>[date]</tt>)',
+            label=' — Custom function patterns with Jinja2 expansions.',
             use_markup=True, xalign=0)
         top_bar.pack_start(info_lbl, True, True, 0)
 
@@ -828,22 +821,15 @@ class DictManagerWindow(Gtk.Window):
         self.tmpl_btn_edit.connect('clicked',   self._on_tmpl_edit)
         self.tmpl_btn_delete.connect('clicked', self._on_tmpl_delete)
 
-        tmpl_btn_import = Gtk.Button(label='⬆ Import CSV')
-        tmpl_btn_export = Gtk.Button(label='⬇ Export CSV')
-        tmpl_btn_import.connect('clicked', self._on_tmpl_import)
-        tmpl_btn_export.connect('clicked', self._on_tmpl_export)
-
         btn_bar.pack_start(self.tmpl_btn_add,    False, False, 0)
         btn_bar.pack_start(self.tmpl_btn_edit,   False, False, 0)
         btn_bar.pack_start(self.tmpl_btn_delete, False, False, 0)
-        btn_bar.pack_start(tmpl_btn_import,      False, False, 0)
-        btn_bar.pack_start(tmpl_btn_export,      False, False, 0)
 
         # Quick test area (right side)
         test_lbl = Gtk.Label(label='Quick test:')
         self.tmpl_quick_entry = Gtk.Entry()
         self.tmpl_quick_entry.set_width_chars(18)
-        self.tmpl_quick_entry.set_placeholder_text('e.g. [5++] or [date]')
+        self.tmpl_quick_entry.set_placeholder_text('e.g. 5++')
         self.tmpl_quick_entry.connect('activate', self._on_tmpl_quick_test)
         tmpl_quick_btn = Gtk.Button(label='▶')
         tmpl_quick_btn.connect('clicked', self._on_tmpl_quick_test)
@@ -967,92 +953,6 @@ class DictManagerWindow(Gtk.Window):
             self._show_info(f'Input: {test_input}\n\nOutput:\n{output}')
         else:
             self._show_error(output)
-
-    # ── Templates: Import / Export CSV ────────────────────────────────────────
-
-    def _on_tmpl_export(self, _btn):
-        dlg = Gtk.FileChooserDialog(
-            title='Export Smart Templates as CSV',
-            transient_for=self,
-            action=Gtk.FileChooserAction.SAVE,
-        )
-        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
-        dlg.set_current_name('cbakey_templates.csv')
-        dlg.set_do_overwrite_confirmation(True)
-        ff = Gtk.FileFilter()
-        ff.set_name('CSV files (*.csv)')
-        ff.add_mime_type('text/csv')
-        ff.add_pattern('*.csv')
-        dlg.add_filter(ff)
-
-        if dlg.run() == Gtk.ResponseType.OK:
-            path = dlg.get_filename()
-            if not path.endswith('.csv'):
-                path += '.csv'
-            try:
-                buf = io.StringIO()
-                w = csv.DictWriter(buf, fieldnames=['pattern', 'expansion', 'mode'],
-                                   lineterminator='\n')
-                w.writeheader()
-                w.writerows(self.templates)
-                with open(path, 'w', encoding='utf-8', newline='') as f:
-                    f.write(buf.getvalue())
-                self._show_info(f'Exported {len(self.templates)} template(s) to:\n{path}')
-            except OSError as ex:
-                self._show_error(f'Export failed: {ex}')
-        dlg.destroy()
-
-    def _on_tmpl_import(self, _btn):
-        dlg = Gtk.FileChooserDialog(
-            title='Import Smart Templates from CSV',
-            transient_for=self,
-            action=Gtk.FileChooserAction.OPEN,
-        )
-        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Import', Gtk.ResponseType.OK)
-        ff = Gtk.FileFilter()
-        ff.set_name('CSV files (*.csv)')
-        ff.add_mime_type('text/csv')
-        ff.add_pattern('*.csv')
-        dlg.add_filter(ff)
-
-        if dlg.run() == Gtk.ResponseType.OK:
-            path = dlg.get_filename()
-            try:
-                with open(path, encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    required = {'pattern', 'expansion', 'mode'}
-                    if reader.fieldnames and not required.issubset(set(reader.fieldnames)):
-                        raise ValueError(f'CSV must have columns: {sorted(required)}')
-                    imported = []
-                    for row in reader:
-                        p = row.get('pattern', '').strip()
-                        e = row.get('expansion', '').strip()
-                        m = row.get('mode', 'both').strip().lower()
-                        if not p or not e:
-                            continue
-                        if m not in ('en', 'vi', 'both'):
-                            m = 'both'
-                        imported.append({'pattern': p, 'expansion': e, 'mode': m})
-
-                existing = {t['pattern'] for t in self.templates}
-                added, skipped = 0, 0
-                for t in imported:
-                    if t['pattern'] in existing:
-                        skipped += 1
-                    else:
-                        self.templates.append(t)
-                        existing.add(t['pattern'])
-                        added += 1
-                if added:
-                    save_templates(self.tmpl_path, self.templates)
-                    self._refresh_template_table()
-                msg = f'Imported {added} new template(s).'
-                if skipped:
-                    msg += f'\n{skipped} skipped (pattern already exists).'
-                self._show_info(msg)
-            except Exception as ex:
-                self._show_error(f'Import failed: {ex}')
-        dlg.destroy()
 
     # ── Filter ─────────────────────────────────────────────────────────────────
 

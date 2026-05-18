@@ -364,6 +364,30 @@ src/adapter/fcitx5/surrounding_cursor_normalize.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_fcitx5_adapter.dir/build.make CMakeFiles/cbakey_fcitx5_adapter.dir/src/adapter/fcitx5/surrounding_cursor_normalize.cpp.s
 .PHONY : src/adapter/fcitx5/surrounding_cursor_normalize.cpp.s
 
+src/adapter/fcitx5/x11_click_interceptor.o: src/adapter/fcitx5/x11_click_interceptor.cpp.o
+.PHONY : src/adapter/fcitx5/x11_click_interceptor.o
+
+# target to build an object file
+src/adapter/fcitx5/x11_click_interceptor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_fcitx5plugin.dir/build.make CMakeFiles/cbakey_fcitx5plugin.dir/src/adapter/fcitx5/x11_click_interceptor.cpp.o
+.PHONY : src/adapter/fcitx5/x11_click_interceptor.cpp.o
+
+src/adapter/fcitx5/x11_click_interceptor.i: src/adapter/fcitx5/x11_click_interceptor.cpp.i
+.PHONY : src/adapter/fcitx5/x11_click_interceptor.i
+
+# target to preprocess a source file
+src/adapter/fcitx5/x11_click_interceptor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_fcitx5plugin.dir/build.make CMakeFiles/cbakey_fcitx5plugin.dir/src/adapter/fcitx5/x11_click_interceptor.cpp.i
+.PHONY : src/adapter/fcitx5/x11_click_interceptor.cpp.i
+
+src/adapter/fcitx5/x11_click_interceptor.s: src/adapter/fcitx5/x11_click_interceptor.cpp.s
+.PHONY : src/adapter/fcitx5/x11_click_interceptor.s
+
+# target to generate assembly for a file
+src/adapter/fcitx5/x11_click_interceptor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cbakey_fcitx5plugin.dir/build.make CMakeFiles/cbakey_fcitx5plugin.dir/src/adapter/fcitx5/x11_click_interceptor.cpp.s
+.PHONY : src/adapter/fcitx5/x11_click_interceptor.cpp.s
+
 src/common/logger.o: src/common/logger.cpp.o
 .PHONY : src/common/logger.o
 
@@ -519,6 +543,9 @@ help:
 	@echo "... src/adapter/fcitx5/surrounding_cursor_normalize.o"
 	@echo "... src/adapter/fcitx5/surrounding_cursor_normalize.i"
 	@echo "... src/adapter/fcitx5/surrounding_cursor_normalize.s"
+	@echo "... src/adapter/fcitx5/x11_click_interceptor.o"
+	@echo "... src/adapter/fcitx5/x11_click_interceptor.i"
+	@echo "... src/adapter/fcitx5/x11_click_interceptor.s"
 	@echo "... src/common/logger.o"
 	@echo "... src/common/logger.i"
 	@echo "... src/common/logger.s"

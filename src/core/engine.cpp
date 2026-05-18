@@ -36,14 +36,23 @@ static std::string shellEscape(const std::string& s) {
     return out;
 }
 
-/// Call `cbakey-template expand --mode <mode> '<input>'`.
+/// Call `cbakey-template expand --mode <mode> '<trigger>'`.
 /// Returns the rendered template text, or empty string if no match / error.
+/// Requires the "**" activation prefix so normal words never trigger templates
+/// accidentally (e.g. "update" contains "date" but lacks "**").
 static std::string tryParametricExpand(const std::string& input, const std::string& mode) {
-    if (input.empty()) return {};
+    // Only activate when the user explicitly wrapped the trigger in [brackets].
+    // e.g. [date] or [5++] — prevents accidental expansion of words that happen
+    // to contain a template pattern (e.g. "update" containing "date").
+    if (input.size() < 3 || input.front() != '[' || input.back() != ']') {
+        return {};
+    }
+    const std::string trigger = input.substr(1, input.size() - 2);
+    if (trigger.empty()) return {};
 
     const std::string cmd =
         "cbakey-template expand --mode " + mode +
-        " '" + shellEscape(input) + "' 2>/dev/null";
+        " '" + shellEscape(trigger) + "' 2>/dev/null";
 
     FILE* pipe = popen(cmd.c_str(), "r");
     if (!pipe) return {};
