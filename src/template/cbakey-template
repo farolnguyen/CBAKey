@@ -312,7 +312,16 @@ def cmd_expand(input_str: str, debug: bool = False,
     """Expand input if a template matches. Prints result to stdout.
     Returns True if expanded, False otherwise.
     Exit code: 0 = expanded, 1 = no match.
+
+    Accepts trigger with or without [brackets] activation prefix.
+    e.g. both '[5++]' and '5++' are accepted.
     """
+    # Strip [brackets] activation prefix if present (typed in-app format)
+    if input_str.startswith('[') and input_str.endswith(']') and len(input_str) > 2:
+        input_str = input_str[1:-1]
+    if not input_str:
+        return False
+
     templates = load_templates()
     result_pair = find_match(templates, input_str, mode_filter=mode_filter)
     if result_pair is None:

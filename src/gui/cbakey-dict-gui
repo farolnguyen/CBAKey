@@ -297,7 +297,15 @@ def _inline_expand(pattern: str, expansion: str, mode: str, test_input: str) -> 
         return False, f'Jinja2 error: {e}'
 
 def expand_template_preview(test_input: str) -> tuple[bool, str]:
-    """Call cbakey-template expand on test_input. Returns (ok, output_or_error)."""
+    """Call cbakey-template expand on test_input. Returns (ok, output_or_error).
+    Accepts trigger with or without [brackets] activation prefix.
+    """
+    # Strip [brackets] if present — user may type [trigger] in quick test
+    if test_input.startswith('[') and test_input.endswith(']') and len(test_input) > 2:
+        test_input = test_input[1:-1]
+    if not test_input:
+        return False, 'Empty trigger.'
+
     bin_path = _cbakey_template_bin()
     if not bin_path:
         return False, 'cbakey-template not found in PATH.'
