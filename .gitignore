@@ -1,4 +1,8 @@
+# ── Build directories ─────────────────────────────────────────────────────────
 /build/
+/build_deb/
+/build_rel/
+/build_release/
 /out/
 /cmake-build-*/
 /CMakeFiles/
@@ -10,8 +14,7 @@
 /install_manifest.txt
 /Testing/
 
-/corpus/.bfs_cache.json
-
+# ── Python ────────────────────────────────────────────────────────────────────
 /.venv/
 /venv/
 **/__pycache__/
@@ -20,7 +23,9 @@
 *.pyd
 /.pytest_cache/
 /.mypy_cache/
+/corpus/.bfs_cache.json
 
+# ── IDE / Editor ──────────────────────────────────────────────────────────────
 /.vscode/
 /.idea/
 *.swp
@@ -29,8 +34,8 @@
 .DS_Store
 Thumbs.db
 
+# ── Compiled / Binary ─────────────────────────────────────────────────────────
 *.log
-
 *.o
 *.obj
 *.a
@@ -39,4 +44,10 @@ Thumbs.db
 *.dylib
 *.exe
 
-*.md
+# ── Internal / Dev-only ───────────────────────────────────────────────────────
+# Claude AI session files and project planning notes (not for public repo)
+/.claude/
+/.rules/
+
+# ── Temp / Test files ─────────────────────────────────────────────────────────
+/test.txt

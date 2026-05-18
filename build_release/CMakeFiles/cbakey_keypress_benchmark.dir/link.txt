@@ -1,1 +1,0 @@
-/usr/bin/c++ -O2 -O3 -DNDEBUG CMakeFiles/cbakey_keypress_benchmark.dir/tests/keypress_benchmark.cpp.o -o cbakey_keypress_benchmark  libcbakey_core.a 

@@ -1,1 +1,0 @@
-/usr/bin/c++ -O2 -O3 -DNDEBUG CMakeFiles/cbakey_m1_fallback_audit.dir/tools/m1_fallback_audit.cpp.o -o cbakey_m1_fallback_audit  libcbakey_core.a 

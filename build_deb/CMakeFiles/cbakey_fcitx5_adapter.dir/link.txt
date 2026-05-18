@@ -1,2 +1,0 @@
-/usr/bin/ar qc libcbakey_fcitx5_adapter.a CMakeFiles/cbakey_fcitx5_adapter.dir/src/adapter/fcitx5/bridge.cpp.o CMakeFiles/cbakey_fcitx5_adapter.dir/src/adapter/fcitx5/preedit_strategy.cpp.o CMakeFiles/cbakey_fcitx5_adapter.dir/src/adapter/fcitx5/surrounding_cursor_normalize.cpp.o
-/usr/bin/ranlib libcbakey_fcitx5_adapter.a

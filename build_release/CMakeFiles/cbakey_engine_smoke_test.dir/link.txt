@@ -1,1 +1,0 @@
-/usr/bin/c++ -O2 -O3 -DNDEBUG CMakeFiles/cbakey_engine_smoke_test.dir/tests/engine_smoke_test.cpp.o -o cbakey_engine_smoke_test  libcbakey_core.a 
