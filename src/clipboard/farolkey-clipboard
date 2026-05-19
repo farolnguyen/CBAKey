@@ -805,6 +805,9 @@ def _start_x11_hotkey(on_trigger):
                     GLib.idle_add(on_trigger)
         threading.Thread(target=_loop, daemon=True).start()
         print('X11 hotkey: Ctrl+Super+V active', flush=True)
+    except ImportError:
+        print('X11 hotkey unavailable: python3-xlib not installed. '
+              'Run: sudo apt install python3-xlib', flush=True)
     except Exception as e:
         print(f'X11 hotkey unavailable: {e}', flush=True)
 

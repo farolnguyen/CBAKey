@@ -58,6 +58,9 @@ PKGS=(
     slurp                 # Region selector on wlroots Wayland
     python3-pynput        # Global hotkey listener
 
+    # X11 global hotkey (Clipboard History Ctrl+Super+V on X11 sessions)
+    python3-xlib
+
     # Notifications
     libnotify-bin         # notify-send
 )
