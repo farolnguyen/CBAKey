@@ -236,16 +236,21 @@ def main():
             print('[farolkey] Nothing to remove on non-GNOME systems.')
         return
 
-    if _IS_GNOME:
-        # GNOME handles the hotkey itself after gsettings registration.
-        # No persistent daemon needed.
+    if _IS_GNOME and _IS_WAYLAND:
+        # Wayland + GNOME: gsettings custom shortcut is the only reliable approach
+        # (pynput/evdev needs input group permission on Wayland).
+        # GNOME Shell handles the hotkey itself — no persistent daemon needed.
         gnome_setup(hotkey)
         if '--setup' not in sys.argv:
-            # Called from autostart — setup is enough, exit cleanly.
             sys.exit(0)
         return
 
-    # Non-GNOME: run pynput listener
+    if _IS_GNOME and not _IS_WAYLAND:
+        # X11 + GNOME: gsettings custom shortcuts are unreliable on X11 for
+        # Super key combos. Register anyway as a bonus, but also run pynput.
+        gnome_setup(hotkey)
+
+    # X11 or non-GNOME Wayland: run pynput listener
     if '--setup' in sys.argv:
         print(f'[farolkey] Non-GNOME: hotkey listener will start on next login.')
         return
