@@ -508,13 +508,19 @@ private:
         });
         ui.registerAction("cbakey-clipboard", &clipboardAction_);
 
-        // Screenshot — launches cbakey-screenshot. Label shows configured hotkey.
+        // Screenshot — double-fork with a short delay so the systray popup fully
+        // closes before the capture starts (avoids the menu appearing in the shot).
         refreshScreenshotLabel();
         screenshotAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
             if (const pid_t pid = fork(); pid == 0) {
-                execlp("cbakey-screenshot", "cbakey-screenshot", nullptr);
-                _exit(1);
+                // Grandchild is re-parented to init; first child exits immediately.
+                if (fork() == 0) {
+                    usleep(800'000); // 800 ms — systray + any popups dismiss before capture
+                    execlp("cbakey-screenshot", "cbakey-screenshot", nullptr);
+                    _exit(1);
+                }
+                _exit(0);
             }
         });
         ui.registerAction("cbakey-screenshot", &screenshotAction_);
@@ -602,7 +608,7 @@ private:
         std::string cfgDir = xdgCfg ? std::string(xdgCfg)
                                      : std::string(getenv("HOME")) + "/.config";
         std::ifstream f(cfgDir + "/cbakey/screenshot.conf");
-        std::string hotkey = "Super+Shift+S";
+        std::string hotkey = "Windows+Shift+S";
         for (std::string line; std::getline(f, line); ) {
             if (line.rfind("hotkey=", 0) == 0) {
                 hotkey = line.substr(7);
@@ -611,6 +617,12 @@ private:
                 for (char& c : hotkey) {
                     if (c == '+') { cap = true; }
                     else if (cap) { c = static_cast<char>(toupper(c)); cap = false; }
+                }
+                // "Super" → "Windows" for user-friendly display
+                for (std::string::size_type pos = 0;
+                     (pos = hotkey.find("Super", pos)) != std::string::npos; ) {
+                    hotkey.replace(pos, 5, "Windows");
+                    pos += 7;
                 }
                 break;
             }

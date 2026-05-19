@@ -96,11 +96,15 @@ class SettingsWindow(Gtk.Window):
         hotkey_row.pack_start(self._hotkey_entry, True, True, 0)
         vbox.pack_start(hotkey_row, False, False, 0)
 
-        hint = Gtk.Label(label='Dùng dấu + để kết hợp phím. Modifier hợp lệ: super, ctrl, alt, shift')
-        hint.get_style_context().add_class('hint')
-        hint.set_xalign(0)
-        hint.set_margin_top(2)
-        vbox.pack_start(hint, False, False, 0)
+        for hint_text in [
+            'Dùng dấu + để kết hợp phím. Modifier hợp lệ: super, ctrl, alt, shift',
+            '💡 super = phím Windows (⊞) trên bàn phím',
+        ]:
+            hint = Gtk.Label(label=hint_text)
+            hint.get_style_context().add_class('hint')
+            hint.set_xalign(0)
+            hint.set_margin_top(2)
+            vbox.pack_start(hint, False, False, 0)
 
         # ── Section: Lưu trữ ─────────────────────────────────────────────────
         vbox.pack_start(self._section_label('Lưu trữ'), False, False, 0)
@@ -227,22 +231,50 @@ class SettingsWindow(Gtk.Window):
         dlg.destroy()
 
     def _on_save(self, *_):
+        old_hotkey = self._conf.get('hotkey', '')
         self._conf['hotkey']          = self._hotkey_entry.get_text().strip()
         self._conf['save_path']       = self._path_entry.get_text().strip()
         self._conf['ask_before_save'] = 'true' if self._ask_switch.get_active() else 'false'
         self._conf['auto_save']       = 'true' if self._auto_switch.get_active() else 'false'
         save_conf(self._conf)
 
+        hotkey_changed = self._conf['hotkey'] != old_hotkey
+        apply_ok, apply_msg = self._apply_hotkey() if hotkey_changed else (True, '')
+
+        if apply_ok:
+            msg = 'Đã lưu và áp dụng cài đặt.' if hotkey_changed else 'Đã lưu cài đặt.'
+            detail = (f'Phím tắt mới: {self._conf["hotkey"]}' if hotkey_changed else '')
+        else:
+            msg = 'Đã lưu cài đặt.'
+            detail = f'Không thể áp dụng phím tắt tự động:\n{apply_msg}'
+
         info = Gtk.MessageDialog(
             parent=self,
-            message_type=Gtk.MessageType.INFO,
+            message_type=Gtk.MessageType.INFO if apply_ok else Gtk.MessageType.WARNING,
             buttons=Gtk.ButtonsType.OK,
-            text='Đã lưu cài đặt.',
-            secondary_text='Khởi động lại cbakey-screenshot-daemon để áp dụng phím tắt mới.',
+            text=msg,
+            secondary_text=detail,
         )
         info.run()
         info.destroy()
         self.destroy()
+
+    def _apply_hotkey(self):
+        """Re-run the daemon --setup to apply new hotkey immediately."""
+        daemon = shutil.which('cbakey-screenshot-daemon') or str(
+            Path(__file__).parent / 'cbakey-screenshot-daemon'
+        )
+        try:
+            result = subprocess.run(
+                [daemon, '--setup'],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                return True, ''
+            err = result.stderr.strip() or result.stdout.strip()
+            return False, err or 'Lỗi không xác định.'
+        except Exception as e:
+            return False, str(e)
 
     def _on_test(self, *_):
         import shutil as sh

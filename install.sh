@@ -73,6 +73,8 @@ if [ ${#MISSING[@]} -eq 0 ]; then
     ok "All dependencies already installed."
 else
     echo "Installing: ${MISSING[*]}"
+    # Prompt for sudo password once here — subsequent sudo calls reuse the cached credential.
+    sudo -v
     sudo apt update -qq
     sudo apt install -y "${MISSING[@]}"
     ok "Dependencies installed."
