@@ -622,14 +622,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             clearRepeatTransformState();
             clearPendingLiteralEscape();
             return ProcessResult{};
-        case KeyAux::Enter: {
-            // Commit preedit but do NOT consume Enter — let the app create the newline.
-            // commitWithSuffix("\n") embeds '\n' in the commit string which many apps
-            // ignore (they need the actual key event to produce a newline).
-            auto r = commitWithSuffix("");
-            r.consumed = false;  // forward Enter to application
-            return r;
-        }
+        case KeyAux::Enter:
+            return commitWithSuffix("\n");
         case KeyAux::Tab:
             return commitWithSuffix("\t");
     }
@@ -726,11 +720,12 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     }
 
     if (transformed) {
-        // VNI: when '7' turns 'uo' → 'uơ' and there is already a coda in the syllable,
-        // complete the transform by converting 'u' → 'ư' (giving 'ươ').
-        // Uses normalizeVniUoTransform instead of normalizeTelexBuffer to avoid
-        // incorrectly transforming triple-vowel nuclei like "uơi" (needed for "cưới").
-        if (config_.method == farolkey::core::InputMethod::Vni) {
+        // After any transform, normalize so the preedit reflects the final shape.
+        // Telex: converts intermediate "đuợ" → "đượ" (u→ư when nucleus starts with uơ).
+        // VNI:   converts 'uo'→'uơ' after '7' transform (only when coda is present).
+        if (config_.method == farolkey::core::InputMethod::Telex) {
+            vi_syllable::normalizeTelexBuffer(decoded);
+        } else {
             vi_syllable::normalizeVniUoTransform(decoded);
         }
         preeditBuffer_ = encodeUtf8(decoded);

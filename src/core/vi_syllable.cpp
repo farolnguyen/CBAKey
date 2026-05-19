@@ -665,7 +665,13 @@ bool applyTelexTransform(std::u32string& buffer, char key) {
         pos = rightmostNucleusCharWithBase(buffer, *span, U"o");
         newSetIdx = 7;
     } else if (key == 'w') {
-        pos = rightmostNucleusCharWithBase(buffer, *span, U"aou");
+        // Priority: u→ư and o→ơ (horn diacritic) before a→ă (breve).
+        // This handles typing order variations like "nuaxw" → "nữa" where u has
+        // a tone mark already (ũ) but should still be the w target, not the 'a'.
+        pos = rightmostNucleusCharWithBase(buffer, *span, U"ou");
+        if (!pos) {
+            pos = rightmostNucleusCharWithBase(buffer, *span, U"a");
+        }
         if (!pos) {
             return false;
         }
