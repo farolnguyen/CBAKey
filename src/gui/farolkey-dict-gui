@@ -200,8 +200,32 @@ def csv_to_entries(text):
 
 # ── Template I/O ──────────────────────────────────────────────────────────────
 
+_DEFAULT_TEMPLATES = [
+    {'pattern': '{n}++',
+     'expansion': '{% for i in range(1, n|int+1) %}{{ i }}\n{% endfor %}',
+     'mode': 'en'},
+    {'pattern': 'for{n}',
+     'expansion': 'for (let i = 1; i <= {{ n|int }}; i++) {\n    // ...\n}',
+     'mode': 'en'},
+    {'pattern': 'date',
+     'expansion': '{{ today() }}',
+     'mode': 'both'},
+    {'pattern': 'hello{name}',
+     'expansion': 'Kính gửi {{ name|title }},\n\nThân gửi,',
+     'mode': 'both'},
+    {'pattern': 'list{n}',
+     'expansion': '{{ numbered(n) }}',
+     'mode': 'both'},
+    {'pattern': 'line{n}',
+     'expansion': '{{ repeat("=-", n|int, sep="") }}',
+     'mode': 'both'},
+]
+
 def load_templates(path):
-    """Load templates from JSONL. Returns list of dicts {pattern, expansion, mode}."""
+    """Load templates from JSONL. Returns list of dicts {pattern, expansion, mode}.
+    Returns built-in example templates when file does not exist yet."""
+    if not os.path.exists(path):
+        return [dict(t) for t in _DEFAULT_TEMPLATES]
     templates = []
     try:
         with open(path) as f:
@@ -219,7 +243,7 @@ def load_templates(path):
                         })
                 except json.JSONDecodeError:
                     pass
-    except FileNotFoundError:
+    except OSError:
         pass
     return templates
 
