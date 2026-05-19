@@ -8,7 +8,18 @@ if command -v fcitx5-remote >/dev/null 2>&1; then
     fi
 fi
 
+# Register screenshot hotkey for the installing user (best-effort).
+# postinst runs as root, so we need to run gsettings as the real user.
+if command -v cbakey-screenshot-daemon >/dev/null 2>&1; then
+    REAL_USER="${SUDO_USER:-${USER:-}}"
+    if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
+        su - "$REAL_USER" -c "cbakey-screenshot-daemon --setup" 2>/dev/null || true
+    fi
+fi
+
 echo "CBAKey installed. To activate:"
 echo "  1. Open Fcitx5 Configuration"
 echo "  2. Add input method: CBAKey Vietnamese"
 echo "  3. Restart Fcitx5: pkill fcitx5; fcitx5 -d"
+echo ""
+echo "Screenshot shortcut: Super+Shift+S (registered automatically on GNOME)"

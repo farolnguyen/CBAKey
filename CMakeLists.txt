@@ -256,6 +256,23 @@ if(CBAKEY_BUILD_FCITX5_PLUGIN)
         DESTINATION "bin"
         COMPONENT runtime
     )
+
+    # Screenshot tool, daemon, and settings (Python + GTK3)
+    install(PROGRAMS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/screenshot/cbakey-screenshot"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/screenshot/cbakey-screenshot-daemon"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/screenshot/cbakey-screenshot-settings"
+        DESTINATION "bin"
+        COMPONENT runtime
+    )
+
+    # Autostart desktop entries (clipboard + screenshot daemons)
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/deploy/autostart/cbakey-clipboard.desktop"
+        "${CMAKE_CURRENT_SOURCE_DIR}/deploy/autostart/cbakey-screenshot.desktop"
+        DESTINATION "etc/xdg/autostart"
+        COMPONENT runtime
+    )
 endif()
 
 # ── M10: CPack DEB ───────────────────────────────────────────────────────────

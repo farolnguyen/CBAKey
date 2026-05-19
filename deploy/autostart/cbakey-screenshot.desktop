@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=CBAKey Screenshot Daemon
+Comment=Global hotkey listener for CBAKey screenshot tool
+Exec=cbakey-screenshot-daemon
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=4

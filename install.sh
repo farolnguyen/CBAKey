@@ -51,6 +51,15 @@ PKGS=(
 
     # Jinja2 template engine (Smart Templates)
     python3-jinja2
+
+    # Screenshot tool dependencies
+    gnome-screenshot      # Screen capture on GNOME Wayland
+    grim                  # Screen capture on wlroots Wayland (Sway/Hyprland)
+    slurp                 # Region selector on wlroots Wayland
+    python3-pynput        # Global hotkey listener
+
+    # Notifications
+    libnotify-bin         # notify-send
 )
 
 MISSING=()

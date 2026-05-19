@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""CBAKey Screenshot Daemon — registers global hotkey for cbakey-screenshot.
+
+On GNOME: registers a custom keyboard shortcut via gsettings (no daemon needed).
+On other DEs: runs as a persistent pynput listener.
+
+Usage:
+  cbakey-screenshot-daemon          # setup + run (called from autostart)
+  cbakey-screenshot-daemon --setup  # one-time setup only, then exit
+  cbakey-screenshot-daemon --remove # remove the registered shortcut
+  cbakey-screenshot-daemon --status # print current status
+"""
+
+import os
+import shutil
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+# ─── Config ───────────────────────────────────────────────────────────────────
+
+def _config_dir() -> Path:
+    xdg = os.environ.get('XDG_CONFIG_HOME', '')
+    base = Path(xdg) if xdg else Path.home() / '.config'
+    return base / 'cbakey'
+
+SCREENSHOT_CONF = _config_dir() / 'screenshot.conf'
+
+SCREENSHOT_TOOL = shutil.which('cbakey-screenshot') or str(
+    Path(__file__).parent / 'cbakey-screenshot'
+)
+
+_DEFAULTS = {'hotkey': 'super+shift+s'}
+
+def load_hotkey() -> str:
+    if SCREENSHOT_CONF.exists():
+        for line in SCREENSHOT_CONF.read_text().splitlines():
+            if line.startswith('hotkey='):
+                return line.split('=', 1)[1].strip()
+    return _DEFAULTS['hotkey']
+
+# ─── Platform ─────────────────────────────────────────────────────────────────
+
+_IS_WAYLAND = bool(
+    os.environ.get('WAYLAND_DISPLAY') or
+    os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
+)
+_DESKTOP  = os.environ.get('XDG_CURRENT_DESKTOP', '').upper()
+_IS_GNOME = 'GNOME' in _DESKTOP
+
+# ─── GNOME gsettings approach ─────────────────────────────────────────────────
+
+_GNOME_SCHEMA  = 'org.gnome.settings-daemon.plugins.media-keys'
+_GNOME_LIST_KEY = 'custom-keybindings'
+_OUR_PATH      = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/cbakey-screenshot/'
+_BIND_SCHEMA   = f'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{_OUR_PATH}'
+
+def _to_gnome_binding(hotkey: str) -> str:
+    """Convert 'super+shift+s' → '<Super><Shift>s'"""
+    MODS = {
+        'super': '<Super>', 'ctrl': '<Control>', 'control': '<Control>',
+        'alt': '<Alt>', 'shift': '<Shift>', 'meta': '<Meta>',
+    }
+    parts = [p.strip().lower() for p in hotkey.split('+')]
+    mods, key = '', ''
+    for p in parts:
+        if p in MODS:
+            mods += MODS[p]
+        else:
+            key = p
+    return mods + key
+
+def _gsettings_get(schema: str, key: str) -> str:
+    r = subprocess.run(
+        ['gsettings', 'get', schema, key],
+        capture_output=True, text=True,
+    )
+    return r.stdout.strip()
+
+def _gsettings_set(schema: str, key: str, value: str):
+    subprocess.run(['gsettings', 'set', schema, key, value], check=True)
+
+def gnome_setup(hotkey: str):
+    """Register/update CBAKey Screenshot shortcut in GNOME."""
+    binding = _to_gnome_binding(hotkey)
+
+    # Read current list, add our path if missing
+    raw = _gsettings_get(_GNOME_SCHEMA, _GNOME_LIST_KEY)
+    if _OUR_PATH not in raw:
+        if raw in ('@as []', '[]', ''):
+            new_list = f"['{_OUR_PATH}']"
+        else:
+            # raw looks like ['/path/a/', '/path/b/'] — insert before closing ]
+            new_list = raw.rstrip().rstrip(']').rstrip() + f", '{_OUR_PATH}']"
+        _gsettings_set(_GNOME_SCHEMA, _GNOME_LIST_KEY, new_list)
+
+    # Set binding properties
+    _gsettings_set(_BIND_SCHEMA, 'name',    'CBAKey Screenshot')
+    _gsettings_set(_BIND_SCHEMA, 'command', SCREENSHOT_TOOL)
+    _gsettings_set(_BIND_SCHEMA, 'binding', binding)
+
+    print(f'[cbakey] GNOME shortcut registered: {binding} → {SCREENSHOT_TOOL}')
+
+def gnome_remove():
+    """Unregister CBAKey Screenshot shortcut from GNOME."""
+    raw = _gsettings_get(_GNOME_SCHEMA, _GNOME_LIST_KEY)
+    if _OUR_PATH not in raw:
+        print('[cbakey] Shortcut not registered, nothing to remove.')
+        return
+
+    # Remove our path from the list
+    import re
+    new_list = re.sub(rf",?\s*'{re.escape(_OUR_PATH)}'", '', raw)
+    new_list = re.sub(rf"'{re.escape(_OUR_PATH)}',?\s*", '', new_list)
+    # Clean up any double commas
+    new_list = re.sub(r',\s*,', ',', new_list).strip()
+    if new_list in ('[]', '[,]', '[  ]'):
+        new_list = '@as []'
+    _gsettings_set(_GNOME_SCHEMA, _GNOME_LIST_KEY, new_list)
+
+    # Reset binding properties
+    subprocess.run(['gsettings', 'reset', _BIND_SCHEMA, 'name'],    capture_output=True)
+    subprocess.run(['gsettings', 'reset', _BIND_SCHEMA, 'command'], capture_output=True)
+    subprocess.run(['gsettings', 'reset', _BIND_SCHEMA, 'binding'], capture_output=True)
+    print('[cbakey] GNOME shortcut removed.')
+
+def gnome_status(hotkey: str) -> bool:
+    binding = _to_gnome_binding(hotkey)
+    raw     = _gsettings_get(_GNOME_SCHEMA, _GNOME_LIST_KEY)
+    current = _gsettings_get(_BIND_SCHEMA, 'binding') if _OUR_PATH in raw else ''
+    ok = _OUR_PATH in raw and current == f"'{binding}'"
+    print(f'GNOME shortcut: {"✓ registered" if ok else "✗ not registered"}')
+    if current:
+        print(f'  binding: {current}')
+    return ok
+
+# ─── pynput approach (non-GNOME) ──────────────────────────────────────────────
+
+_current_keys: set = set()
+_combo:        set = set()
+_triggered           = False
+
+def _parse_hotkey(hotkey_str: str) -> set:
+    from pynput.keyboard import Key, KeyCode
+    KEY_MAP = {
+        'super': Key.cmd, 'meta': Key.cmd,
+        'ctrl': Key.ctrl, 'control': Key.ctrl,
+        'alt': Key.alt,
+        'shift': Key.shift,
+    }
+    combo = set()
+    for part in [p.strip().lower() for p in hotkey_str.split('+')]:
+        if part in KEY_MAP:
+            combo.add(KEY_MAP[part])
+        elif len(part) == 1:
+            combo.add(KeyCode.from_char(part))
+        else:
+            try:
+                combo.add(getattr(Key, part))
+            except AttributeError:
+                print(f'[cbakey] Unknown key: {part!r}', file=sys.stderr)
+    return combo
+
+def _on_press(key):
+    global _triggered
+    _current_keys.add(key)
+    if _combo and _combo.issubset(_current_keys) and not _triggered:
+        _triggered = True
+        subprocess.Popen(
+            [sys.executable, SCREENSHOT_TOOL],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+def _on_release(key):
+    global _triggered
+    _current_keys.discard(key)
+    if not _combo.issubset(_current_keys):
+        _triggered = False
+
+def run_pynput_daemon(hotkey_str: str):
+    try:
+        from pynput import keyboard
+    except ImportError:
+        print('[cbakey] pynput not installed. Run: sudo apt install python3-pynput',
+              file=sys.stderr)
+        sys.exit(1)
+
+    global _combo
+    _combo = _parse_hotkey(hotkey_str)
+    print(f'[cbakey] pynput listener: {hotkey_str}', flush=True)
+
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    signal.signal(signal.SIGINT,  lambda *_: sys.exit(0))
+
+    with keyboard.Listener(on_press=_on_press, on_release=_on_release) as lst:
+        lst.join()
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+def main():
+    hotkey = load_hotkey()
+
+    if '--status' in sys.argv:
+        if _IS_GNOME:
+            gnome_status(hotkey)
+        else:
+            print(f'Platform: non-GNOME ({_DESKTOP or "unknown"})')
+            print(f'Hotkey: {hotkey}')
+        return
+
+    if '--remove' in sys.argv:
+        if _IS_GNOME:
+            gnome_remove()
+        else:
+            print('[cbakey] Nothing to remove on non-GNOME systems.')
+        return
+
+    if _IS_GNOME:
+        # GNOME handles the hotkey itself after gsettings registration.
+        # No persistent daemon needed.
+        gnome_setup(hotkey)
+        if '--setup' not in sys.argv:
+            # Called from autostart — setup is enough, exit cleanly.
+            sys.exit(0)
+        return
+
+    # Non-GNOME: run pynput listener
+    if '--setup' in sys.argv:
+        print(f'[cbakey] Non-GNOME: hotkey listener will start on next login.')
+        return
+
+    run_pynput_daemon(hotkey)
+
+if __name__ == '__main__':
+    main()

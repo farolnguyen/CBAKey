@@ -363,6 +363,7 @@ public:
         sa.addAction(fcitx::StatusGroup::InputMethod, &methodMenuAction_);
         sa.addAction(fcitx::StatusGroup::InputMethod, &dictAction_);
         sa.addAction(fcitx::StatusGroup::InputMethod, &clipboardAction_);
+        sa.addAction(fcitx::StatusGroup::InputMethod, &screenshotAction_);
 
         refreshModeAction(ic);
     }
@@ -507,6 +508,17 @@ private:
         });
         ui.registerAction("cbakey-clipboard", &clipboardAction_);
 
+        // Screenshot — launches cbakey-screenshot. Label shows configured hotkey.
+        refreshScreenshotLabel();
+        screenshotAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
+            FCITX_UNUSED(ic);
+            if (const pid_t pid = fork(); pid == 0) {
+                execlp("cbakey-screenshot", "cbakey-screenshot", nullptr);
+                _exit(1);
+            }
+        });
+        ui.registerAction("cbakey-screenshot", &screenshotAction_);
+
         // Preedit underline — config only, NOT shown in systray menu.
         underlineAction_.setShortText("Underline while composing");
         underlineAction_.setChecked(config_.showPreeditUnderline.value());
@@ -584,6 +596,29 @@ private:
         methodMenuAction_.setShortText(isTelex ? "Input Method: Telex" : "Input Method: VNI");
     }
 
+    // Read hotkey from ~/.config/cbakey/screenshot.conf and update action label.
+    void refreshScreenshotLabel() {
+        const char* xdgCfg = getenv("XDG_CONFIG_HOME");
+        std::string cfgDir = xdgCfg ? std::string(xdgCfg)
+                                     : std::string(getenv("HOME")) + "/.config";
+        std::ifstream f(cfgDir + "/cbakey/screenshot.conf");
+        std::string hotkey = "Super+Shift+S";
+        for (std::string line; std::getline(f, line); ) {
+            if (line.rfind("hotkey=", 0) == 0) {
+                hotkey = line.substr(7);
+                // Capitalise first letter of each segment: "super+shift+s" → "Super+Shift+S"
+                bool cap = true;
+                for (char& c : hotkey) {
+                    if (c == '+') { cap = true; }
+                    else if (cap) { c = static_cast<char>(toupper(c)); cap = false; }
+                }
+                break;
+            }
+        }
+        screenshotAction_.setShortText("Screenshot (" + hotkey + ")");
+        screenshotAction_.setLongText("Take a screenshot with CBAKey");
+    }
+
     void refreshActionStates() {
         const bool isTelex =
             config_.method.value() == cbakey::adapter::fcitx5::CBAKeyMethod::Telex;
@@ -591,6 +626,7 @@ private:
         vniAction_.setChecked(!isTelex);
         underlineAction_.setChecked(config_.showPreeditUnderline.value());
         refreshMethodMenuLabel();
+        refreshScreenshotLabel();   // pick up hotkey changes from screenshot.conf
     }
 
     void applyConfigToAllBridges() {
@@ -685,6 +721,7 @@ private:
     fcitx::SimpleAction vniAction_;
     fcitx::SimpleAction dictAction_;
     fcitx::SimpleAction clipboardAction_;
+    fcitx::SimpleAction screenshotAction_;
     fcitx::SimpleAction underlineAction_;
 };
 
