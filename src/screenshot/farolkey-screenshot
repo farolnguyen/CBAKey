@@ -125,8 +125,9 @@ def capture_fullscreen() -> bytes:
             return r.stdout
         raise CaptureError('Cần cài grim: sudo apt install grim')
     if _MAIM:
-        r = subprocess.run([_MAIM, '-'], capture_output=True)
-        if r.returncode != 0:
+        # maim outputs PNG to stdout when no filename is given (don't pass '-')
+        r = subprocess.run([_MAIM], capture_output=True)
+        if r.returncode != 0 or not r.stdout:
             raise CaptureError(f'maim failed: {r.stderr.decode().strip()}')
         return r.stdout
     raise CaptureError('Cần cài maim: sudo apt install maim')
