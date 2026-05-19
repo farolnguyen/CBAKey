@@ -382,10 +382,9 @@ public:
         FCITX_UNUSED(entry);
         auto* ic = event.inputContext();
         auto  it = bridges_.find(ic);
-        // Clear engine state without committing.  fcitx5-gtk commits the preedit
-        // to the GTK entry on focus-out before calling reset/deactivate on the
-        // daemon; committing here too produces a double commit ("koko" bug).
-        if (it != bridges_.end()) it->second.takeCompositionForCommit();
+        if (it != bridges_.end()) {
+            commitPanelPreeditIfNeeded(ic, it->second);
+        }
         composeAnchors_.erase(ic);
         interceptor_->stopIntercepting();
         pushPreedit(ic, "",
@@ -673,14 +672,27 @@ private:
 
     // ── Flush & cleanup on deactivate ────────────────────────────────────────
 
+    // Commit preedit only when using Panel preedit (true preedit in fcitx5 panel).
+    // Client preedit: fcitx5-gtk already committed it to the GTK entry on focus-out
+    //   — committing again here produces double commit ("koko" bug).
+    // Panel preedit: preedit lives in fcitx5's own panel, NOT in the app; the app
+    //   never receives it automatically — must commit manually to avoid losing text.
+    void commitPanelPreeditIfNeeded(fcitx::InputContext* ic,
+                                    farolkey::adapter::fcitx5::Bridge& bridge) {
+        using farolkey::adapter::fcitx5::PreeditPresentation;
+        const auto presentation = farolkey::adapter::fcitx5::choosePreeditPresentation(
+            bridge.config().fcitx5PreeditMode, snapshotCaps(ic));
+        const std::string pending = bridge.takeCompositionForCommit();
+        if (!pending.empty() &&
+            presentation == PreeditPresentation::Panel) {
+            ic->commitString(pending);
+        }
+    }
+
     void flushAndCleanup(fcitx::InputContext* ic) {
         auto iter = bridges_.find(ic);
         if (iter != bridges_.end()) {
-            // Clear engine state without committing.  fcitx5-gtk (the GTK IM
-            // module in the app process) already commits preedit to the GTK entry
-            // on focus-out before notifying the daemon.  Committing again here
-            // produces a double commit ("koko" instead of "ko").
-            iter->second.takeCompositionForCommit();
+            commitPanelPreeditIfNeeded(ic, iter->second);
             bridges_.erase(iter);
         }
         composeAnchors_.erase(ic);
