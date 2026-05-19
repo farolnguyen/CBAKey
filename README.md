@@ -74,7 +74,7 @@ Mở **Dictionary Manager** từ systray → tab **📖 Abbreviations**.
 
 ```
 ko  →  không
-btv →  Ban Tổ chức
+btc →  Ban Tổ chức
 ```
 
 Gõ trigger rồi nhấn `Space` hoặc `Enter` để expand.
