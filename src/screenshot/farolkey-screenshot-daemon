@@ -81,9 +81,29 @@ def _gsettings_get(schema: str, key: str) -> str:
 def _gsettings_set(schema: str, key: str, value: str):
     subprocess.run(['gsettings', 'set', schema, key, value], check=True)
 
+def _remove_legacy_entry(legacy_path: str):
+    """Remove a leftover custom-keybinding entry (e.g. from a project rename)."""
+    import re
+    raw = _gsettings_get(_GNOME_SCHEMA, _GNOME_LIST_KEY)
+    if legacy_path not in raw:
+        return
+    new_list = re.sub(rf",?\s*'{re.escape(legacy_path)}'", '', raw)
+    new_list = re.sub(rf"'{re.escape(legacy_path)}',?\s*", '', new_list)
+    new_list = re.sub(r',\s*,', ',', new_list).strip()
+    if new_list in ('[]', '[,]', ''):
+        new_list = '@as []'
+    _gsettings_set(_GNOME_SCHEMA, _GNOME_LIST_KEY, new_list)
+    schema = f'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{legacy_path}'
+    for key in ('name', 'command', 'binding'):
+        subprocess.run(['gsettings', 'reset', schema, key], capture_output=True)
+
 def gnome_setup(hotkey: str):
     """Register/update FarolKey Screenshot shortcut in GNOME."""
     binding = _to_gnome_binding(hotkey)
+
+    # Remove legacy cbakey-screenshot entry if present (left over from rename)
+    _remove_legacy_entry('/org/gnome/settings-daemon/plugins/media-keys/'
+                         'custom-keybindings/cbakey-screenshot/')
 
     # Read current list, add our path if missing
     raw = _gsettings_get(_GNOME_SCHEMA, _GNOME_LIST_KEY)
