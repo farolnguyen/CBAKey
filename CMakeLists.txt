@@ -270,7 +270,7 @@ if(CBAKEY_BUILD_FCITX5_PLUGIN)
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/deploy/autostart/cbakey-clipboard.desktop"
         "${CMAKE_CURRENT_SOURCE_DIR}/deploy/autostart/cbakey-screenshot.desktop"
-        DESTINATION "etc/xdg/autostart"
+        DESTINATION "/etc/xdg/autostart"
         COMPONENT runtime
     )
 endif()
