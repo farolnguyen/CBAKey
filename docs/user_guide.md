@@ -161,11 +161,11 @@ Xem thêm: [`docs/user_dict.md`](user_dict.md)
 
 ## 6. Lịch sử Clipboard
 
-FarolKey tích hợp clipboard history kiểu Windows (Ctrl+Win+V).
+FarolKey tích hợp clipboard history kiểu Windows (Win+V).
 
 ### Mở popup
 
-- **Ctrl+Super+V** (GNOME Wayland — đã đăng ký tự động khi cài)
+- **Win+V** (GNOME Wayland — đã đăng ký tự động khi cài)
 - Hoặc click systray FarolKey → **Clipboard History**
 
 ### Tính năng

@@ -9,7 +9,7 @@ Bộ gõ tiếng Việt (Telex / VNI) chạy trên Fcitx5, hỗ trợ Ubuntu/Deb
 - **Telex & VNI** — đặt dấu chính xác theo mô hình âm tiết
 - **Gõ tắt** — định nghĩa viết tắt riêng (vd: `ko` → `không`, `btv` → `Ban Tổ chức`)
 - **Smart Templates** — mẫu gõ động với Jinja2 (vd: `[5++]` → danh sách 1–5)
-- **Clipboard History** — lịch sử clipboard kiểu Windows (Ctrl+Super+V)
+- **Clipboard History** — lịch sử clipboard kiểu Windows (Win+V)
 - **Screenshot** — chụp màn hình vùng chọn / toàn màn hình (Super+Shift+S, tự vào clipboard)
 - **Dictionary Manager** — giao diện quản lý gõ tắt & template trực quan
 - **C1** — sửa từ đã gõ mà không cần xóa lại
@@ -96,7 +96,7 @@ Ngôn ngữ template: [Jinja2](https://jinja.palletsprojects.com/)
 
 ### Clipboard History
 
-Nhấn `Ctrl+Super+V` (hoặc systray → **Clipboard History**) để mở lịch sử clipboard.  
+Nhấn `Win+V` (hoặc systray → **Clipboard History**) để mở lịch sử clipboard.  
 Hỗ trợ text và ảnh, tối đa 50 mục, có thể pin và tìm kiếm.
 
 ---

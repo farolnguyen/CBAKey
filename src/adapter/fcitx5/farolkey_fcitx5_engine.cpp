@@ -497,7 +497,7 @@ private:
         ui.registerAction("farolkey-dict", &dictAction_);
 
         // Clipboard History — launches farolkey-clipboard --show as a detached process.
-        clipboardAction_.setShortText("Clipboard History (Ctrl + Win + V)");
+        clipboardAction_.setShortText("Clipboard History (Win + V)");
         clipboardAction_.setLongText("Show Clipboard History (farolkey-clipboard)");
         clipboardAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);

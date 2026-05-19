@@ -794,7 +794,7 @@ def _start_x11_hotkey(on_trigger):
         disp = Display()
         root = disp.screen().root
         kc = disp.keysym_to_keycode(ord('v'))
-        MOD = X.ControlMask | X.Mod4Mask
+        MOD = X.Mod4Mask
         for extra in (0, X.Mod2Mask):
             root.grab_key(kc, MOD | extra, True, X.GrabModeAsync, X.GrabModeAsync)
         disp.sync()
@@ -804,13 +804,59 @@ def _start_x11_hotkey(on_trigger):
                 if ev.type == X.KeyPress:
                     GLib.idle_add(on_trigger)
         threading.Thread(target=_loop, daemon=True).start()
-        print('X11 hotkey: Ctrl+Super+V active', flush=True)
+        print('X11 hotkey: Win+V active', flush=True)
     except Exception as e:
         print(f'X11 hotkey unavailable: {e}', flush=True)
 
 # ---------------------------------------------------------------------------
 # Entry points
 # ---------------------------------------------------------------------------
+
+_GNOME_CLIPBOARD_PATH = (
+    '/org/gnome/settings-daemon/plugins/media-keys/'
+    'custom-keybindings/farolkey-clipboard/'
+)
+_GNOME_BIND_SCHEMA = (
+    'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:'
+    + _GNOME_CLIPBOARD_PATH
+)
+
+def _setup_gnome_clipboard_hotkey():
+    """Register Win+V as GNOME custom shortcut for FarolKey Clipboard History."""
+    import shutil
+    if not shutil.which('gsettings'):
+        return
+    try:
+        r = subprocess.run(
+            ['gsettings', 'get',
+             'org.gnome.settings-daemon.plugins.media-keys', 'custom-keybindings'],
+            capture_output=True, text=True,
+        )
+        raw = r.stdout.strip()
+        if _GNOME_CLIPBOARD_PATH not in raw:
+            if raw in ('@as []', '[]', ''):
+                new_list = f"['{_GNOME_CLIPBOARD_PATH}']"
+            else:
+                new_list = raw.rstrip().rstrip(']').rstrip() + f", '{_GNOME_CLIPBOARD_PATH}']"
+            subprocess.run(
+                ['gsettings', 'set',
+                 'org.gnome.settings-daemon.plugins.media-keys',
+                 'custom-keybindings', new_list],
+                check=True,
+            )
+        tool = shutil.which('farolkey-clipboard') or __file__
+        for key, val in [
+            ('name',    'FarolKey Clipboard History'),
+            ('command', f'{tool} --show'),
+            ('binding', '<Super>v'),
+        ]:
+            subprocess.run(
+                ['gsettings', 'set', _GNOME_BIND_SCHEMA, key, val],
+                check=True,
+            )
+        print('GNOME hotkey: Win+V registered', flush=True)
+    except Exception as e:
+        print(f'GNOME hotkey setup failed: {e}', flush=True)
 
 def run_daemon():
     """Persistent background daemon: monitors clipboard + serves SHOW."""
@@ -821,7 +867,10 @@ def run_daemon():
     server = PopupServer(history)
     server.start()
 
-    if not _is_wayland():
+    desktop = os.environ.get('XDG_CURRENT_DESKTOP', '').upper()
+    if _is_wayland() and 'GNOME' in desktop:
+        _setup_gnome_clipboard_hotkey()
+    elif not _is_wayland():
         _start_x11_hotkey(server.show_popup)
 
     def _init():
