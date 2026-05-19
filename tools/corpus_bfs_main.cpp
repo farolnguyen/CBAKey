@@ -11,17 +11,17 @@
 #include <unordered_set>
 #include <vector>
 
-#include "cbakey/config/config.h"
-#include "cbakey/core/engine.h"
-#include "cbakey/core/types.h"
+#include "farolkey/config/config.h"
+#include "farolkey/core/engine.h"
+#include "farolkey/core/types.h"
 
 namespace {
 
-using cbakey::config::RuntimeConfig;
-using cbakey::core::Engine;
-using cbakey::core::InputMethod;
-using cbakey::core::KeyEvent;
-using cbakey::core::ProcessResult;
+using farolkey::config::RuntimeConfig;
+using farolkey::core::Engine;
+using farolkey::core::InputMethod;
+using farolkey::core::KeyEvent;
+using farolkey::core::ProcessResult;
 
 struct Node {
     std::vector<KeyEvent> path;
@@ -204,9 +204,9 @@ void printJsonLine(const std::string& id,
 
 int usage() {
     std::cerr << "Usage:\n"
-              << "  cbakey_corpus_bfs --one telex|vni <utf8_word> [ascii_hint]\n"
-              << "  cbakey_corpus_bfs --batch  (stdin: METHOD<TAB>WORD[<TAB>ascii_hint>])\n"
-              << "Env: CBAKEY_CORPUS_BFS_MAX_DEPTH (default 26), CBAKEY_CORPUS_BFS_MAX_NODES (default 1200000)\n";
+              << "  farolkey_corpus_bfs --one telex|vni <utf8_word> [ascii_hint]\n"
+              << "  farolkey_corpus_bfs --batch  (stdin: METHOD<TAB>WORD[<TAB>ascii_hint>])\n"
+              << "Env: FAROLKEY_CORPUS_BFS_MAX_DEPTH (default 26), FAROLKEY_CORPUS_BFS_MAX_NODES (default 1200000)\n";
     return 2;
 }
 
@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
         const std::string method = argv[2];
         const std::string word = argv[3];
         const std::string hint = (argc == 5) ? std::string(argv[4]) : std::string{};
-        RuntimeConfig cfg = cbakey::config::defaultConfig();
+        RuntimeConfig cfg = farolkey::config::defaultConfig();
         if (method == "vni") {
             cfg.method = InputMethod::Vni;
         } else if (method != "telex") {
@@ -234,8 +234,8 @@ int main(int argc, char** argv) {
 
         std::vector<KeyEvent> path;
         std::string err;
-        const int kMaxDepth = envIntOr("CBAKEY_CORPUS_BFS_MAX_DEPTH", 26);
-        const std::size_t kMaxNodes = envSizeOr("CBAKEY_CORPUS_BFS_MAX_NODES", 1200000);
+        const int kMaxDepth = envIntOr("FAROLKEY_CORPUS_BFS_MAX_DEPTH", 26);
+        const std::size_t kMaxNodes = envSizeOr("FAROLKEY_CORPUS_BFS_MAX_NODES", 1200000);
         if (!findSequence(cfg, word, hint, kMaxDepth, kMaxNodes, &path, &err)) {
             std::cerr << "SKIP\t" << method << '\t' << word << '\t' << err << '\n';
             return 1;
@@ -288,7 +288,7 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            RuntimeConfig cfg = cbakey::config::defaultConfig();
+            RuntimeConfig cfg = farolkey::config::defaultConfig();
             if (method == "vni") {
                 cfg.method = InputMethod::Vni;
             } else if (method != "telex") {
@@ -299,8 +299,8 @@ int main(int argc, char** argv) {
 
             std::vector<KeyEvent> path;
             std::string err;
-            const int kMaxDepth = envIntOr("CBAKEY_CORPUS_BFS_MAX_DEPTH", 26);
-            const std::size_t kMaxNodes = envSizeOr("CBAKEY_CORPUS_BFS_MAX_NODES", 1200000);
+            const int kMaxDepth = envIntOr("FAROLKEY_CORPUS_BFS_MAX_DEPTH", 26);
+            const std::size_t kMaxNodes = envSizeOr("FAROLKEY_CORPUS_BFS_MAX_NODES", 1200000);
             if (!findSequence(cfg, word, hint, kMaxDepth, kMaxNodes, &path, &err)) {
                 std::cout << "SKIP\t" << method << '\t' << word << '\t' << err << '\n';
                 ++skip;
@@ -323,7 +323,7 @@ int main(int argc, char** argv) {
             printJsonLine(id, method, word, path, fin.commit);
             ++ok;
         }
-        std::cerr << "[cbakey_corpus_bfs] batch ok=" << ok << " skip=" << skip << '\n';
+        std::cerr << "[farolkey_corpus_bfs] batch ok=" << ok << " skip=" << skip << '\n';
         return 0;
     }
 

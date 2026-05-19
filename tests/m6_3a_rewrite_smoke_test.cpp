@@ -1,12 +1,12 @@
 #include <cassert>
 
-#include "cbakey/config/config.h"
-#include "cbakey/core/engine.h"
+#include "farolkey/config/config.h"
+#include "farolkey/core/engine.h"
 
-using cbakey::config::defaultConfig;
-using cbakey::core::Engine;
-using cbakey::core::InputMethod;
-using cbakey::core::KeyEvent;
+using farolkey::config::defaultConfig;
+using farolkey::core::Engine;
+using farolkey::core::InputMethod;
+using farolkey::core::KeyEvent;
 
 int main() {
     const auto cfg = defaultConfig();
@@ -17,7 +17,7 @@ int main() {
     assert(!Engine::tryRewriteCommittedSyllable(cfg, "ban", KeyEvent{.key = 's', .ctrl = true}));
     assert(!Engine::tryRewriteCommittedSyllable(cfg, "xinchao", KeyEvent{.key = 's'}));
 
-    cbakey::config::RuntimeConfig vni = cfg;
+    farolkey::config::RuntimeConfig vni = cfg;
     vni.method = InputMethod::Vni;
     const auto thuoc6 = Engine::tryRewriteCommittedSyllable(vni, "thuoc", KeyEvent{.key = '6'});
     assert(thuoc6.has_value());

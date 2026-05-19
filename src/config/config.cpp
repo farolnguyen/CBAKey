@@ -1,11 +1,11 @@
-#include "cbakey/config/config.h"
+#include "farolkey/config/config.h"
 
 #include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <sstream>
 
-namespace cbakey::config {
+namespace farolkey::config {
 
 namespace {
 
@@ -52,9 +52,9 @@ RuntimeConfig loadConfigFile(const std::string& path) {
 
         if (key == "method") {
             if (value == "telex") {
-                config.method = cbakey::core::InputMethod::Telex;
+                config.method = farolkey::core::InputMethod::Telex;
             } else if (value == "vni") {
-                config.method = cbakey::core::InputMethod::Vni;
+                config.method = farolkey::core::InputMethod::Vni;
             }
         } else if (key == "enable_user_dictionary" || key == "EnableUserDictionary") {
             config.enableUserDictionary = parseBool(value, config.enableUserDictionary);
@@ -96,4 +96,4 @@ std::vector<std::string> validateConfig(const RuntimeConfig& config) {
     return errors;
 }
 
-}  // namespace cbakey::config
+}  // namespace farolkey::config

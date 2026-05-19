@@ -14,21 +14,21 @@
 #include <string>
 #include <vector>
 
-#include "cbakey/config/config.h"
-#include "cbakey/core/engine.h"
-#include "cbakey/core/types.h"
-#include "cbakey/core/user_dict.h"
+#include "farolkey/config/config.h"
+#include "farolkey/core/engine.h"
+#include "farolkey/core/types.h"
+#include "farolkey/core/user_dict.h"
 
-using cbakey::core::Engine;
-using cbakey::core::KeyAux;
-using cbakey::core::KeyEvent;
-using cbakey::core::ProcessResult;
-using cbakey::core::UserDict;
+using farolkey::core::Engine;
+using farolkey::core::KeyAux;
+using farolkey::core::KeyEvent;
+using farolkey::core::ProcessResult;
+using farolkey::core::UserDict;
 
 /// Write a temporary JSON file and return its path.
 static std::string writeTempDict(const std::string& content) {
     const char* tmpdir = std::getenv("TMPDIR");
-    std::string path = (tmpdir ? std::string(tmpdir) : std::string("/tmp")) + "/cbakey_test_dict.json";
+    std::string path = (tmpdir ? std::string(tmpdir) : std::string("/tmp")) + "/farolkey_test_dict.json";
     FILE* f = std::fopen(path.c_str(), "w");
     assert(f);
     std::fwrite(content.data(), 1, content.size(), f);
@@ -69,7 +69,7 @@ int main() {
 
     // ── Test 2: loadFromFile on non-existent file — silent, empty dict ───────
     {
-        const UserDict dict = UserDict::loadFromFile("/tmp/cbakey_nonexistent_9999.json");
+        const UserDict dict = UserDict::loadFromFile("/tmp/farolkey_nonexistent_9999.json");
         assert(dict.empty());
     }
 
@@ -77,7 +77,7 @@ int main() {
     {
         const std::string json = R"([{"trigger": "btv", "expansion": "Ban T\u1ed5 ch\u1ee9c"}])";
         const std::string path = writeTempDict(json);
-        cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+        farolkey::config::RuntimeConfig cfg = farolkey::config::defaultConfig();
         cfg.enableUserDictionary = true;
         cfg.userDictPath = path;
         Engine eng(cfg);
@@ -95,7 +95,7 @@ int main() {
     {
         const std::string json = R"([{"trigger": "ban", "expansion": "Ban Ch\u1ea5p H\u00e0nh"}])";
         const std::string path = writeTempDict(json);
-        cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+        farolkey::config::RuntimeConfig cfg = farolkey::config::defaultConfig();
         cfg.enableUserDictionary = true;
         cfg.userDictPath = path;
         Engine eng(cfg);
@@ -119,7 +119,7 @@ int main() {
     {
         const std::string json = R"([{"trigger": "ko", "expansion": "kh\u00f4ng"}])";
         const std::string path = writeTempDict(json);
-        cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+        farolkey::config::RuntimeConfig cfg = farolkey::config::defaultConfig();
         cfg.enableUserDictionary = true;
         cfg.userDictPath = path;
         Engine eng(cfg);
@@ -133,7 +133,7 @@ int main() {
     {
         const std::string json = R"([{"trigger": "ko", "expansion": "kh\u00f4ng"}])";
         const std::string path = writeTempDict(json);
-        cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+        farolkey::config::RuntimeConfig cfg = farolkey::config::defaultConfig();
         cfg.enableUserDictionary = false;
         cfg.userDictPath = path;
         Engine eng(cfg);
@@ -147,7 +147,7 @@ int main() {
     {
         const std::string json = R"([{"trigger": "btv", "expansion": "irrelevant"}])";
         const std::string path = writeTempDict(json);
-        cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+        farolkey::config::RuntimeConfig cfg = farolkey::config::defaultConfig();
         cfg.enableUserDictionary = true;
         cfg.userDictPath = path;
         Engine eng(cfg);

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=FarolKey Clipboard History
+Comment=Background clipboard monitor for FarolKey Vietnamese IME
+Exec=farolkey-clipboard --daemon
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

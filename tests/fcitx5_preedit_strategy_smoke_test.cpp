@@ -1,14 +1,14 @@
 #include <cassert>
 
-#include "cbakey/adapter/fcitx5/preedit_strategy.h"
+#include "farolkey/adapter/fcitx5/preedit_strategy.h"
 
-using cbakey::adapter::fcitx5::PreeditCapabilitySnapshot;
-using cbakey::adapter::fcitx5::CommitDispatch;
-using cbakey::adapter::fcitx5::PreeditPresentation;
-using cbakey::adapter::fcitx5::adjustCommitForPresentation;
-using cbakey::adapter::fcitx5::choosePreeditPresentation;
-using cbakey::core::KeyAux;
-using cbakey::config::Fcitx5PreeditMode;
+using farolkey::adapter::fcitx5::PreeditCapabilitySnapshot;
+using farolkey::adapter::fcitx5::CommitDispatch;
+using farolkey::adapter::fcitx5::PreeditPresentation;
+using farolkey::adapter::fcitx5::adjustCommitForPresentation;
+using farolkey::adapter::fcitx5::choosePreeditPresentation;
+using farolkey::core::KeyAux;
+using farolkey::config::Fcitx5PreeditMode;
 
 int main() {
     assert(choosePreeditPresentation(Fcitx5PreeditMode::Auto,

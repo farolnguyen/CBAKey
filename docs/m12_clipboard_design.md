@@ -2,7 +2,7 @@
 
 ## Decision
 
-**Architecture:** Standalone Python + GTK3 daemon (`cbakey-clipboard`), NOT a Fcitx5 C++ addon.
+**Architecture:** Standalone Python + GTK3 daemon (`farolkey-clipboard`), NOT a Fcitx5 C++ addon.
 
 **Why not a Fcitx5 addon:**
 - Clipboard protocol (X11 XAtom / Wayland wl-data-device) is orthogonal to IME logic.
@@ -10,8 +10,8 @@
 - Consistent with Dictionary Manager pattern (Python + GTK3 → reuse toolkit).
 - Easier to package separately or disable without affecting IME.
 
-**Hotkey integration:** CBAKey Fcitx5 engine adds a systray action "Clipboard History"
-that `fork()`+`execlp("cbakey-clipboard", "--show")` — same pattern as Dict Manager.
+**Hotkey integration:** FarolKey Fcitx5 engine adds a systray action "Clipboard History"
+that `fork()`+`execlp("farolkey-clipboard", "--show")` — same pattern as Dict Manager.
 For the daemon autostart, added to Fcitx5 autostart or user `~/.config/autostart/`.
 
 ---
@@ -36,9 +36,9 @@ For the daemon autostart, added to Fcitx5 autostart or user `~/.config/autostart
 
 ```
 src/clipboard/
-  cbakey-clipboard        # Python daemon + UI (single file)
+  farolkey-clipboard        # Python daemon + UI (single file)
 docs/m12_clipboard_design.md
-~/.local/share/cbakey/
+~/.local/share/farolkey/
   clipboard_history.json  # persisted history (plain text entries)
 ```
 
@@ -59,7 +59,7 @@ class ClipboardHistory:
 ```
 
 Persistence: JSONL (one JSON object per line), newest-first, max 50 lines.
-File: `~/.local/share/cbakey/clipboard_history.json`
+File: `~/.local/share/farolkey/clipboard_history.json`
 
 ---
 

@@ -6,9 +6,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cbakey/core/types.h"
+#include "farolkey/core/types.h"
 
-namespace cbakey::test {
+namespace farolkey::test {
 
 struct CorpusRunStats {
     int skipped = 0;
@@ -21,10 +21,10 @@ struct CorpusOutcome {
 };
 
 /// Parses `sequence` into KeyEvents; returns nullopt and sets err on failure.
-std::optional<std::vector<cbakey::core::KeyEvent>> parseSequence(const nlohmann::json& caseObj,
+std::optional<std::vector<farolkey::core::KeyEvent>> parseSequence(const nlohmann::json& caseObj,
                                                                  std::string* err);
 
 /// Runs one corpus case: builds `Engine` from `config` field. Skip does not count as error.
 CorpusOutcome runCorpusCase(const nlohmann::json& caseObj, CorpusRunStats* stats = nullptr);
 
-}  // namespace cbakey::test
+}  // namespace farolkey::test

@@ -1,10 +1,10 @@
-#include "cbakey/adapter/fcitx5/surrounding_cursor_normalize.h"
+#include "farolkey/adapter/fcitx5/surrounding_cursor_normalize.h"
 
 #include <algorithm>
 #include <cstddef>
 #include <string>
 
-namespace cbakey::adapter::fcitx5 {
+namespace farolkey::adapter::fcitx5 {
 namespace {
 
 bool decodeOneUtf8(const std::string& s, std::size_t* i, char32_t* out) {
@@ -91,4 +91,4 @@ unsigned int normalizeSurroundingCursorToCodepointIndex(const std::string& utf8_
     return utf8ByteOffsetToScalarIndex(utf8_text, cursor_raw);
 }
 
-}  // namespace cbakey::adapter::fcitx5
+}  // namespace farolkey::adapter::fcitx5

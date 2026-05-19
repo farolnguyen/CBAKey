@@ -3,8 +3,8 @@
 #include <string>
 #include <vector>
 
-#include "cbakey/config/config.h"
-#include "cbakey/core/engine.h"
+#include "farolkey/config/config.h"
+#include "farolkey/core/engine.h"
 
 namespace {
 
@@ -13,19 +13,19 @@ struct BenchScenario {
     std::vector<std::string> sequences;  // each string is one word sequence
 };
 
-double runScenario(const BenchScenario& s, const cbakey::config::RuntimeConfig& cfg,
+double runScenario(const BenchScenario& s, const farolkey::config::RuntimeConfig& cfg,
                    int iterations) {
-    cbakey::core::Engine engine(cfg);
+    farolkey::core::Engine engine(cfg);
     long long keyCount = 0;
     const auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < iterations; ++i) {
         for (const std::string& seq : s.sequences) {
             engine.clearState();
             for (const char key : seq) {
-                engine.processKey(cbakey::core::KeyEvent{.key = key});
+                engine.processKey(farolkey::core::KeyEvent{.key = key});
                 ++keyCount;
             }
-            engine.processKey(cbakey::core::KeyEvent{.key = ' '});
+            engine.processKey(farolkey::core::KeyEvent{.key = ' '});
             ++keyCount;
         }
     }
@@ -62,11 +62,11 @@ int main() {
         "Dict expansion (no-op when dict empty)",
         {"ko", "btv", "dk"}};
 
-    cbakey::config::RuntimeConfig telexCfg = cbakey::config::defaultConfig();
-    cbakey::config::RuntimeConfig vniCfg = cbakey::config::defaultConfig();
-    vniCfg.method = cbakey::core::InputMethod::Vni;
+    farolkey::config::RuntimeConfig telexCfg = farolkey::config::defaultConfig();
+    farolkey::config::RuntimeConfig vniCfg = farolkey::config::defaultConfig();
+    vniCfg.method = farolkey::core::InputMethod::Vni;
 
-    std::cout << "=== CBAKey keypress benchmark (Release) ===\n";
+    std::cout << "=== FarolKey keypress benchmark (Release) ===\n";
     std::cout << "Budget: <2 µs/key target, <10 µs/key acceptable\n\n";
 
     const double t1 = runScenario(telex, telexCfg, kIter);

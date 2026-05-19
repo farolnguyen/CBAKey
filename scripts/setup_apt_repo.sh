@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CBAKey — Setup APT repository nội bộ
+# FarolKey — Setup APT repository nội bộ
 #
 # Sử dụng: bash scripts/setup_apt_repo.sh [--repo-dir DIR] [--key-id KEY_ID]
 #
@@ -47,11 +47,11 @@ for tool in dpkg-scanpackages gpg apt-ftparchive; do
 done
 
 # --- Build .deb nếu chưa có ---
-DEB_FILE="$(ls "$DEB_DIR"/cbakey_*.deb 2>/dev/null | sort -V | tail -1 || true)"
+DEB_FILE="$(ls "$DEB_DIR"/farolkey_*.deb 2>/dev/null | sort -V | tail -1 || true)"
 if [[ -z "$DEB_FILE" ]]; then
     echo "==> .deb chưa có, chạy build_deb.sh..."
     bash "$SCRIPT_DIR/build_deb.sh"
-    DEB_FILE="$(ls "$DEB_DIR"/cbakey_*.deb | sort -V | tail -1)"
+    DEB_FILE="$(ls "$DEB_DIR"/farolkey_*.deb | sort -V | tail -1)"
 fi
 echo "==> Dùng gói: $DEB_FILE"
 
@@ -70,12 +70,12 @@ gzip -k -f "$DISTS_DIR/Packages"
 # --- Release ---
 echo "==> Tạo Release..."
 cat > "$REPO_DIR/dists/$CODENAME/Release" <<EOF
-Origin: CBAKey Internal
-Label: CBAKey
+Origin: FarolKey Internal
+Label: FarolKey
 Codename: $CODENAME
 Architectures: $ARCH
 Components: $COMPONENT
-Description: CBAKey Vietnamese IME (internal build)
+Description: FarolKey Vietnamese IME (internal build)
 Date: $(date -u '+%a, %d %b %Y %H:%M:%S UTC')
 EOF
 
@@ -102,8 +102,8 @@ fi
 
 # --- Export public key ---
 if [[ -n "$KEY_ID" ]]; then
-    gpg --armor --export "$KEY_ID" > "$REPO_DIR/cbakey-archive-keyring.gpg"
-    echo "==> Public key: $REPO_DIR/cbakey-archive-keyring.gpg"
+    gpg --armor --export "$KEY_ID" > "$REPO_DIR/farolkey-archive-keyring.gpg"
+    echo "==> Public key: $REPO_DIR/farolkey-archive-keyring.gpg"
 fi
 
 # --- Tóm tắt ---
@@ -118,13 +118,13 @@ echo ""
 echo "Cấu hình máy client (thay <server> bằng IP/hostname thực):"
 echo ""
 echo "  # Copy public key về máy client:"
-echo "  sudo curl -fsSL http://<server>:8080/cbakey-archive-keyring.gpg \\"
-echo "    -o /etc/apt/keyrings/cbakey-archive-keyring.gpg"
+echo "  sudo curl -fsSL http://<server>:8080/farolkey-archive-keyring.gpg \\"
+echo "    -o /etc/apt/keyrings/farolkey-archive-keyring.gpg"
 echo ""
 echo "  # Thêm sources.list:"
-echo "  echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/cbakey-archive-keyring.gpg] \\"
+echo "  echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/farolkey-archive-keyring.gpg] \\"
 echo "    http://<server>:8080 $CODENAME $COMPONENT' \\"
-echo "    | sudo tee /etc/apt/sources.list.d/cbakey.list"
+echo "    | sudo tee /etc/apt/sources.list.d/farolkey.list"
 echo ""
 echo "  sudo apt update"
-echo "  sudo apt install cbakey"
+echo "  sudo apt install farolkey"

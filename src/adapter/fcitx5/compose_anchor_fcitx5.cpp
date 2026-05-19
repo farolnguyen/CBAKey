@@ -1,4 +1,4 @@
-#include "cbakey/adapter/fcitx5/compose_anchor_fcitx5.h"
+#include "farolkey/adapter/fcitx5/compose_anchor_fcitx5.h"
 
 #include <fcitx/inputcontext.h>
 #include <fcitx/surroundingtext.h>
@@ -6,9 +6,9 @@
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/keysym.h>
 
-#include "cbakey/adapter/fcitx5/compose_anchor.h"
+#include "farolkey/adapter/fcitx5/compose_anchor.h"
 
-namespace cbakey::adapter::fcitx5 {
+namespace farolkey::adapter::fcitx5 {
 
 namespace {
 
@@ -121,4 +121,4 @@ void commitPendingRespectingComposeAnchor(fcitx::InputContext* ic,
     }
 }
 
-}  // namespace cbakey::adapter::fcitx5
+}  // namespace farolkey::adapter::fcitx5

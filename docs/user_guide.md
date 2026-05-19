@@ -1,4 +1,4 @@
-# CBAKey — Hướng dẫn sử dụng
+# FarolKey — Hướng dẫn sử dụng
 
 Bộ gõ tiếng Việt cho Linux (Fcitx5), hỗ trợ Telex và VNI, chạy trên Ubuntu/Debian với Wayland và X11.
 
@@ -25,22 +25,22 @@ Bộ gõ tiếng Việt cho Linux (Fcitx5), hỗ trợ Telex và VNI, chạy tr�
 
 - Linux amd64 (Ubuntu 22.04+ hoặc Debian 12+)
 - Fcitx5 đã cài và đang chạy
-- Không cần gỡ bộ gõ khác — CBAKey là addon riêng
+- Không cần gỡ bộ gõ khác — FarolKey là addon riêng
 
 ### Bước 1 — Build gói .deb
 
 ```bash
-git clone <repo-url> CBAKey
-cd CBAKey
+git clone <repo-url> FarolKey
+cd FarolKey
 bash scripts/build_deb.sh
 ```
 
-Gói sẽ ở: `build_deb/cbakey_0.1.0_amd64.deb`
+Gói sẽ ở: `build_deb/farolkey_0.1.0_amd64.deb`
 
 ### Bước 2 — Cài đặt
 
 ```bash
-sudo apt install ./build_deb/cbakey_0.1.0_amd64.deb
+sudo apt install ./build_deb/farolkey_0.1.0_amd64.deb
 ```
 
 > Dùng `apt install ./...` (có dấu `./`) để apt tự cài luôn các gói phụ thuộc.
@@ -57,7 +57,7 @@ pkill fcitx5 || true; sleep 0.5; fcitx5 -d
 fcitx5-configtool
 ```
 
-Trong cửa sổ cấu hình: **Input Method** → nhấn **+** → tìm **CBAKey** → **Add**.
+Trong cửa sổ cấu hình: **Input Method** → nhấn **+** → tìm **FarolKey** → **Add**.
 
 ---
 
@@ -88,7 +88,7 @@ Nhấn `Ctrl+Alt+Z` lần nữa để về chế độ English.
 
 ## 4. Tùy chỉnh
 
-File cấu hình: `~/.config/cbakey/cbakey.conf`  
+File cấu hình: `~/.config/farolkey/farolkey.conf`  
 Được tạo tự động lần đầu khi khởi động. Sau khi sửa, restart Fcitx5 để áp dụng.
 
 ```ini
@@ -121,7 +121,7 @@ toggle_hotkey=Ctrl+Space
 
 ## 5. Từ điển cá nhân & Gõ tắt
 
-Tạo file `~/.config/cbakey/user_dict.json` với các cặp trigger → expansion:
+Tạo file `~/.config/farolkey/user_dict.json` với các cặp trigger → expansion:
 
 ```json
 {"trigger": "ko", "expansion": "không"}
@@ -142,7 +142,7 @@ Tạo file `~/.config/cbakey/user_dict.json` với các cặp trigger → expans
 
 ### Quản lý bằng giao diện (Dictionary Manager)
 
-Mở từ systray CBAKey → **Dictionary Manager**:
+Mở từ systray FarolKey → **Dictionary Manager**:
 
 - Tab **📖 Abbreviations**: xem, thêm, sửa, xóa gõ tắt; tìm kiếm; Import/Export CSV
 - Bật/tắt từ điển bằng nút toggle **Enable user dictionary** ở trên cùng
@@ -161,12 +161,12 @@ Xem thêm: [`docs/user_dict.md`](user_dict.md)
 
 ## 6. Lịch sử Clipboard
 
-CBAKey tích hợp clipboard history kiểu Windows (Ctrl+Win+V).
+FarolKey tích hợp clipboard history kiểu Windows (Ctrl+Win+V).
 
 ### Mở popup
 
 - **Ctrl+Super+V** (GNOME Wayland — đã đăng ký tự động khi cài)
-- Hoặc click systray CBAKey → **Clipboard History**
+- Hoặc click systray FarolKey → **Clipboard History**
 
 ### Tính năng
 
@@ -179,8 +179,8 @@ CBAKey tích hợp clipboard history kiểu Windows (Ctrl+Win+V).
 
 ### Tự động khởi động
 
-Daemon clipboard chạy tự động từ lúc login (qua `~/.config/autostart/cbakey-clipboard.desktop`).  
-Lịch sử lưu tại: `~/.local/share/cbakey/clipboard_history.json`
+Daemon clipboard chạy tự động từ lúc login (qua `~/.config/autostart/farolkey-clipboard.desktop`).  
+Lịch sử lưu tại: `~/.local/share/farolkey/clipboard_history.json`
 
 ### Auto-paste (nếu có cài tool)
 
@@ -199,7 +199,7 @@ Cho phép định nghĩa **template có tham số** — gõ trigger ngắn, engi
 
 ### Mở giao diện
 
-Systray CBAKey → **Dictionary Manager** → tab **⚡ Smart Templates**
+Systray FarolKey → **Dictionary Manager** → tab **⚡ Smart Templates**
 
 ### Cách hoạt động
 
@@ -232,15 +232,15 @@ Ngoài ra có thể dùng toàn bộ **Jinja2** filters và control flow:
 ### CLI nhanh
 
 ```bash
-cbakey-template list                         # xem danh sách
-cbakey-template add '{n}++' '{{ numbered(n) }}' --mode en
-cbakey-template expand '5++'                # test expand (không cần [] ở CLI)
-cbakey-template path                         # xem file path
+farolkey-template list                         # xem danh sách
+farolkey-template add '{n}++' '{{ numbered(n) }}' --mode en
+farolkey-template expand '5++'                # test expand (không cần [] ở CLI)
+farolkey-template path                         # xem file path
 ```
 
 > **Lưu ý:** cặp `[...]` chỉ cần khi gõ trong ứng dụng. Lệnh CLI `expand` dùng trigger trực tiếp (không cần ngoặc vuông).
 
-File template: `~/.config/cbakey/templates.json`
+File template: `~/.config/farolkey/templates.json`
 
 ### Mode
 
@@ -270,14 +270,14 @@ fcitx5_committed_rewrite=true
 **Bộ gõ không xuất hiện sau khi cài?**
 
 ```bash
-ls /usr/share/fcitx5/addon/cbakey.conf   # kiểm tra file addon
+ls /usr/share/fcitx5/addon/farolkey.conf   # kiểm tra file addon
 pkill fcitx5; sleep 0.5; fcitx5 -d       # restart Fcitx5
-# Mở fcitx5-configtool → thêm CBAKey vào danh sách
+# Mở fcitx5-configtool → thêm FarolKey vào danh sách
 ```
 
 **Phím tắt `Ctrl+Alt+Z` không chuyển được?**
 
-Kiểm tra xem phím tắt có bị ứng dụng khác chiếm không. Đổi sang tổ hợp khác trong `cbakey.conf`.
+Kiểm tra xem phím tắt có bị ứng dụng khác chiếm không. Đổi sang tổ hợp khác trong `farolkey.conf`.
 
 **Dấu bị đặt sai chỗ?**
 
@@ -286,14 +286,14 @@ Thử đổi `fcitx5_preedit_mode=panel` trong config (chế độ chẩn đoán
 **Lỗi phụ thuộc khi `dpkg -i`?**
 
 ```bash
-sudo apt install ./build_deb/cbakey_0.1.0_amd64.deb
+sudo apt install ./build_deb/farolkey_0.1.0_amd64.deb
 # apt sẽ tự cài libfcitx5core và các phụ thuộc khác
 ```
 
 **Muốn gỡ cài đặt?**
 
 ```bash
-sudo dpkg -r cbakey
+sudo dpkg -r farolkey
 pkill fcitx5; sleep 0.5; fcitx5 -d
 ```
 

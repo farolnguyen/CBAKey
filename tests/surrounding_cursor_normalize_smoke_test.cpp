@@ -1,10 +1,10 @@
 #include <cassert>
 #include <string>
 
-#include "cbakey/adapter/fcitx5/surrounding_cursor_normalize.h"
+#include "farolkey/adapter/fcitx5/surrounding_cursor_normalize.h"
 
 int main() {
-    using cbakey::adapter::fcitx5::normalizeSurroundingCursorToCodepointIndex;
+    using farolkey::adapter::fcitx5::normalizeSurroundingCursorToCodepointIndex;
 
     const std::string ascii = "hello";
     assert(normalizeSurroundingCursorToCodepointIndex(ascii, 5) == 5);

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Expand Telex/VNI corpus lines using offline BFS against cbakey_core (cbakey_corpus_bfs).
+Expand Telex/VNI corpus lines using offline BFS against farolkey_core (farolkey_corpus_bfs).
 
 Examples:
-  cmake -S . -B build -DCBAKEY_BUILD_CORPUS_TOOLS=ON -DCBAKEY_BUILD_TESTS=ON
+  cmake -S . -B build -DFAROLKEY_BUILD_CORPUS_TOOLS=ON -DFAROLKEY_BUILD_TESTS=ON
   cmake --build build
 
   pip install -r scripts/requirements-corpus.txt
@@ -28,7 +28,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_BFS = REPO_ROOT / "build" / "cbakey_corpus_bfs"
+DEFAULT_BFS = REPO_ROOT / "build" / "farolkey_corpus_bfs"
 CACHE_PATH = REPO_ROOT / "corpus" / ".bfs_cache.json"
 
 
@@ -148,26 +148,26 @@ def worker(job: tuple[str, str, str, float, str]) -> tuple[str, str, str, str | 
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Generate corpus JSONL via cbakey_corpus_bfs")
+    ap = argparse.ArgumentParser(description="Generate corpus JSONL via farolkey_corpus_bfs")
     ap.add_argument("--method", choices=("telex", "vni"), required=True)
     ap.add_argument("--out", type=Path, required=True, help="Output JSONL path")
     ap.add_argument("--limit", type=int, default=500, help="Max words to try")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) // 2))
-    ap.add_argument("--bfs", type=Path, default=DEFAULT_BFS, help="Path to cbakey_corpus_bfs")
+    ap.add_argument("--bfs", type=Path, default=DEFAULT_BFS, help="Path to farolkey_corpus_bfs")
     ap.add_argument("--words-file", type=Path, default=None, help="Line-delimited words (instead of wordfreq)")
     ap.add_argument("--timeout", type=float, default=90.0, help="Per-word BFS timeout (seconds)")
     ap.add_argument("--no-cache", action="store_true", help="Ignore and overwrite merge into cache")
-    ap.add_argument("--max-nodes", type=int, default=None, help="CBAKEY_CORPUS_BFS_MAX_NODES for cbakey_corpus_bfs")
-    ap.add_argument("--max-depth", type=int, default=None, help="CBAKEY_CORPUS_BFS_MAX_DEPTH for cbakey_corpus_bfs")
+    ap.add_argument("--max-nodes", type=int, default=None, help="FAROLKEY_CORPUS_BFS_MAX_NODES for farolkey_corpus_bfs")
+    ap.add_argument("--max-depth", type=int, default=None, help="FAROLKEY_CORPUS_BFS_MAX_DEPTH for farolkey_corpus_bfs")
     args = ap.parse_args()
 
     if args.max_nodes is not None:
-        os.environ["CBAKEY_CORPUS_BFS_MAX_NODES"] = str(args.max_nodes)
+        os.environ["FAROLKEY_CORPUS_BFS_MAX_NODES"] = str(args.max_nodes)
     if args.max_depth is not None:
-        os.environ["CBAKEY_CORPUS_BFS_MAX_DEPTH"] = str(args.max_depth)
+        os.environ["FAROLKEY_CORPUS_BFS_MAX_DEPTH"] = str(args.max_depth)
 
     if not args.bfs.is_file():
-        print(f"Missing {args.bfs} — build the project with -DCBAKEY_BUILD_CORPUS_TOOLS=ON", file=sys.stderr)
+        print(f"Missing {args.bfs} — build the project with -DFAROLKEY_BUILD_CORPUS_TOOLS=ON", file=sys.stderr)
         return 2
 
     if args.words_file is not None:

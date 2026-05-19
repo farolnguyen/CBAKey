@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# CBAKey — Installation script
+# FarolKey — Installation script
 # Usage: bash install.sh
 #
-# This script installs CBAKey and all required dependencies.
+# This script installs FarolKey and all required dependencies.
 # Run as a regular user (not root) — sudo is called internally when needed.
 
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Update GITHUB_REPO and VERSION when releasing a new version.
-GITHUB_REPO="farolnguyen/CBAKey"           # <--- update with your GitHub repo
+GITHUB_REPO="farolnguyen/FarolKey"           # <--- update with your GitHub repo
 VERSION="0.1.0"
-DEB_NAME="cbakey_${VERSION}_amd64.deb"
+DEB_NAME="farolkey_${VERSION}_amd64.deb"
 DEB_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/${DEB_NAME}"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ err()  { echo -e "${RED}✗${NC} $*"; exit 1; }
 hdr()  { echo -e "\n${BOLD}=== $* ===${NC}"; }
 
 # ── Checks ────────────────────────────────────────────────────────────────────
-hdr "CBAKey Installer v${VERSION}"
+hdr "FarolKey Installer v${VERSION}"
 echo "GitHub: https://github.com/${GITHUB_REPO}"
 echo ""
 
@@ -81,7 +81,7 @@ else
 fi
 
 # ── Step 2: Download .deb ─────────────────────────────────────────────────────
-hdr "Step 2/4: Downloading CBAKey package"
+hdr "Step 2/4: Downloading FarolKey package"
 
 TMP_DEB="/tmp/${DEB_NAME}"
 
@@ -98,12 +98,12 @@ fi
 ok "Downloaded: $TMP_DEB"
 
 # ── Step 3: Install .deb ──────────────────────────────────────────────────────
-hdr "Step 3/4: Installing CBAKey"
+hdr "Step 3/4: Installing FarolKey"
 
 # Use apt instead of dpkg to auto-resolve any remaining library deps
 sudo apt install -y "$TMP_DEB"
 rm -f "$TMP_DEB"
-ok "CBAKey installed."
+ok "FarolKey installed."
 
 # ── Step 4: Set Fcitx5 as default input method ────────────────────────────────
 hdr "Step 4/4: Configuring input method"
@@ -117,11 +117,11 @@ fi
 
 # Ensure environment variables are set for the current user
 IM_ENV_FILE="$HOME/.profile"
-IM_BLOCK="# CBAKey/Fcitx5 input method environment"
-if ! grep -q "CBAKey/Fcitx5" "$IM_ENV_FILE" 2>/dev/null; then
+IM_BLOCK="# FarolKey/Fcitx5 input method environment"
+if ! grep -q "FarolKey/Fcitx5" "$IM_ENV_FILE" 2>/dev/null; then
     cat >> "$IM_ENV_FILE" << 'EOF'
 
-# CBAKey/Fcitx5 input method environment
+# FarolKey/Fcitx5 input method environment
 export GTK_IM_MODULE=fcitx
 export QT_IM_MODULE=fcitx
 export XMODIFIERS=@im=fcitx
@@ -134,16 +134,16 @@ fi
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════╗"
-echo -e "║      CBAKey installed successfully!      ║"
+echo -e "║      FarolKey installed successfully!      ║"
 echo -e "╚══════════════════════════════════════════╝${NC}"
 echo ""
 echo "Next steps:"
 echo "  1. Log out and log back in (to apply input method settings)"
 echo "  2. Open Fcitx5 Configuration:  fcitx5-configtool"
-echo "     → Input Method tab → click '+' → search 'CBAKey' → Add"
+echo "     → Input Method tab → click '+' → search 'FarolKey' → Add"
 echo "  3. Press Ctrl+Alt+Z to toggle Vietnamese / English mode"
 echo ""
 echo "Optional — open Dictionary Manager (abbreviations + smart templates):"
-echo "  cbakey-dict-gui"
+echo "  farolkey-dict-gui"
 echo ""
 echo "Documentation: https://github.com/${GITHUB_REPO}"

@@ -1,4 +1,4 @@
-#include "cbakey/adapter/fcitx5/committed_rewrite_fcitx5.h"
+#include "farolkey/adapter/fcitx5/committed_rewrite_fcitx5.h"
 
 #include <cctype>
 #include <optional>
@@ -9,10 +9,10 @@
 #include <fcitx/surroundingtext.h>
 #include <fcitx-utils/capabilityflags.h>
 
-#include "cbakey/adapter/fcitx5/surrounding_cursor_normalize.h"
-#include "cbakey/core/engine.h"
+#include "farolkey/adapter/fcitx5/surrounding_cursor_normalize.h"
+#include "farolkey/core/engine.h"
 
-namespace cbakey::adapter::fcitx5 {
+namespace farolkey::adapter::fcitx5 {
 namespace {
 
 bool decodeOneUtf8(const std::string& s, std::size_t* i, char32_t* out) {
@@ -160,12 +160,12 @@ std::optional<std::pair<std::string, int>> tokenLeftOfCaret(const std::string& t
     return std::make_pair(token, token_chars);
 }
 
-bool isCommittedRewriteTrigger(const cbakey::config::RuntimeConfig& config,
-                               const cbakey::core::KeyEvent& ev) {
+bool isCommittedRewriteTrigger(const farolkey::config::RuntimeConfig& config,
+                               const farolkey::core::KeyEvent& ev) {
     if (ev.ctrl || ev.alt) {
         return false;
     }
-    if (ev.aux != cbakey::core::KeyAux::None) {
+    if (ev.aux != farolkey::core::KeyAux::None) {
         return false;
     }
     if (ev.key_from_keypad) {
@@ -175,7 +175,7 @@ bool isCommittedRewriteTrigger(const cbakey::config::RuntimeConfig& config,
         return false;
     }
     const unsigned char uk = static_cast<unsigned char>(ev.key);
-    if (config.method == cbakey::core::InputMethod::Telex) {
+    if (config.method == farolkey::core::InputMethod::Telex) {
         const char k = static_cast<char>(std::tolower(uk));
         switch (k) {
             case 's':
@@ -199,8 +199,8 @@ bool isCommittedRewriteTrigger(const cbakey::config::RuntimeConfig& config,
 }  // namespace
 
 bool tryApplyCommittedSyllableRewrite(fcitx::InputContext* ic,
-                                      const cbakey::config::RuntimeConfig& config,
-                                      const cbakey::core::KeyEvent& event) {
+                                      const farolkey::config::RuntimeConfig& config,
+                                      const farolkey::core::KeyEvent& event) {
     if (!ic || !config.fcitx5CommittedRewrite || !isCommittedRewriteTrigger(config, event)) {
         return false;
     }
@@ -226,7 +226,7 @@ bool tryApplyCommittedSyllableRewrite(fcitx::InputContext* ic,
         return false;
     }
     const auto rewritten =
-        cbakey::core::Engine::tryRewriteCommittedSyllable(config, token, event);
+        farolkey::core::Engine::tryRewriteCommittedSyllable(config, token, event);
     if (!rewritten) {
         return false;
     }
@@ -243,4 +243,4 @@ bool tryApplyCommittedSyllableRewrite(fcitx::InputContext* ic,
     return true;
 }
 
-}  // namespace cbakey::adapter::fcitx5
+}  // namespace farolkey::adapter::fcitx5

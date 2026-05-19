@@ -24,8 +24,8 @@ void trimInPlace(std::string* s) {
     s->erase(0, i);
 }
 
-void runJsonlFile(const fs::path& filePath, cbakey::test::CorpusRunStats* total) {
-    cbakey::test::CorpusRunStats fileStats;
+void runJsonlFile(const fs::path& filePath, farolkey::test::CorpusRunStats* total) {
+    farolkey::test::CorpusRunStats fileStats;
     std::ifstream in(filePath);
     ASSERT_TRUE(in.good()) << "cannot open " << filePath;
 
@@ -48,7 +48,7 @@ void runJsonlFile(const fs::path& filePath, cbakey::test::CorpusRunStats* total)
         const std::string id = j.value("id", std::string{"<no-id>"});
         SCOPED_TRACE(filePath.filename().string() + ":" + std::to_string(lineNo) + " id=" + id);
 
-        const cbakey::test::CorpusOutcome outcome = cbakey::test::runCorpusCase(j, &fileStats);
+        const farolkey::test::CorpusOutcome outcome = farolkey::test::runCorpusCase(j, &fileStats);
 
         if (outcome.skipped) {
             std::cerr << "[SKIP] " << filePath.filename().string() << ":" << lineNo << " id=" << id;
@@ -100,7 +100,7 @@ TEST(CorpusJsonl, AllFilesUnderCorpus) {
 
     ASSERT_FALSE(files.empty()) << "no .jsonl files under corpus/";
 
-    cbakey::test::CorpusRunStats total;
+    farolkey::test::CorpusRunStats total;
     for (const fs::path& p : files) {
         runJsonlFile(p, &total);
     }

@@ -1,6 +1,6 @@
-#include "cbakey/adapter/fcitx5/x11_click_interceptor.h"
+#include "farolkey/adapter/fcitx5/x11_click_interceptor.h"
 
-#ifdef CBAKEY_ENABLE_X11
+#ifdef FAROLKEY_ENABLE_X11
 
 // Only include xcb/xcb.h (from libxcb1-dev). Intentionally NOT including
 // xcb_public.h or xcb_ewmh.h to avoid the libxcb-ewmh-dev dependency.
@@ -11,7 +11,7 @@
 
 #include <cstdlib>
 
-namespace cbakey::adapter::fcitx5 {
+namespace farolkey::adapter::fcitx5 {
 
 struct X11ClickInterceptor::Impl {
     fcitx::EventLoop*  eventLoop = nullptr;
@@ -148,11 +148,11 @@ void X11ClickInterceptor::stopIntercepting() {
     intercepting_ = false;
 }
 
-} // namespace cbakey::adapter::fcitx5
+} // namespace farolkey::adapter::fcitx5
 
-#else // CBAKEY_ENABLE_X11 not defined — no-op stub
+#else // FAROLKEY_ENABLE_X11 not defined — no-op stub
 
-namespace cbakey::adapter::fcitx5 {
+namespace farolkey::adapter::fcitx5 {
 
 struct X11ClickInterceptor::Impl {};
 
@@ -162,6 +162,6 @@ X11ClickInterceptor::~X11ClickInterceptor() = default;
 void X11ClickInterceptor::startIntercepting(CommitFn) {}
 void X11ClickInterceptor::stopIntercepting() {}
 
-} // namespace cbakey::adapter::fcitx5
+} // namespace farolkey::adapter::fcitx5
 
-#endif // CBAKEY_ENABLE_X11
+#endif // FAROLKEY_ENABLE_X11

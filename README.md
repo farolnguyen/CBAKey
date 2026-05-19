@@ -1,4 +1,4 @@
-# CBAKey — Bộ gõ tiếng Việt cho Linux
+# FarolKey — Bộ gõ tiếng Việt cho Linux
 
 Bộ gõ tiếng Việt (Telex / VNI) chạy trên Fcitx5, hỗ trợ Ubuntu/Debian với Wayland và X11.
 
@@ -25,7 +25,7 @@ Bộ gõ tiếng Việt (Telex / VNI) chạy trên Fcitx5, hỗ trợ Ubuntu/Deb
 ### Cách 1 — Script tự động (khuyến nghị)
 
 ```bash
-wget https://raw.githubusercontent.com/FarolNguyen/CBAKey/main/install.sh
+wget https://raw.githubusercontent.com/FarolNguyen/FarolKey/main/install.sh
 bash install.sh
 ```
 
@@ -33,7 +33,7 @@ Script tự cài dependencies, tải và cài `.deb`, cấu hình Fcitx5.
 
 ### Cách 2 — Tải file .deb thủ công
 
-1. Tải file `.deb` từ [Releases](https://github.com/FarolNguyen/CBAKey/releases/latest)
+1. Tải file `.deb` từ [Releases](https://github.com/FarolNguyen/FarolKey/releases/latest)
 2. Cài dependencies:
 
 ```bash
@@ -45,13 +45,13 @@ sudo apt install fcitx5 fcitx5-config-qt \
 3. Cài package:
 
 ```bash
-sudo apt install ./cbakey_0.1.0_amd64.deb
+sudo apt install ./farolkey_0.1.0_amd64.deb
 ```
 
 ### Sau khi cài
 
 1. **Đăng xuất và đăng nhập lại**
-2. Mở **Fcitx5 Configuration** → **Input Method** → nhấn **+** → tìm **CBAKey** → Add
+2. Mở **Fcitx5 Configuration** → **Input Method** → nhấn **+** → tìm **FarolKey** → Add
 3. Nhấn `Ctrl+Alt+Z` để chuyển Vietnamese / English
 
 ---
@@ -104,14 +104,14 @@ Hỗ trợ text và ảnh, tối đa 50 mục, có thể pin và tìm kiếm.
 ## Gỡ cài đặt
 
 ```bash
-sudo dpkg -r cbakey
+sudo dpkg -r farolkey
 ```
 
 ---
 
 ## Báo lỗi
 
-Tạo issue tại: [github.com/FarolNguyen/CBAKey/issues](https://github.com/FarolNguyen/CBAKey/issues)
+Tạo issue tại: [github.com/FarolNguyen/FarolKey/issues](https://github.com/FarolNguyen/FarolKey/issues)
 
 Vui lòng cung cấp:
 - Phiên bản OS: `lsb_release -a`

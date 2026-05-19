@@ -1,9 +1,9 @@
 #include <cassert>
 
-#include "cbakey/adapter/fcitx5/compose_anchor.h"
+#include "farolkey/adapter/fcitx5/compose_anchor.h"
 
-using cbakey::adapter::fcitx5::ComposeAnchorSnapshot;
-using cbakey::adapter::fcitx5::planCaretNudgeForAnchoredCommit;
+using farolkey::adapter::fcitx5::ComposeAnchorSnapshot;
+using farolkey::adapter::fcitx5::planCaretNudgeForAnchoredCommit;
 
 int main() {
     assert(!planCaretNudgeForAnchoredCommit(ComposeAnchorSnapshot{}, "x", 1, true, 256).has_value());

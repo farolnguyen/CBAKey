@@ -1,4 +1,4 @@
-#include "cbakey/core/vi_syllable.h"
+#include "farolkey/core/vi_syllable.h"
 
 #include <array>
 #include <cwctype>
@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace cbakey::core::vi_syllable {
+namespace farolkey::core::vi_syllable {
 namespace {
 
 locale_t utf8CTypeLocale() {
@@ -917,4 +917,4 @@ bool applyVniTransform(std::u32string& buffer, char key) {
     return replaceWithSetPreserveTone(buffer, *pos, newSetIdx);
 }
 
-}  // namespace cbakey::core::vi_syllable
+}  // namespace farolkey::core::vi_syllable

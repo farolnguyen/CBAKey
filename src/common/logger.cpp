@@ -1,8 +1,8 @@
-#include "cbakey/common/logger.h"
+#include "farolkey/common/logger.h"
 
 #include <iostream>
 
-namespace cbakey::common {
+namespace farolkey::common {
 
 namespace {
 
@@ -26,4 +26,4 @@ void log(LogLevel level, const std::string& component, const std::string& messag
               << "[" << component << "] " << message << '\n';
 }
 
-}  // namespace cbakey::common
+}  // namespace farolkey::common

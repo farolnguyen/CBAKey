@@ -1,17 +1,17 @@
 #include <cassert>
 
-#include "cbakey/core/vi_syllable.h"
+#include "farolkey/core/vi_syllable.h"
 
-using cbakey::core::vi_syllable::findLastSyllable;
-using cbakey::core::vi_syllable::findStableComposeSplit;
-using cbakey::core::vi_syllable::applyTelexTransform;
-using cbakey::core::vi_syllable::applyVniTransform;
-using cbakey::core::vi_syllable::normalizeTelexBuffer;
-using cbakey::core::vi_syllable::normalizeVietnameseNfc;
-using cbakey::core::vi_syllable::removeTelexDiacritics;
-using cbakey::core::vi_syllable::removeVniDiacritics;
-using cbakey::core::vi_syllable::selectToneVowelIndex;
-using cbakey::core::vi_syllable::segmentWholeBufferPreferMaxSyllables;
+using farolkey::core::vi_syllable::findLastSyllable;
+using farolkey::core::vi_syllable::findStableComposeSplit;
+using farolkey::core::vi_syllable::applyTelexTransform;
+using farolkey::core::vi_syllable::applyVniTransform;
+using farolkey::core::vi_syllable::normalizeTelexBuffer;
+using farolkey::core::vi_syllable::normalizeVietnameseNfc;
+using farolkey::core::vi_syllable::removeTelexDiacritics;
+using farolkey::core::vi_syllable::removeVniDiacritics;
+using farolkey::core::vi_syllable::selectToneVowelIndex;
+using farolkey::core::vi_syllable::segmentWholeBufferPreferMaxSyllables;
 
 int main() {
     const auto qua = findLastSyllable(U"qua");

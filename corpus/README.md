@@ -11,7 +11,7 @@
 | ID | Nội dung |
 |----|-----------|
 | M0.1 | Thư mục `corpus/` chứa JSON Lines (`*.jsonl`), có **schema version** |
-| M0.2 | Runner (GoogleTest) đọc corpus, báo cáo **pass / fail / skip** rõ ràng — target CMake: `cbakey_corpus_test` (`ctest -R cbakey_corpus_test`, `WORKING_DIRECTORY` = project root để thấy `corpus/`) |
+| M0.2 | Runner (GoogleTest) đọc corpus, báo cáo **pass / fail / skip** rõ ràng — target CMake: `farolkey_corpus_test` (`ctest -R farolkey_corpus_test`, `WORKING_DIRECTORY` = project root để thấy `corpus/`) |
 | M0.3 | `docs/behavior_reference.md` — behavior reference song ngữ (tách file; bổ sung dần) |
 | M0.4 | Phân tách prototype vs production — theo exit criteria trong `progress.md` |
 
@@ -158,7 +158,7 @@ Runner thực tế có thể điều chỉnh nhỏ miễn giữ `corpus_schema_v
 { "key": "z", "ctrl": true, "alt": true }
 ```
 
-Giá trị `aux` khớp tên enum C++ `KeyAux` trong `include/cbakey/core/types.h` (`Enter`, `Tab`, `Left`, …).
+Giá trị `aux` khớp tên enum C++ `KeyAux` trong `include/farolkey/core/types.h` (`Enter`, `Tab`, `Left`, …).
 
 **Trường tùy chọn trên case:**
 
@@ -191,7 +191,7 @@ Giá trị `aux` khớp tên enum C++ `KeyAux` trong `include/cbakey/core/types.
 
 ## 12. Runner triển khai (CMake)
 
-- **Target:** `cbakey_corpus_test` — link `cbakey_core`, `GTest::gtest_main`, `nlohmann_json::nlohmann_json`.
+- **Target:** `farolkey_corpus_test` — link `farolkey_core`, `GTest::gtest_main`, `nlohmann_json::nlohmann_json`.
 - **Phát hiện file:** nếu có `corpus/final/`, runner **ưu tiên quét `corpus/final/**/*.jsonl`**; nếu không, fallback sang **đệ quy** mọi `corpus/**/*.jsonl` (theo thứ tự đường dẫn), bỏ qua dòng trống.
 - **Skip:** dòng có `"skip": true` → in `[SKIP] …` ra stderr (kèm `skip_reason` nếu có); không fail test.
 - **Lần build đầu:** CMake `FetchContent` tải **googletest** + **nlohmann/json** (cần mạng).
@@ -218,16 +218,16 @@ Giá trị `aux` khớp tên enum C++ `KeyAux` trong `include/cbakey/core/types.
 
 ## 14. Mở rộng corpus tự động (BFS + script)
 
-### Công cụ C++: `cbakey_corpus_bfs`
+### Công cụ C++: `farolkey_corpus_bfs`
 
-- Build: `-DCBAKEY_BUILD_CORPUS_TOOLS=ON` (mặc định bật cùng flow thường dùng).
+- Build: `-DFAROLKEY_BUILD_CORPUS_TOOLS=ON` (mặc định bật cùng flow thường dùng).
 - **Ý tưởng:** BFS trên `Engine` thật — tìm chuỗi phím ASCII (Telex `a–z`, VNI thêm `0–9`) đưa preedit đúng **từ đích** (một âm tiết), rồi commit bằng **space**; xuất một dòng JSONL giống schema §9.
 - **Gợi ý thứ tự phím (quan trọng):** truyền thêm **ascii_hint** (ví dụ NFKD bỏ dấu thanh: `chào` → `chao`) để ưu tiên thử các chữ trong skeleton Latin → giảm thời gian BFS (Telex dài có thể ~1 phút/từ nếu không gợi ý).
-- **Môi trường:** `CBAKEY_CORPUS_BFS_MAX_NODES` (mặc định `1200000`), `CBAKEY_CORPUS_BFS_MAX_DEPTH` (mặc định `26`).
+- **Môi trường:** `FAROLKEY_CORPUS_BFS_MAX_NODES` (mặc định `1200000`), `FAROLKEY_CORPUS_BFS_MAX_DEPTH` (mặc định `26`).
 
 ```bash
-build/cbakey_corpus_bfs --one telex 'chào' chao
-build/cbakey_corpus_bfs --batch < words.tsv   # mỗi dòng: telex<TAB>từ[<TAB>hint>]
+build/farolkey_corpus_bfs --one telex 'chào' chao
+build/farolkey_corpus_bfs --batch < words.tsv   # mỗi dòng: telex<TAB>từ[<TAB>hint>]
 ```
 
 ### Script Python: `scripts/expand_corpus.py`
@@ -239,7 +239,7 @@ build/cbakey_corpus_bfs --batch < words.tsv   # mỗi dòng: telex<TAB>từ[<TAB
 
 ```bash
 pip install -r scripts/requirements-corpus.txt
-cmake -S . -B build -DCBAKEY_BUILD_CORPUS_TOOLS=ON -DCBAKEY_BUILD_TESTS=ON
+cmake -S . -B build -DFAROLKEY_BUILD_CORPUS_TOOLS=ON -DFAROLKEY_BUILD_TESTS=ON
 cmake --build build
 
 python3 scripts/expand_corpus.py --method telex --limit 500 --jobs 8 \
@@ -253,8 +253,8 @@ Từ **không** tìm được trong giới hạn node/depth sẽ `[skip]` trên 
 
 ### English (short)
 
-- **`cbakey_corpus_bfs`:** offline BFS against the real `Engine`; optional **ASCII hint** (NFKD base letters) reorders the try-alphabet to shrink search time.
-- **`expand_corpus.py`:** optional **wordfreq** word source, on-disk **cache**, parallel workers; writes JSONL for `cbakey_corpus_test`.
+- **`farolkey_corpus_bfs`:** offline BFS against the real `Engine`; optional **ASCII hint** (NFKD base letters) reorders the try-alphabet to shrink search time.
+- **`expand_corpus.py`:** optional **wordfreq** word source, on-disk **cache**, parallel workers; writes JSONL for `farolkey_corpus_test`.
 
 ---
 
@@ -263,6 +263,6 @@ Từ **không** tìm được trong giới hạn node/depth sẽ `[skip]` trên 
 | Date | Change |
 |------|--------|
 | 2026-05-11 | Initial M0 checkpoint: user decisions + locked B2–B3, C1–C2 for corpus-only semantics; example schema v1. |
-| 2026-05-11 | Implemented `cbakey_corpus_test` + sample `telex.jsonl` / `vni.jsonl` / `engine_meta.jsonl`. |
-| 2026-05-11 | Added `cbakey_corpus_bfs`, `scripts/expand_corpus.py`, recursive JSONL discovery, `corpus/generated/` sample. |
+| 2026-05-11 | Implemented `farolkey_corpus_test` + sample `telex.jsonl` / `vni.jsonl` / `engine_meta.jsonl`. |
+| 2026-05-11 | Added `farolkey_corpus_bfs`, `scripts/expand_corpus.py`, recursive JSONL discovery, `corpus/generated/` sample. |
 | 2026-05-11 | Added canonical `corpus/final/`, `scripts/finalize_corpus_set.py`, and runner preference for canonical corpus when available. |

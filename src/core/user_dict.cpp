@@ -1,4 +1,4 @@
-#include "cbakey/core/user_dict.h"
+#include "farolkey/core/user_dict.h"
 
 #include <algorithm>
 #include <cctype>
@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace cbakey::core {
+namespace farolkey::core {
 
 namespace {
 
@@ -178,4 +178,4 @@ bool UserDict::remove(const std::string& trigger) {
     return true;
 }
 
-}  // namespace cbakey::core
+}  // namespace farolkey::core

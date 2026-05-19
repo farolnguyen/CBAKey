@@ -1,13 +1,13 @@
 #include <cassert>
 
-#include "cbakey/config/config.h"
-#include "cbakey/core/engine.h"
+#include "farolkey/config/config.h"
+#include "farolkey/core/engine.h"
 
-using cbakey::core::Engine;
-using cbakey::core::InputMode;
-using cbakey::core::KeyAux;
-using cbakey::core::KeyEvent;
-using cbakey::core::ProcessResult;
+using farolkey::core::Engine;
+using farolkey::core::InputMode;
+using farolkey::core::KeyAux;
+using farolkey::core::KeyEvent;
+using farolkey::core::ProcessResult;
 
 static std::string typeSequence(Engine& engine, const std::string& keys) {
     for (const char key : keys) {
@@ -28,7 +28,7 @@ static std::string utf8HoacNangSpace() {
 }
 
 int main() {
-    Engine engine(cbakey::config::defaultConfig());
+    Engine engine(farolkey::config::defaultConfig());
 
     auto result1 = engine.processKey(KeyEvent{.key = 'x'});
     assert(result1.consumed);
@@ -191,8 +191,8 @@ int main() {
     auto undo2 = engine.processKey(KeyEvent{.key = '\b'});
     assert(undo2.preedit.empty());
 
-    cbakey::config::RuntimeConfig vniConfig = cbakey::config::defaultConfig();
-    vniConfig.method = cbakey::core::InputMethod::Vni;
+    farolkey::config::RuntimeConfig vniConfig = farolkey::config::defaultConfig();
+    vniConfig.method = farolkey::core::InputMethod::Vni;
     Engine vniEngine(vniConfig);
 
     auto ctrlPaste = vniEngine.processKey(KeyEvent{.key = 'v', .ctrl = true});
@@ -1465,7 +1465,7 @@ int main() {
     // ---- "ua" + coda + tone: tone must land on â/a (second vowel), not u ----
     // Telex: c-h-u-a-a-n (aa->â) then r (hỏi) -> "chuẩn"; z must strip whole syllable.
     {
-        Engine telexEngine(cbakey::config::defaultConfig());
+        Engine telexEngine(farolkey::config::defaultConfig());
         ProcessResult r;
         for (const char k : {'c', 'h', 'u', 'a', 'a', 'n', 'r'}) {
             r = telexEngine.processKey(KeyEvent{.key = k});
@@ -1479,7 +1479,7 @@ int main() {
 
     // Telex: t-u-a-a-n (aa->â) then f (huyền) -> "tuần"; z must strip whole syllable.
     {
-        Engine telexEngine(cbakey::config::defaultConfig());
+        Engine telexEngine(farolkey::config::defaultConfig());
         ProcessResult r;
         for (const char k : {'t', 'u', 'a', 'a', 'n', 'f'}) {
             r = telexEngine.processKey(KeyEvent{.key = k});
@@ -1493,8 +1493,8 @@ int main() {
 
     // VNI: x-u-a-6 (6->â) then n then 3 (hỏi) -> "xuẩn"
     {
-        cbakey::config::RuntimeConfig vniCfg2 = cbakey::config::defaultConfig();
-        vniCfg2.method = cbakey::core::InputMethod::Vni;
+        farolkey::config::RuntimeConfig vniCfg2 = farolkey::config::defaultConfig();
+        vniCfg2.method = farolkey::core::InputMethod::Vni;
         Engine vniEngine2(vniCfg2);
         ProcessResult r;
         for (const char k : {'x', 'u', 'a', '6', 'n', '3'}) {
@@ -1511,9 +1511,9 @@ int main() {
     // Bug: VNI only transformed 'o'→'ơ' but not 'u'→'ư', giving 'đuợc' instead of 'được'.
     // Fix: VNI now calls normalizeTelexBuffer after vowel transforms, same as Telex.
     {
-        cbakey::config::RuntimeConfig uoTelexCfg = cbakey::config::defaultConfig();
-        cbakey::config::RuntimeConfig uoVniCfg   = cbakey::config::defaultConfig();
-        uoVniCfg.method = cbakey::core::InputMethod::Vni;
+        farolkey::config::RuntimeConfig uoTelexCfg = farolkey::config::defaultConfig();
+        farolkey::config::RuntimeConfig uoVniCfg   = farolkey::config::defaultConfig();
+        uoVniCfg.method = farolkey::core::InputMethod::Vni;
 
         // Telex: dduowcj + Space → "được "
         // Intermediate "đuơ" after 'w' is expected; 'c' triggers normalization to "đươc".
@@ -1554,9 +1554,9 @@ int main() {
 
     // --- Uppercase Đ regression (bug: uppercase D + VNI 9 was producing "D9") ---
     {
-        cbakey::config::RuntimeConfig uVniCfg = cbakey::config::defaultConfig();
-        uVniCfg.method = cbakey::core::InputMethod::Vni;
-        cbakey::config::RuntimeConfig uTelCfg = cbakey::config::defaultConfig();
+        farolkey::config::RuntimeConfig uVniCfg = farolkey::config::defaultConfig();
+        uVniCfg.method = farolkey::core::InputMethod::Vni;
+        farolkey::config::RuntimeConfig uTelCfg = farolkey::config::defaultConfig();
 
         // VNI: D + 9 → preedit "Đ"
         Engine vniU(uVniCfg);
@@ -1582,9 +1582,9 @@ int main() {
 
     // --- 'ươ'↔'uô' toggle bugs (Bug 1 + Bug 2) ---
     {
-        cbakey::config::RuntimeConfig telCfg = cbakey::config::defaultConfig();
-        cbakey::config::RuntimeConfig vniCfg_ = cbakey::config::defaultConfig();
-        vniCfg_.method = cbakey::core::InputMethod::Vni;
+        farolkey::config::RuntimeConfig telCfg = farolkey::config::defaultConfig();
+        farolkey::config::RuntimeConfig vniCfg_ = farolkey::config::defaultConfig();
+        vniCfg_.method = farolkey::core::InputMethod::Vni;
 
         // Bug 1 fix: Telex 'ươ' + 'w' → revert to 'uo' (strip diacritics + tone)
         // User can then re-apply whatever transform they want.

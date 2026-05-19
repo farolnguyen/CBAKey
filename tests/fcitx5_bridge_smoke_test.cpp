@@ -1,13 +1,13 @@
 #include <cassert>
 
-#include "cbakey/adapter/fcitx5/bridge.h"
+#include "farolkey/adapter/fcitx5/bridge.h"
 
-using cbakey::adapter::fcitx5::Bridge;
-using cbakey::core::InputMode;
-using cbakey::core::KeyEvent;
+using farolkey::adapter::fcitx5::Bridge;
+using farolkey::core::InputMode;
+using farolkey::core::KeyEvent;
 
 int main() {
-    Bridge bridge(cbakey::config::defaultConfig());
+    Bridge bridge(farolkey::config::defaultConfig());
 
     bridge.handleKey(KeyEvent{.key = 'a'});
     bridge.handleKey(KeyEvent{.key = 'a'});
@@ -21,7 +21,7 @@ int main() {
     assert(committed[0] == "ấ ");
     assert(bridge.preedit().empty());
 
-    Bridge smartBoundaryBridge(cbakey::config::defaultConfig());
+    Bridge smartBoundaryBridge(farolkey::config::defaultConfig());
     for (const char k : {'x', 'i', 'n', 'c', 'h'}) {
         const auto r = smartBoundaryBridge.handleKey(KeyEvent{.key = k});
         assert(r.commit.empty());

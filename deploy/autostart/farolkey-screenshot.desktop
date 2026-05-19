@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=FarolKey Screenshot Daemon
+Comment=Global hotkey listener for FarolKey screenshot tool
+Exec=farolkey-screenshot-daemon
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=4

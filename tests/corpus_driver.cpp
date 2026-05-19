@@ -3,17 +3,17 @@
 #include <sstream>
 #include <unordered_map>
 
-#include "cbakey/config/config.h"
-#include "cbakey/core/engine.h"
+#include "farolkey/config/config.h"
+#include "farolkey/core/engine.h"
 
-namespace cbakey::test {
+namespace farolkey::test {
 namespace {
 
-using cbakey::core::Engine;
-using cbakey::core::InputMethod;
-using cbakey::core::KeyAux;
-using cbakey::core::KeyEvent;
-using cbakey::core::ProcessResult;
+using farolkey::core::Engine;
+using farolkey::core::InputMethod;
+using farolkey::core::KeyAux;
+using farolkey::core::KeyEvent;
+using farolkey::core::ProcessResult;
 
 bool auxFromString(const std::string& s, KeyAux* out, std::string* err) {
     static const std::unordered_map<std::string, KeyAux> kMap = {
@@ -175,7 +175,7 @@ CorpusOutcome runCorpusCase(const nlohmann::json& c, CorpusRunStats* stats) {
         return {false, id + ": unsupported corpus_schema_version (only 1 supported)"};
     }
 
-    cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+    farolkey::config::RuntimeConfig cfg = farolkey::config::defaultConfig();
     cfg.enableUserDictionary = false;  // corpus tests must not load the user's personal dict
     const std::string cfgName = c.value("config", "default");
     if (cfgName == "vni") {
@@ -257,4 +257,4 @@ CorpusOutcome runCorpusCase(const nlohmann::json& c, CorpusRunStats* stats) {
     return {false, std::nullopt};
 }
 
-}  // namespace cbakey::test
+}  // namespace farolkey::test

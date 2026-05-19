@@ -7,18 +7,18 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cbakey/config/config.h"
-#include "cbakey/core/engine.h"
-#include "cbakey/core/vi_syllable.h"
+#include "farolkey/config/config.h"
+#include "farolkey/core/engine.h"
+#include "farolkey/core/vi_syllable.h"
 
 namespace fs = std::filesystem;
 
 namespace {
 
-using cbakey::core::Engine;
-using cbakey::core::InputMethod;
-using cbakey::core::KeyEvent;
-using cbakey::core::ProcessResult;
+using farolkey::core::Engine;
+using farolkey::core::InputMethod;
+using farolkey::core::KeyEvent;
+using farolkey::core::ProcessResult;
 
 struct AuditStats {
     int tone_supported = 0;
@@ -109,7 +109,7 @@ bool hasTag(const nlohmann::json& obj, const std::string& want) {
 }
 
 void auditCase(const nlohmann::json& obj, AuditStats* stats) {
-    cbakey::config::RuntimeConfig cfg = cbakey::config::defaultConfig();
+    farolkey::config::RuntimeConfig cfg = farolkey::config::defaultConfig();
     const std::string config = obj.value("config", "default");
     if (config == "vni") {
         cfg.method = InputMethod::Vni;
@@ -146,7 +146,7 @@ void auditCase(const nlohmann::json& obj, AuditStats* stats) {
             const bool vniRemoveDiacritics = cfg.method == InputMethod::Vni && hasTag(obj, "vni.remove_diacritics");
             if (cfg.method == InputMethod::Telex) {
                 if (isTelexTone(key)) {
-                    if (cbakey::core::vi_syllable::selectToneVowelIndex(decoded)) {
+                    if (farolkey::core::vi_syllable::selectToneVowelIndex(decoded)) {
                         ++stats->tone_supported;
                     } else if (telexRepeatEscape) {
                         ++stats->literal_supported;
@@ -156,7 +156,7 @@ void auditCase(const nlohmann::json& obj, AuditStats* stats) {
                     }
                 } else if (isTelexTransform(key)) {
                     std::u32string copy = decoded;
-                    if (cbakey::core::vi_syllable::applyTelexTransform(copy, key)) {
+                    if (farolkey::core::vi_syllable::applyTelexTransform(copy, key)) {
                         ++stats->transform_supported;
                     } else if (telexRepeatEscape) {
                         ++stats->literal_supported;
@@ -166,20 +166,20 @@ void auditCase(const nlohmann::json& obj, AuditStats* stats) {
                     }
                 } else if (key == 'z') {
                     std::u32string copy = decoded;
-                    if (cbakey::core::vi_syllable::removeTelexDiacritics(copy)) {
+                    if (farolkey::core::vi_syllable::removeTelexDiacritics(copy)) {
                         ++stats->literal_supported;
                     }
                 } else if (telexRawEscape) {
                     ++stats->literal_supported;
                 } else {
                     std::u32string copy = decodeUtf8(appended);
-                    if (cbakey::core::vi_syllable::normalizeTelexBuffer(copy)) {
+                    if (farolkey::core::vi_syllable::normalizeTelexBuffer(copy)) {
                         ++stats->literal_supported;
                     }
                 }
             } else {
                 if (isVniTone(key)) {
-                    if (cbakey::core::vi_syllable::selectToneVowelIndex(decoded)) {
+                    if (farolkey::core::vi_syllable::selectToneVowelIndex(decoded)) {
                         ++stats->tone_supported;
                     } else if (vniRepeatEscape) {
                         ++stats->literal_supported;
@@ -189,7 +189,7 @@ void auditCase(const nlohmann::json& obj, AuditStats* stats) {
                     }
                 } else if (isVniTransform(key)) {
                     std::u32string copy = decoded;
-                    if (cbakey::core::vi_syllable::applyVniTransform(copy, key)) {
+                    if (farolkey::core::vi_syllable::applyVniTransform(copy, key)) {
                         ++stats->transform_supported;
                     } else {
                         ++stats->transform_fallback;
@@ -197,7 +197,7 @@ void auditCase(const nlohmann::json& obj, AuditStats* stats) {
                     }
                 } else if (key == '0' && vniRemoveDiacritics) {
                     std::u32string copy = decoded;
-                    if (cbakey::core::vi_syllable::removeVniDiacritics(copy)) {
+                    if (farolkey::core::vi_syllable::removeVniDiacritics(copy)) {
                         ++stats->literal_supported;
                     }
                 } else if (key == '\\' && vniRawEscape) {
@@ -210,32 +210,32 @@ void auditCase(const nlohmann::json& obj, AuditStats* stats) {
                 bool handledByNew = false;
                 if (cfg.method == InputMethod::Telex) {
                     if (isTelexTone(key)) {
-                        handledByNew = cbakey::core::vi_syllable::selectToneVowelIndex(decoded).has_value();
+                        handledByNew = farolkey::core::vi_syllable::selectToneVowelIndex(decoded).has_value();
                     } else if (isTelexTransform(key)) {
                         auto copy = decoded;
-                        handledByNew = cbakey::core::vi_syllable::applyTelexTransform(copy, key);
+                        handledByNew = farolkey::core::vi_syllable::applyTelexTransform(copy, key);
                     } else if (key == 'z') {
                         auto copy = decoded;
-                        handledByNew = cbakey::core::vi_syllable::removeTelexDiacritics(copy);
+                        handledByNew = farolkey::core::vi_syllable::removeTelexDiacritics(copy);
                     } else {
                         auto copy = decodeUtf8(appended);
-                        handledByNew = cbakey::core::vi_syllable::normalizeTelexBuffer(copy);
+                        handledByNew = farolkey::core::vi_syllable::normalizeTelexBuffer(copy);
                     }
                     if (!handledByNew && (telexRepeatEscape || telexRawEscape)) {
                         handledByNew = true;
                     }
                 } else {
                     if (isVniTone(key)) {
-                        handledByNew = cbakey::core::vi_syllable::selectToneVowelIndex(decoded).has_value();
+                        handledByNew = farolkey::core::vi_syllable::selectToneVowelIndex(decoded).has_value();
                         if (!handledByNew && vniRepeatEscape) {
                             handledByNew = true;
                         }
                     } else if (isVniTransform(key)) {
                         auto copy = decoded;
-                        handledByNew = cbakey::core::vi_syllable::applyVniTransform(copy, key);
+                        handledByNew = farolkey::core::vi_syllable::applyVniTransform(copy, key);
                     } else if (key == '0' && vniRemoveDiacritics) {
                         auto copy = decoded;
-                        handledByNew = cbakey::core::vi_syllable::removeVniDiacritics(copy);
+                        handledByNew = farolkey::core::vi_syllable::removeVniDiacritics(copy);
                     } else if (key == '\\' && vniRawEscape) {
                         handledByNew = true;
                     }

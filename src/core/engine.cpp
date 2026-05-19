@@ -1,4 +1,4 @@
-#include "cbakey/core/engine.h"
+#include "farolkey/core/engine.h"
 
 #include <algorithm>
 #include <array>
@@ -11,15 +11,15 @@
 #include <string>
 #include <vector>
 
-#include "cbakey/core/user_dict.h"
-#include "cbakey/core/vi_syllable.h"
+#include "farolkey/core/user_dict.h"
+#include "farolkey/core/vi_syllable.h"
 
-namespace cbakey::core {
+namespace farolkey::core {
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// M15: Smart Templates — parametric expansion via cbakey-template subprocess
+// M15: Smart Templates — parametric expansion via farolkey-template subprocess
 // ---------------------------------------------------------------------------
 
 /// Shell-escape a string for single-quote wrapping: ' → '\''
@@ -36,7 +36,7 @@ static std::string shellEscape(const std::string& s) {
     return out;
 }
 
-/// Call `cbakey-template expand --mode <mode> '<trigger>'`.
+/// Call `farolkey-template expand --mode <mode> '<trigger>'`.
 /// Returns the rendered template text, or empty string if no match / error.
 /// Requires the "**" activation prefix so normal words never trigger templates
 /// accidentally (e.g. "update" contains "date" but lacks "**").
@@ -51,7 +51,7 @@ static std::string tryParametricExpand(const std::string& input, const std::stri
     if (trigger.empty()) return {};
 
     const std::string cmd =
-        "cbakey-template expand --mode " + mode +
+        "farolkey-template expand --mode " + mode +
         " '" + shellEscape(trigger) + "' 2>/dev/null";
 
     FILE* pipe = popen(cmd.c_str(), "r");
@@ -346,11 +346,11 @@ bool isVniEscapableKey(char key) {
 namespace {
 
 /// Resolve the user dictionary path from config or XDG default.
-std::string resolveUserDictPath(const cbakey::config::RuntimeConfig& cfg) {
+std::string resolveUserDictPath(const farolkey::config::RuntimeConfig& cfg) {
     if (!cfg.userDictPath.empty()) {
         return cfg.userDictPath;
     }
-    // XDG_CONFIG_HOME / cbakey / user_dict.json
+    // XDG_CONFIG_HOME / farolkey / user_dict.json
     const char* xdg = std::getenv("XDG_CONFIG_HOME");
     std::string base;
     if (xdg && xdg[0] != '\0') {
@@ -359,12 +359,12 @@ std::string resolveUserDictPath(const cbakey::config::RuntimeConfig& cfg) {
         const char* home = std::getenv("HOME");
         base = home ? std::string(home) + "/.config" : "/tmp";
     }
-    return base + "/cbakey/user_dict.json";
+    return base + "/farolkey/user_dict.json";
 }
 
 }  // namespace
 
-Engine::Engine(cbakey::config::RuntimeConfig config)
+Engine::Engine(farolkey::config::RuntimeConfig config)
     : config_(std::move(config)),
       userDict_(config_.enableUserDictionary
                     ? UserDict::loadFromFile(resolveUserDictPath(config_))
@@ -559,7 +559,7 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         return ProcessResult{.preedit = preeditBuffer_, .commit = committedPrefix, .consumed = true};
     };
 
-    if (config_.method == cbakey::core::InputMethod::Vni && event.key_from_keypad &&
+    if (config_.method == farolkey::core::InputMethod::Vni && event.key_from_keypad &&
         event.aux == KeyAux::None && event.key != '\0' &&
         std::isdigit(static_cast<unsigned char>(event.key)) != 0 && !preeditBuffer_.empty()) {
         ProcessResult r;
@@ -574,7 +574,7 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         const char pendingKey = static_cast<char>(std::tolower(static_cast<unsigned char>(pendingRaw)));
         clearRepeatTransformState();
         const bool escapable =
-            config_.method == cbakey::core::InputMethod::Telex ? isTelexEscapableKey(pendingKey)
+            config_.method == farolkey::core::InputMethod::Telex ? isTelexEscapableKey(pendingKey)
                                                                : isVniEscapableKey(pendingKey);
         if (event.aux == KeyAux::None && pendingRaw != '\0' && escapable) {
             materializeLiteralChar(pendingRaw);
@@ -664,11 +664,11 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     const std::string bufferBefore = preeditBuffer_;
 
     std::u32string decoded = decodeUtf8Normalized(preeditBuffer_);
-    if ((config_.method == cbakey::core::InputMethod::Telex && key == 'z') ||
-        (config_.method == cbakey::core::InputMethod::Vni && key == '0')) {
+    if ((config_.method == farolkey::core::InputMethod::Telex && key == 'z') ||
+        (config_.method == farolkey::core::InputMethod::Vni && key == '0')) {
         clearRepeatTransformState();
         const bool removed =
-            config_.method == cbakey::core::InputMethod::Telex ? vi_syllable::removeTelexDiacritics(decoded)
+            config_.method == farolkey::core::InputMethod::Telex ? vi_syllable::removeTelexDiacritics(decoded)
                                                                : vi_syllable::removeVniDiacritics(decoded);
         if (removed) {
             preeditBuffer_ = encodeUtf8(decoded);
@@ -682,11 +682,11 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     }
 
     if (repeatTransformState_.active && repeatTransformState_.key == key &&
-        ((config_.method == cbakey::core::InputMethod::Telex && isTelexRepeatableKey(key)) ||
-         (config_.method == cbakey::core::InputMethod::Vni && isVniRepeatableKey(key)))) {
+        ((config_.method == farolkey::core::InputMethod::Telex && isTelexRepeatableKey(key)) ||
+         (config_.method == farolkey::core::InputMethod::Vni && isVniRepeatableKey(key)))) {
         std::u32string reverted = decodeUtf8Normalized(repeatTransformState_.buffer_before);
         reverted.push_back(static_cast<unsigned char>(raw));
-        if (config_.method == cbakey::core::InputMethod::Telex) {
+        if (config_.method == farolkey::core::InputMethod::Telex) {
             vi_syllable::normalizeTelexBuffer(reverted);
         }
         preeditBuffer_ = encodeUtf8(reverted);
@@ -698,7 +698,7 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
     }
     bool transformed = false;
-    if (config_.method == cbakey::core::InputMethod::Telex) {
+    if (config_.method == farolkey::core::InputMethod::Telex) {
         if (key == 's' || key == 'f' || key == 'r' || key == 'x' || key == 'j') {
             transformed = applyTone(decoded, key);
         } else {
@@ -717,12 +717,12 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         // complete the transform by converting 'u' → 'ư' (giving 'ươ').
         // Uses normalizeVniUoTransform instead of normalizeTelexBuffer to avoid
         // incorrectly transforming triple-vowel nuclei like "uơi" (needed for "cưới").
-        if (config_.method == cbakey::core::InputMethod::Vni) {
+        if (config_.method == farolkey::core::InputMethod::Vni) {
             vi_syllable::normalizeVniUoTransform(decoded);
         }
         preeditBuffer_ = encodeUtf8(decoded);
-        if ((config_.method == cbakey::core::InputMethod::Telex && isTelexRepeatableKey(key)) ||
-            (config_.method == cbakey::core::InputMethod::Vni && isVniRepeatableKey(key))) {
+        if ((config_.method == farolkey::core::InputMethod::Telex && isTelexRepeatableKey(key)) ||
+            (config_.method == farolkey::core::InputMethod::Vni && isVniRepeatableKey(key))) {
             repeatTransformState_.active = true;
             repeatTransformState_.key = key;
             repeatTransformState_.buffer_before = bufferBefore;
@@ -739,7 +739,7 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     clearRepeatTransformState();
     clearPendingLiteralEscape();
     decoded.push_back(static_cast<unsigned char>(raw));
-    if (config_.method == cbakey::core::InputMethod::Telex) {
+    if (config_.method == farolkey::core::InputMethod::Telex) {
         vi_syllable::normalizeTelexBuffer(decoded);
     }
     preeditBuffer_ = encodeUtf8(decoded);
@@ -828,7 +828,7 @@ void Engine::seedPreeditForCommittedRewrite(std::string utf8) {
     preeditBuffer_ = std::move(utf8);
 }
 
-std::optional<std::string> Engine::tryRewriteCommittedSyllable(const cbakey::config::RuntimeConfig& config,
+std::optional<std::string> Engine::tryRewriteCommittedSyllable(const farolkey::config::RuntimeConfig& config,
                                                                const std::string& token_utf8,
                                                                const KeyEvent& event) {
     if (token_utf8.empty() || token_utf8.size() > 96) {
@@ -854,7 +854,7 @@ std::optional<std::string> Engine::tryRewriteCommittedSyllable(const cbakey::con
     if (r.preedit.empty()) {
         return std::nullopt;
     }
-    if (config.method == cbakey::core::InputMethod::Vni && event.key >= '1' && event.key <= '5') {
+    if (config.method == farolkey::core::InputMethod::Vni && event.key >= '1' && event.key <= '5') {
         if (r.preedit.size() == token_utf8.size() + 1 &&
             r.preedit.compare(0, token_utf8.size(), token_utf8) == 0 &&
             r.preedit.back() == event.key) {
@@ -867,4 +867,4 @@ std::optional<std::string> Engine::tryRewriteCommittedSyllable(const cbakey::con
     return r.preedit;
 }
 
-}  // namespace cbakey::core
+}  // namespace farolkey::core

@@ -1,6 +1,6 @@
-# CBAKey — APT Repository nội bộ (M10.2)
+# FarolKey — APT Repository nội bộ (M10.2)
 
-Hướng dẫn dựng và maintain APT repository để phân phối CBAKey trong nội bộ qua `apt install`.
+Hướng dẫn dựng và maintain APT repository để phân phối FarolKey trong nội bộ qua `apt install`.
 
 ---
 
@@ -36,13 +36,13 @@ Key-Type: RSA
 Key-Length: 4096
 Subkey-Type: RSA
 Subkey-Length: 4096
-Name-Real: CBAKey Internal Signing
-Name-Email: cbakey-sign@internal
+Name-Real: FarolKey Internal Signing
+Name-Email: farolkey-sign@internal
 Expire-Date: 2y
 EOF
 
 # Lấy fingerprint
-gpg --list-keys cbakey-sign@internal
+gpg --list-keys farolkey-sign@internal
 # Ghi lại fingerprint dài (40 ký tự hex) hoặc dùng email làm KEY_ID
 ```
 
@@ -58,8 +58,8 @@ bash scripts/build_deb.sh
 
 # Bước 2: Tạo APT repo + ký
 bash scripts/setup_apt_repo.sh \
-    --repo-dir /var/www/apt/cbakey \
-    --key-id cbakey-sign@internal
+    --repo-dir /var/www/apt/farolkey \
+    --key-id farolkey-sign@internal
 ```
 
 Script sẽ tạo cấu trúc:
@@ -67,7 +67,7 @@ Script sẽ tạo cấu trúc:
 ```
 apt_repo/
 ├── pool/main/
-│   └── cbakey_0.1.0_amd64.deb
+│   └── farolkey_0.1.0_amd64.deb
 ├── dists/stable/
 │   ├── Release
 │   ├── Release.gpg
@@ -75,7 +75,7 @@ apt_repo/
 │   └── main/binary-amd64/
 │       ├── Packages
 │       └── Packages.gz
-└── cbakey-archive-keyring.gpg   ← public key để distribute cho client
+└── farolkey-archive-keyring.gpg   ← public key để distribute cho client
 ```
 
 ---
@@ -85,7 +85,7 @@ apt_repo/
 ### Dev/test (tạm thời)
 
 ```bash
-cd /var/www/apt/cbakey
+cd /var/www/apt/farolkey
 python3 -m http.server 8080
 ```
 
@@ -95,7 +95,7 @@ python3 -m http.server 8080
 server {
     listen 80;
     server_name apt.internal;
-    root /var/www/apt/cbakey;
+    root /var/www/apt/farolkey;
     autoindex on;
     location / {
         try_files $uri $uri/ =404;
@@ -110,17 +110,17 @@ server {
 ```bash
 # 1. Thêm public key
 sudo mkdir -p /etc/apt/keyrings
-sudo curl -fsSL http://apt.internal/cbakey-archive-keyring.gpg \
-    -o /etc/apt/keyrings/cbakey-archive-keyring.gpg
+sudo curl -fsSL http://apt.internal/farolkey-archive-keyring.gpg \
+    -o /etc/apt/keyrings/farolkey-archive-keyring.gpg
 
 # 2. Thêm sources.list
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/cbakey-archive-keyring.gpg] \
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/farolkey-archive-keyring.gpg] \
     http://apt.internal stable main" \
-    | sudo tee /etc/apt/sources.list.d/cbakey.list
+    | sudo tee /etc/apt/sources.list.d/farolkey.list
 
 # 3. Cài đặt
 sudo apt update
-sudo apt install cbakey
+sudo apt install farolkey
 ```
 
 ---
@@ -133,8 +133,8 @@ bash scripts/build_deb.sh
 
 # Chạy lại setup_apt_repo.sh — script tự copy .deb mới vào pool và regenerate Packages/Release
 bash scripts/setup_apt_repo.sh \
-    --repo-dir /var/www/apt/cbakey \
-    --key-id cbakey-sign@internal
+    --repo-dir /var/www/apt/farolkey \
+    --key-id farolkey-sign@internal
 ```
 
 Máy client chạy `sudo apt update && sudo apt upgrade` sẽ nhận phiên bản mới.
@@ -161,8 +161,8 @@ sudo apt install dpkg-dev
 
 Xóa thủ công rồi chạy lại script:
 ```bash
-rm /var/www/apt/cbakey/pool/main/cbakey_<old-version>_amd64.deb
-bash scripts/setup_apt_repo.sh --repo-dir /var/www/apt/cbakey --key-id cbakey-sign@internal
+rm /var/www/apt/farolkey/pool/main/farolkey_<old-version>_amd64.deb
+bash scripts/setup_apt_repo.sh --repo-dir /var/www/apt/farolkey --key-id farolkey-sign@internal
 ```
 
 ---

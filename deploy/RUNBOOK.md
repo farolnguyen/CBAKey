@@ -1,10 +1,10 @@
-# CBAKey — Deployment Runbook
+# FarolKey — Deployment Runbook
 
 ## Yêu cầu hệ thống
 
 - Linux amd64 (Ubuntu 22.04+ / Debian 12+ khuyến nghị)
 - Fcitx5 ≥ 5.0 đã cài và đang chạy
-- Không cần gỡ bộ gõ khác (CBAKey là addon riêng, không xung đột)
+- Không cần gỡ bộ gõ khác (FarolKey là addon riêng, không xung đột)
 
 ---
 
@@ -13,20 +13,20 @@
 ### Bước 1 — Build .deb
 
 ```bash
-git clone <repo-url> CBAKey && cd CBAKey
+git clone <repo-url> FarolKey && cd FarolKey
 bash scripts/build_deb.sh
-# .deb sẽ ở build_deb/cbakey_0.1.0_amd64.deb
+# .deb sẽ ở build_deb/farolkey_0.1.0_amd64.deb
 ```
 
 ### Bước 2 — Cài đặt
 
 ```bash
-sudo dpkg -i build_deb/cbakey_0.1.0_amd64.deb
+sudo dpkg -i build_deb/farolkey_0.1.0_amd64.deb
 # Nếu báo thiếu phụ thuộc (unconfigured):
 sudo apt-get install -f
 ```
 
-Hoặc gộp một lệnh (apt cài luôn phụ thuộc): `sudo apt install ./build_deb/cbakey_0.1.0_amd64.deb`  
+Hoặc gộp một lệnh (apt cài luôn phụ thuộc): `sudo apt install ./build_deb/farolkey_0.1.0_amd64.deb`  
 (trên Ubuntu/Debian mới; đường dẫn phải có `./` vì là file `.deb` local.)
 
 ### Bước 3 — Kích hoạt trong Fcitx5
@@ -37,7 +37,7 @@ pkill fcitx5 || true; sleep 0.5; fcitx5 -d
 
 # Mở cấu hình Fcitx5
 fcitx5-configtool
-# → "Input Method" tab → "+" → tìm "CBAKey" → Add
+# → "Input Method" tab → "+" → tìm "FarolKey" → Add
 ```
 
 ### Bước 4 — Kiểm tra hoạt động
@@ -69,7 +69,7 @@ bash scripts/restart_fcitx5.sh
 ### Gỡ .deb
 
 ```bash
-sudo dpkg -r cbakey
+sudo dpkg -r farolkey
 pkill fcitx5 || true; sleep 0.5; fcitx5 -d
 ```
 
@@ -84,7 +84,7 @@ bash scripts/restart_fcitx5.sh
 
 ## 4. Cấu hình
 
-File cấu hình: `~/.config/cbakey/cbakey.conf`  
+File cấu hình: `~/.config/farolkey/farolkey.conf`  
 Được tạo tự động với giá trị mặc định lần cài đầu tiên.
 
 ```ini
@@ -99,7 +99,7 @@ Sau khi sửa config: restart Fcitx5 để áp dụng.
 
 ### Từ điển cá nhân
 
-File: `~/.config/cbakey/user_dict.json`
+File: `~/.config/farolkey/user_dict.json`
 
 ```json
 {"trigger": "ko", "expansion": "không"}
@@ -113,14 +113,14 @@ Xem thêm: [docs/user_dict.md](../docs/user_dict.md)
 
 ## 5. Troubleshooting
 
-### Lỗi: `cbakey depends on libfcitx5core10 | …` (không có gói nào được cài)
+### Lỗi: `farolkey depends on libfcitx5core10 | …` (không có gói nào được cài)
 
 Trên Ubuntu 24.04 và một số bản Debian, thư viện lõi Fcitx5 có tên **`libfcitx5core7`**, không phải 8/9/10. **Hãy build lại `.deb` từ repo mới nhất** (đã khai báo thêm `libfcitx5core7` trong `Depends`).
 
 Nếu gói đang ở trạng thái lỗi sau lần cài cũ:
 
 ```bash
-sudo dpkg --remove --force-remove-reinstreq cbakey 2>/dev/null || true
+sudo dpkg --remove --force-remove-reinstreq farolkey 2>/dev/null || true
 sudo apt-get install -f
 ```
 
@@ -128,16 +128,16 @@ Sau đó build lại rồi cài:
 
 ```bash
 bash scripts/build_deb.sh
-sudo dpkg -i build_deb/cbakey_0.1.0_amd64.deb
-# hoặc: sudo apt install ./build_deb/cbakey_0.1.0_amd64.deb
+sudo dpkg -i build_deb/farolkey_0.1.0_amd64.deb
+# hoặc: sudo apt install ./build_deb/farolkey_0.1.0_amd64.deb
 ```
 
-### Không thấy CBAKey trong danh sách input method
+### Không thấy FarolKey trong danh sách input method
 
 ```bash
 # Kiểm tra file addon
-ls /usr/share/fcitx5/addon/cbakey.conf
-ls /usr/lib/x86_64-linux-gnu/fcitx5/libcbakey.so
+ls /usr/share/fcitx5/addon/farolkey.conf
+ls /usr/lib/x86_64-linux-gnu/fcitx5/libfarolkey.so
 
 # Kiểm tra Fcitx5 log
 journalctl --user -u fcitx5 -n 50
@@ -145,7 +145,7 @@ journalctl --user -u fcitx5 -n 50
 fcitx5 --verbose --debug 2>&1 | head -100
 ```
 
-Nếu file thiếu: `sudo dpkg -i build_deb/cbakey_*.deb` lại.
+Nếu file thiếu: `sudo dpkg -i build_deb/farolkey_*.deb` lại.
 
 ### Bộ gõ không phản hồi phím
 
@@ -153,11 +153,11 @@ Nếu file thiếu: `sudo dpkg -i build_deb/cbakey_*.deb` lại.
 # Kiểm tra Fcitx5 đang chạy
 pgrep fcitx5
 
-# Kiểm tra CBAKey đã được chọn làm input method hiện tại
+# Kiểm tra FarolKey đã được chọn làm input method hiện tại
 fcitx5-remote -n   # in ra tên input method đang active
 ```
 
-Nếu không active: mở `fcitx5-configtool` và chuyển CBAKey lên đầu danh sách.
+Nếu không active: mở `fcitx5-configtool` và chuyển FarolKey lên đầu danh sách.
 
 ### Preedit bị lệch / ký tự hiển thị sai
 
@@ -175,14 +175,14 @@ Lưu ý: chỉ hoạt động khi app hỗ trợ `SurroundingText`. Xem `docs/fc
 ### Rollback về phiên bản cũ
 
 ```bash
-sudo dpkg -i cbakey_<old-version>_amd64.deb
+sudo dpkg -i farolkey_<old-version>_amd64.deb
 ```
 
 ---
 
 ## 6. Kiểm tra sau cài đặt (checklist)
 
-- [ ] `fcitx5-remote -n` trả về "cbakey" khi đang gõ tiếng Việt
+- [ ] `fcitx5-remote -n` trả về "farolkey" khi đang gõ tiếng Việt
 - [ ] Gõ `chaof ` → "chào " trong một app
 - [ ] Gõ `vni16 ` (VNI) → "vní " nếu method=vni  
 - [ ] `Ctrl+Alt+Z` chuyển sang English mode, ký tự gõ thẳng

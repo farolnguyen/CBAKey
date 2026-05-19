@@ -1,0 +1,918 @@
+#!/usr/bin/env python3
+"""FarolKey Clipboard History — daemon + Windows-style popup.
+
+Usage:
+  farolkey-clipboard --daemon   # persistent daemon (monitors clipboard, serves SHOW)
+  farolkey-clipboard --show     # show popup (signals daemon if running, else inline)
+  farolkey-clipboard            # same as --show
+"""
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
+
+import hashlib
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Paths & constants
+# ---------------------------------------------------------------------------
+
+def _data_dir() -> Path:
+    xdg = os.environ.get('XDG_DATA_HOME', '')
+    base = Path(xdg) if xdg else Path.home() / '.local' / 'share'
+    d = base / 'farolkey'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def _images_dir() -> Path:
+    d = _data_dir() / 'clipboard_images'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+HISTORY_FILE = _data_dir() / 'clipboard_history.json'
+SOCKET_PATH  = _data_dir() / 'clipboard.sock'
+
+MAX_ITEMS    = 50
+THUMB_HEIGHT = 72
+PREVIEW_CHARS = 200
+POPUP_WIDTH  = 380
+POPUP_HEIGHT = 520
+MARGIN       = 12
+
+_WL_COPY  = shutil.which('wl-copy')
+_XCLIP    = shutil.which('xclip')
+_XSEL     = shutil.which('xsel')
+_XDOTOOL  = shutil.which('xdotool')
+_YDOTOOL  = shutil.which('ydotool')
+_WTYPE    = shutil.which('wtype')
+
+# Module-level monitor — allows popup to call suppress()
+_active_monitor: Optional['ClipboardMonitor'] = None
+
+# ---------------------------------------------------------------------------
+# Privacy
+# ---------------------------------------------------------------------------
+
+_PASSWORD_MANAGERS = {
+    'keepass', 'keepassxc', '1password', 'bitwarden',
+    'gnome-keyring', 'secret-tool', 'pass', 'gopass',
+}
+
+def _is_sensitive(text: str, owner: str = '') -> bool:
+    if not text or not text.strip():
+        return True
+    if any(p in owner.lower() for p in _PASSWORD_MANAGERS):
+        return True
+    return False
+
+# ---------------------------------------------------------------------------
+# Clipboard write helpers (survive window destruction on Wayland)
+# ---------------------------------------------------------------------------
+
+def _is_wayland() -> bool:
+    return 'wayland' in os.environ.get('XDG_SESSION_TYPE', '').lower()
+
+def _set_clipboard_text(text: str):
+    if _is_wayland() and _WL_COPY:
+        try:
+            proc = subprocess.Popen(['wl-copy', '--'], stdin=subprocess.PIPE)
+            proc.stdin.write(text.encode('utf-8'))
+            proc.stdin.close()
+            return
+        except Exception:
+            pass
+    for cmd in (
+        ([_XCLIP, '-selection', 'clipboard'] if _XCLIP else None),
+        ([_XSEL,  '--clipboard', '--input']  if _XSEL  else None),
+    ):
+        if cmd:
+            try:
+                proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+                proc.stdin.write(text.encode('utf-8'))
+                proc.stdin.close()
+                return
+            except Exception:
+                pass
+    clip = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+    clip.set_text(text, -1)
+    clip.store()
+
+def _set_clipboard_image(image_path: str):
+    if not Path(image_path).exists():
+        return
+    if _is_wayland() and _WL_COPY:
+        try:
+            with open(image_path, 'rb') as f:
+                proc = subprocess.Popen(
+                    ['wl-copy', '--type', 'image/png'], stdin=subprocess.PIPE)
+                proc.stdin.write(f.read())
+                proc.stdin.close()
+            return
+        except Exception:
+            pass
+    try:
+        pb = GdkPixbuf.Pixbuf.new_from_file(image_path)
+        clip = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        clip.set_image(pb)
+        clip.store()
+    except Exception:
+        pass
+
+# ---------------------------------------------------------------------------
+# Auto-paste simulation
+# ---------------------------------------------------------------------------
+
+def _try_auto_paste(delay_ms: int = 150) -> bool:
+    """Simulate Ctrl+V in the previously-focused window after a short delay.
+    Returns True if a paste tool was found and launched (not guaranteed to succeed).
+    """
+    time.sleep(delay_ms / 1000.0)
+    if _is_wayland():
+        # ydotool needs ydotoold daemon; KEY_LEFTCTRL=29, KEY_V=47
+        if _YDOTOOL:
+            try:
+                subprocess.run(
+                    ['ydotool', 'key', '29:1', '47:1', '47:0', '29:0'],
+                    capture_output=True, timeout=2)
+                return True
+            except Exception:
+                pass
+        # wtype: simple Wayland keyboard emulator
+        if _WTYPE:
+            try:
+                subprocess.run(['wtype', '-M', 'ctrl', 'v', '-m', 'ctrl'],
+                               capture_output=True, timeout=2)
+                return True
+            except Exception:
+                pass
+    else:
+        if _XDOTOOL:
+            try:
+                subprocess.run(
+                    ['xdotool', 'key', '--clearmodifiers', 'ctrl+v'],
+                    capture_output=True, timeout=2)
+                return True
+            except Exception:
+                pass
+    return False
+
+
+def _has_auto_paste_tool() -> bool:
+    if _is_wayland():
+        return bool(_YDOTOOL or _WTYPE)
+    return bool(_XDOTOOL)
+
+# ---------------------------------------------------------------------------
+# Content hashing
+# ---------------------------------------------------------------------------
+
+def _text_hash(text: str) -> str:
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+def _pixbuf_hash(pb: GdkPixbuf.Pixbuf) -> str:
+    try:
+        data = pb.get_pixels()
+        w, h = pb.get_width(), pb.get_height()
+        sample = data[:2048] + data[-2048:] + f'{w}x{h}'.encode()
+        return hashlib.md5(sample).hexdigest()
+    except Exception:
+        return ''
+
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ClipboardEntry:
+    type: str           # 'text' | 'image'
+    text: str = ''
+    image_path: str = ''
+    timestamp: float = field(default_factory=time.time)
+    pinned: bool = False
+
+class ClipboardHistory:
+    def __init__(self):
+        self._entries: list[ClipboardEntry] = []
+        self._lock = threading.Lock()
+        self._load()
+
+    def _load(self):
+        if not HISTORY_FILE.exists():
+            return
+        try:
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+                    self._entries.append(ClipboardEntry(
+                        type=obj.get('type', 'text'),
+                        text=obj.get('text', ''),
+                        image_path=obj.get('image_path', ''),
+                        timestamp=obj.get('timestamp', 0.0),
+                        pinned=obj.get('pinned', False),
+                    ))
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            tmp = HISTORY_FILE.with_suffix('.tmp')
+            with open(tmp, 'w', encoding='utf-8') as f:
+                for e in self._entries:
+                    f.write(json.dumps(asdict(e), ensure_ascii=False) + '\n')
+            tmp.replace(HISTORY_FILE)
+        except Exception:
+            pass
+
+    def add_text(self, text: str, owner: str = '') -> bool:
+        if _is_sensitive(text, owner):
+            return False
+        h = _text_hash(text)
+        with self._lock:
+            # Dedup: skip if same hash in recent 5 entries
+            for e in self._entries[:5]:
+                if e.type == 'text' and _text_hash(e.text) == h:
+                    return False
+            self._entries.insert(0, ClipboardEntry(type='text', text=text))
+            self._evict()
+            self._save()
+            return True
+
+    def add_image(self, pixbuf: GdkPixbuf.Pixbuf) -> bool:
+        h = _pixbuf_hash(pixbuf)
+        if not h:
+            return False
+        with self._lock:
+            # Dedup: skip if same hash in recent 5 image entries
+            for e in self._entries[:5]:
+                if e.type == 'image' and e.image_path:
+                    try:
+                        existing = GdkPixbuf.Pixbuf.new_from_file(e.image_path)
+                        if _pixbuf_hash(existing) == h:
+                            return False
+                    except Exception:
+                        pass
+            fname = f'{int(time.time() * 1000)}.png'
+            path = str(_images_dir() / fname)
+            try:
+                pixbuf.savev(path, 'png', [], [])
+            except Exception:
+                return False
+            self._entries.insert(0, ClipboardEntry(type='image', image_path=path))
+            self._evict()
+            self._save()
+            return True
+
+    def _evict(self):
+        non_pinned = [e for e in self._entries if not e.pinned]
+        while len(self._entries) > MAX_ITEMS and non_pinned:
+            oldest = non_pinned.pop()
+            self._entries.remove(oldest)
+            _unlink_image(oldest)
+
+    def toggle_pin(self, index: int):
+        with self._lock:
+            if 0 <= index < len(self._entries):
+                self._entries[index].pinned = not self._entries[index].pinned
+                self._save()
+
+    def delete(self, index: int):
+        with self._lock:
+            if 0 <= index < len(self._entries):
+                e = self._entries.pop(index)
+                _unlink_image(e)
+                self._save()
+
+    def clear_unpinned(self):
+        with self._lock:
+            to_remove = [e for e in self._entries if not e.pinned]
+            for e in to_remove:
+                self._entries.remove(e)
+                _unlink_image(e)
+            self._save()
+
+    def all_entries(self) -> list[ClipboardEntry]:
+        with self._lock:
+            return list(self._entries)
+
+def _unlink_image(entry: ClipboardEntry):
+    if entry.type == 'image' and entry.image_path:
+        try:
+            Path(entry.image_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+# ---------------------------------------------------------------------------
+# Clipboard monitor — debounced, hash-dedup, suppress
+# ---------------------------------------------------------------------------
+
+class ClipboardMonitor:
+    """Monitors clipboard; debounces rapid owner-change bursts; supports suppress()."""
+
+    def __init__(self, history: ClipboardHistory):
+        self._history = history
+        self._clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        self._last_hash: str = ''
+        self._debounce_id: Optional[int] = None
+        self._suppress_until: float = 0.0
+        # Called after each successful capture so open popups can refresh live.
+        self._popup_notify = None
+        self._clipboard.connect('owner-change', self._on_owner_change)
+
+    def capture_now(self):
+        """Capture current clipboard (must be called from inside GTK main loop)."""
+        added = self._do_capture()
+        if added and self._popup_notify:
+            try:
+                self._popup_notify()
+            except Exception:
+                pass
+
+    def set_popup_notify(self, cb):
+        """Register callback invoked after each successful capture (for live updates)."""
+        self._popup_notify = cb
+
+    def suppress(self, ms: int = 1000):
+        """Ignore owner-change for ms ms (call before write-back to clipboard)."""
+        self._suppress_until = time.monotonic() + ms / 1000.0
+        if self._debounce_id is not None:
+            GLib.source_remove(self._debounce_id)
+            self._debounce_id = None
+
+    def _on_owner_change(self, clipboard, event):
+        if time.monotonic() < self._suppress_until:
+            return
+        # Debounce: cancel previous and reschedule 200 ms out.
+        # Many apps fire owner-change once per MIME type offered.
+        if self._debounce_id is not None:
+            GLib.source_remove(self._debounce_id)
+        self._debounce_id = GLib.timeout_add(200, self._delayed_capture)
+
+    def _delayed_capture(self) -> bool:
+        self._debounce_id = None
+        if time.monotonic() < self._suppress_until:
+            return False
+        added = self._do_capture()
+        # Notify open popup so it updates in real time
+        if added and self._popup_notify:
+            try:
+                self._popup_notify()
+            except Exception:
+                pass
+        return False
+
+    def _do_capture(self) -> bool:
+        """Read clipboard and add new content to history. Returns True if added."""
+        try:
+            pixbuf = self._clipboard.wait_for_image()
+            if pixbuf is not None:
+                h = _pixbuf_hash(pixbuf)
+                if h and h != self._last_hash:
+                    self._last_hash = h
+                    return self._history.add_image(pixbuf)
+                return False
+            text = self._clipboard.wait_for_text()
+            if text:
+                h = _text_hash(text)
+                if h != self._last_hash:
+                    self._last_hash = h
+                    return self._history.add_text(text)
+        except Exception:
+            pass
+        return False
+
+# ---------------------------------------------------------------------------
+# Popup
+# ---------------------------------------------------------------------------
+
+class ClipboardPopup(Gtk.Window):
+
+    def __init__(self, history: ClipboardHistory):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self._history = history
+
+        self.set_title('Clipboard History')
+        self.set_decorated(False)
+        self.set_default_size(POPUP_WIDTH, POPUP_HEIGHT)
+        self.set_keep_above(True)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        # No focus-out-event → destroy: closing only via Esc / ✕ / item select.
+
+        self._apply_css()
+        self._position_window()
+        self._build_ui()
+        self.connect('key-press-event', self._on_key_press)
+        self.show_all()
+        self._search.grab_focus()
+
+    def _apply_css(self):
+        css = b"""
+        window { border: 1px solid @borders; border-radius: 8px; background-color: @theme_bg_color; }
+        .cb-header { background-color: @theme_selected_bg_color; padding: 8px 10px; border-radius: 8px 8px 0 0; }
+        .cb-title  { color: @theme_selected_fg_color; font-weight: bold; font-size: 13px; }
+        .cb-hbtn   { color: @theme_selected_fg_color; background: none; border: none; padding: 0 4px; font-size: 11px; min-height: 0; min-width: 0; }
+        .cb-item   { padding: 5px 8px; border-bottom: 1px solid alpha(@borders, 0.4); }
+        .cb-item:selected { background-color: alpha(@theme_selected_bg_color, 0.18); }
+        .cb-text   { font-size: 12px; }
+        .cb-ts     { font-size: 10px; color: alpha(@theme_fg_color, 0.45); }
+        .cb-footer { padding: 3px 8px; font-size: 10px; color: alpha(@theme_fg_color, 0.5); }
+        """
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    def _position_window(self):
+        if _is_wayland():
+            self.set_position(Gtk.WindowPosition.CENTER)
+        else:
+            screen = Gdk.Screen.get_default()
+            geo = screen.get_monitor_geometry(screen.get_primary_monitor())
+            self.move(
+                geo.x + geo.width  - POPUP_WIDTH  - MARGIN,
+                geo.y + geo.height - POPUP_HEIGHT - MARGIN)
+
+    def _build_ui(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.add(root)
+
+        # Header
+        inner = Gtk.Box(spacing=6)
+        inner.get_style_context().add_class('cb-header')
+        title = Gtk.Label(label='📋  Clipboard History', xalign=0)
+        title.get_style_context().add_class('cb-title')
+        clear_btn = Gtk.Button(label='Clear all')
+        clear_btn.get_style_context().add_class('cb-hbtn')
+        clear_btn.connect('clicked', self._on_clear_all)
+        close_btn = Gtk.Button(label='✕')
+        close_btn.get_style_context().add_class('cb-hbtn')
+        close_btn.connect('clicked', lambda *_: self.destroy())
+        inner.pack_start(title, True, True, 0)
+        inner.pack_end(close_btn, False, False, 0)
+        inner.pack_end(clear_btn, False, False, 0)
+
+        hdr_eb = Gtk.EventBox()
+        hdr_eb.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        hdr_eb.add(inner)
+        hdr_eb.connect('button-press-event', self._on_drag)
+        root.pack_start(hdr_eb, False, False, 0)
+
+        # Search
+        self._search = Gtk.SearchEntry()
+        self._search.set_placeholder_text('Search…')
+        self._search.set_margin_start(8); self._search.set_margin_end(8)
+        self._search.set_margin_top(5);   self._search.set_margin_bottom(3)
+        self._search.connect('search-changed', lambda *_: self._rebuild())
+        root.pack_start(self._search, False, False, 0)
+
+        # List
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        self._listbox = Gtk.ListBox()
+        self._listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._listbox.connect('row-activated', self._on_activate)
+        scroll.add(self._listbox)
+        root.pack_start(scroll, True, True, 0)
+
+        # Footer
+        self._footer = Gtk.Label(label='', xalign=0)
+        self._footer.get_style_context().add_class('cb-footer')
+        self._footer.set_margin_start(8)
+        root.pack_start(self._footer, False, False, 0)
+
+        self._rebuild()
+
+    def _rebuild(self):
+        query = self._search.get_text().strip().lower()
+        entries = self._history.all_entries()
+        filtered = [
+            (i, e) for i, e in enumerate(entries)
+            if not query
+            or (e.type == 'text' and query in e.text.lower())
+            or (e.type == 'image' and 'image' in query)
+        ]
+        for child in self._listbox.get_children():
+            self._listbox.remove(child)
+        for orig_idx, entry in filtered:
+            self._listbox.add(self._make_row(orig_idx, entry))
+        self._listbox.show_all()
+        n = len(entries); s = len(filtered)
+        self._footer.set_text(f'{s}/{n} items' if query else
+                              f'{n} item{"s" if n != 1 else ""}')
+
+    def _make_row(self, orig_idx: int, entry: ClipboardEntry) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        row._orig_idx = orig_idx
+        row.get_style_context().add_class('cb-item')
+
+        hbox = Gtk.Box(spacing=6)
+
+        pin_lbl = Gtk.Label(label='📌' if entry.pinned else '', xalign=0)
+        pin_lbl.set_width_chars(2)
+        hbox.pack_start(pin_lbl, False, False, 0)
+
+        if entry.type == 'image':
+            content = self._image_widget(entry.image_path)
+        else:
+            preview = entry.text[:PREVIEW_CHARS].replace('\n', '↵').replace('\t', '→')
+            if len(entry.text) > PREVIEW_CHARS:
+                preview += '…'
+            content = Gtk.Label(label=preview, xalign=0)
+            content.set_line_wrap(True)
+            content.set_line_wrap_mode(2)
+            content.set_max_width_chars(36)
+            content.set_lines(3)
+            content.get_style_context().add_class('cb-text')
+        hbox.pack_start(content, True, True, 0)
+
+        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        right.set_valign(Gtk.Align.START)
+        ts_lbl = Gtk.Label(label=_fmt_time(entry.timestamp), xalign=1)
+        ts_lbl.get_style_context().add_class('cb-ts')
+        right.pack_start(ts_lbl, False, False, 0)
+        btn_box = Gtk.Box()
+        pin_btn = Gtk.Button(label='🔓' if entry.pinned else '📌')
+        pin_btn.set_relief(Gtk.ReliefStyle.NONE)
+        pin_btn.connect('clicked', self._on_pin, orig_idx)
+        del_btn = Gtk.Button(label='✕')
+        del_btn.set_relief(Gtk.ReliefStyle.NONE)
+        del_btn.connect('clicked', self._on_delete, orig_idx)
+        btn_box.pack_start(pin_btn, False, False, 0)
+        btn_box.pack_start(del_btn, False, False, 0)
+        right.pack_start(btn_box, False, False, 0)
+        hbox.pack_end(right, False, False, 0)
+
+        row.add(hbox)
+        return row
+
+    def _image_widget(self, image_path: str) -> Gtk.Widget:
+        box = Gtk.Box(spacing=6)
+        if image_path and Path(image_path).exists():
+            try:
+                pb = GdkPixbuf.Pixbuf.new_from_file(image_path)
+                w, h = pb.get_width(), pb.get_height()
+                if h > 0:
+                    nw = max(1, int(w * THUMB_HEIGHT / h))
+                    pb = pb.scale_simple(nw, THUMB_HEIGHT, GdkPixbuf.InterpType.BILINEAR)
+                box.pack_start(Gtk.Image.new_from_pixbuf(pb), False, False, 0)
+            except Exception:
+                pass
+        lbl = Gtk.Label(label='🖼 Image', xalign=0)
+        lbl.get_style_context().add_class('cb-text')
+        box.pack_start(lbl, False, False, 0)
+        return box
+
+    # ---- Actions ----
+
+    def _do_copy(self, orig_idx: int):
+        entries = self._history.all_entries()
+        if 0 <= orig_idx < len(entries):
+            e = entries[orig_idx]
+            if _active_monitor:
+                _active_monitor.suppress(1000)
+            if e.type == 'text':
+                _set_clipboard_text(e.text)
+            elif e.type == 'image' and e.image_path:
+                _set_clipboard_image(e.image_path)
+
+    def _on_activate(self, listbox, row):
+        self._do_copy(row._orig_idx)
+        if _has_auto_paste_tool():
+            # Close popup first so focus returns to previous app, then paste
+            self.destroy()
+            threading.Thread(target=_try_auto_paste, daemon=True).start()
+        else:
+            # Show brief "Copied!" status then close
+            self._footer.set_text('✓ Copied — press Ctrl+V to paste')
+            GLib.timeout_add(500, self.destroy)
+
+    def _on_pin(self, btn, orig_idx):
+        self._history.toggle_pin(orig_idx)
+        self._rebuild()
+
+    def _on_delete(self, btn, orig_idx):
+        if _active_monitor:
+            _active_monitor.suppress(1000)
+        self._history.delete(orig_idx)
+        self._rebuild()
+
+    def _on_clear_all(self, btn):
+        dlg = Gtk.MessageDialog(transient_for=self, flags=Gtk.DialogFlags.MODAL,
+                                message_type=Gtk.MessageType.QUESTION,
+                                buttons=Gtk.ButtonsType.YES_NO,
+                                text='Clear all unpinned items?')
+        dlg.format_secondary_text('Pinned items will be kept.')
+        resp = dlg.run()
+        dlg.destroy()
+        if resp == Gtk.ResponseType.YES:
+            if _active_monitor:
+                _active_monitor.suppress(500)
+            self._history.clear_unpinned()
+            self._rebuild()
+
+    # ---- Keyboard ----
+
+    def _on_key_press(self, widget, event):
+        k = event.keyval
+        if k == Gdk.KEY_Escape:
+            self.destroy(); return True
+        if k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            row = self._listbox.get_selected_row()
+            if row:
+                self._do_copy(row._orig_idx)
+                if _has_auto_paste_tool():
+                    self.destroy()
+                    threading.Thread(target=_try_auto_paste, daemon=True).start()
+                else:
+                    self._footer.set_text('✓ Copied — press Ctrl+V to paste')
+                    GLib.timeout_add(500, self.destroy)
+                return True
+        if k == Gdk.KEY_Up:
+            self._move_sel(-1); return True
+        if k == Gdk.KEY_Down:
+            self._move_sel(1); return True
+        return False
+
+    def _move_sel(self, d: int):
+        rows = self._listbox.get_children()
+        if not rows: return
+        sel = self._listbox.get_selected_row()
+        idx = rows.index(sel) if sel in rows else (-1 if d > 0 else len(rows))
+        self._listbox.select_row(rows[max(0, min(len(rows) - 1, idx + d))])
+
+    def _on_drag(self, widget, event):
+        if event.button == 1:
+            self.begin_move_drag(event.button, int(event.x_root),
+                                 int(event.y_root), event.time)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _fmt_time(ts: float) -> str:
+    diff = time.time() - ts
+    if diff < 60:   return 'just now'
+    if diff < 3600: return f'{int(diff/60)}m ago'
+    if diff < 86400: return time.strftime('%H:%M', time.localtime(ts))
+    return time.strftime('%d/%m', time.localtime(ts))
+
+# ---------------------------------------------------------------------------
+# IPC server (shared by daemon and show-mode singleton)
+# ---------------------------------------------------------------------------
+
+class PopupServer:
+    """Unix socket server: accepts SHOW commands → creates / raises popup."""
+
+    def __init__(self, history: ClipboardHistory):
+        self._history = history
+        self._popup_ref: Optional[ClipboardPopup] = None
+        self._sock: Optional[socket.socket] = None
+
+    def start(self):
+        if SOCKET_PATH.exists():
+            # Check if stale (nobody listening)
+            try:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.settimeout(0.5)
+                s.connect(str(SOCKET_PATH))
+                s.close()
+                # Socket is live — someone else is already running
+                raise RuntimeError('socket in use')
+            except (ConnectionRefusedError, FileNotFoundError, socket.timeout):
+                SOCKET_PATH.unlink(missing_ok=True)
+        self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._sock.bind(str(SOCKET_PATH))
+        self._sock.listen(5)
+        threading.Thread(target=self._accept_loop, daemon=True).start()
+
+    def stop(self):
+        if self._sock:
+            try: self._sock.close()
+            except Exception: pass
+        SOCKET_PATH.unlink(missing_ok=True)
+
+    def _accept_loop(self):
+        while True:
+            try:
+                conn, _ = self._sock.accept()
+                data = conn.recv(64).strip()
+                conn.close()
+                if data == b'SHOW':
+                    GLib.idle_add(self.show_popup)
+            except Exception:
+                break
+
+    def show_popup(self) -> bool:
+        """Raise existing popup or create a new one (called from GTK main loop)."""
+        if self._popup_ref is not None:
+            try:
+                if self._popup_ref.get_realized():
+                    # Capture before rebuilding so "open again" always shows latest
+                    if _active_monitor:
+                        _active_monitor.capture_now()
+                    self._popup_ref._rebuild()
+                    self._popup_ref.present()
+                    return False
+            except Exception:
+                pass
+            self._popup_ref = None
+
+        # Fresh popup — do NOT capture here; wait for the 'map' signal instead.
+        # On Wayland, wait_for_text() requires the surface to be mapped first.
+        popup = ClipboardPopup(self._history)
+        popup.connect('destroy', lambda *_: self._on_popup_closed())
+        popup.connect('map', lambda *_: self._on_popup_mapped())
+        self._popup_ref = popup
+
+        # Register popup for real-time clipboard updates
+        if _active_monitor:
+            _active_monitor.set_popup_notify(self._refresh_popup)
+
+        return False
+
+    def _on_popup_mapped(self):
+        """Called after popup window is shown on screen — safe to read clipboard now."""
+        if _active_monitor:
+            _active_monitor.capture_now()
+        self._refresh_popup()
+
+    def _refresh_popup(self):
+        if self._popup_ref and self._popup_ref.get_realized():
+            try:
+                self._popup_ref._rebuild()
+            except Exception:
+                pass
+
+    def _on_popup_closed(self):
+        self._popup_ref = None
+        if _active_monitor:
+            _active_monitor.set_popup_notify(None)
+
+
+def _send_show() -> bool:
+    """Signal an existing popup server. Returns True if acknowledged."""
+    if not SOCKET_PATH.exists():
+        return False
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(1.0)
+        s.connect(str(SOCKET_PATH))
+        s.sendall(b'SHOW\n')
+        s.close()
+        return True
+    except Exception:
+        return False
+
+# ---------------------------------------------------------------------------
+# X11 global hotkey
+# ---------------------------------------------------------------------------
+
+def _start_x11_hotkey(on_trigger):
+    try:
+        from Xlib import X
+        from Xlib.display import Display
+        disp = Display()
+        root = disp.screen().root
+        kc = disp.keysym_to_keycode(ord('v'))
+        MOD = X.ControlMask | X.Mod4Mask
+        for extra in (0, X.Mod2Mask):
+            root.grab_key(kc, MOD | extra, True, X.GrabModeAsync, X.GrabModeAsync)
+        disp.sync()
+        def _loop():
+            while True:
+                ev = disp.next_event()
+                if ev.type == X.KeyPress:
+                    GLib.idle_add(on_trigger)
+        threading.Thread(target=_loop, daemon=True).start()
+        print('X11 hotkey: Ctrl+Super+V active', flush=True)
+    except Exception as e:
+        print(f'X11 hotkey unavailable: {e}', flush=True)
+
+# ---------------------------------------------------------------------------
+# Entry points
+# ---------------------------------------------------------------------------
+
+def run_daemon():
+    """Persistent background daemon: monitors clipboard + serves SHOW."""
+    global _active_monitor
+    history = ClipboardHistory()
+    _active_monitor = ClipboardMonitor(history)
+
+    server = PopupServer(history)
+    server.start()
+
+    if not _is_wayland():
+        _start_x11_hotkey(server.show_popup)
+
+    def _init():
+        # Capture current clipboard once GTK main loop is running
+        _active_monitor.capture_now()
+        return False
+
+    GLib.idle_add(_init)
+
+    def _cleanup(*_):
+        server.stop()
+        Gtk.main_quit()
+
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGINT,  _cleanup)
+    print(f'farolkey-clipboard daemon (socket: {SOCKET_PATH})', flush=True)
+    Gtk.main()
+    server.stop()
+
+
+def run_show():
+    """Show popup. Signals existing server if any; otherwise becomes the singleton."""
+    global _active_monitor
+
+    # Signal existing daemon / popup process
+    if _send_show():
+        return
+
+    # We are the singleton for this session
+    history = ClipboardHistory()
+    _active_monitor = ClipboardMonitor(history)
+
+    server = PopupServer(history)
+    try:
+        server.start()
+    except RuntimeError:
+        # Another process just bound the socket between our check and bind
+        if _send_show():
+            return
+        # Give up and create popup without server (edge case)
+
+    quit_timer: list[Optional[int]] = [None]
+
+    def _cancel_quit():
+        if quit_timer[0] is not None:
+            GLib.source_remove(quit_timer[0])
+            quit_timer[0] = None
+
+    def _schedule_quit():
+        _cancel_quit()
+        def _do_quit():
+            if server._popup_ref is None:
+                server.stop()
+                Gtk.main_quit()
+            return False
+        quit_timer[0] = GLib.timeout_add(2000, _do_quit)
+
+    # Patch server to hook quit logic into popup lifecycle
+    _orig_on_closed = server._on_popup_closed
+    def _hooked_on_closed():
+        _orig_on_closed()
+        _schedule_quit()
+    server._on_popup_closed = _hooked_on_closed
+
+    _orig_show = server.show_popup
+    def _hooked_show() -> bool:
+        _cancel_quit()
+        return _orig_show()
+    server.show_popup = _hooked_show
+    # Update accept_loop reference
+    server.__class__.show_popup = lambda self: _hooked_show()
+
+    def _init():
+        _hooked_show()  # capture + create popup
+        return False
+
+    GLib.idle_add(_init)
+
+    def _cleanup(*_):
+        server.stop()
+        Gtk.main_quit()
+
+    signal.signal(signal.SIGTERM, _cleanup)
+    signal.signal(signal.SIGINT,  _cleanup)
+    Gtk.main()
+    server.stop()
+
+
+if __name__ == '__main__':
+    mode = sys.argv[1] if len(sys.argv) > 1 else '--show'
+    if mode == '--daemon':
+        run_daemon()
+    else:
+        run_show()
