@@ -456,6 +456,13 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         if (preeditBuffer_.empty()) {
             return r;
         }
+        // Normalize before commit: converts intermediate states like "đuợc" → "được"
+        // (normalizeTelexBuffer only runs on keypress, not at commit time).
+        if (config_.method == farolkey::core::InputMethod::Telex) {
+            auto decoded = decodeUtf8Normalized(preeditBuffer_);
+            vi_syllable::normalizeTelexBuffer(decoded);
+            preeditBuffer_ = encodeUtf8(decoded);
+        }
         // M8.2/M13: user dict / abbreviation expansion.
         // Expansion fires on word-boundary keys (space, enter, tab).
         // In Vietnamese mode only Vi/Both entries expand; password fields are skipped.
@@ -615,8 +622,14 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             clearRepeatTransformState();
             clearPendingLiteralEscape();
             return ProcessResult{};
-        case KeyAux::Enter:
-            return commitWithSuffix("\n");
+        case KeyAux::Enter: {
+            // Commit preedit but do NOT consume Enter — let the app create the newline.
+            // commitWithSuffix("\n") embeds '\n' in the commit string which many apps
+            // ignore (they need the actual key event to produce a newline).
+            auto r = commitWithSuffix("");
+            r.consumed = false;  // forward Enter to application
+            return r;
+        }
         case KeyAux::Tab:
             return commitWithSuffix("\t");
     }
