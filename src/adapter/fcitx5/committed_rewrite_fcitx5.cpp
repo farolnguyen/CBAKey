@@ -8,8 +8,6 @@
 #include <fcitx/inputcontext.h>
 #include <fcitx/surroundingtext.h>
 #include <fcitx-utils/capabilityflags.h>
-#include <fcitx-utils/key.h>
-#include <fcitx-utils/keysym.h>
 
 #include "farolkey/adapter/fcitx5/surrounding_cursor_normalize.h"
 #include "farolkey/core/engine.h"
@@ -198,51 +196,16 @@ bool isCommittedRewriteTrigger(const farolkey::config::RuntimeConfig& config,
     return false;
 }
 
-/// Count UTF-8 codepoints in \p s (used to determine how many Backspaces to emit).
-int codepointCount(const std::string& s) {
-    int n = 0;
-    for (std::size_t i = 0; i < s.size(); ) {
-        const unsigned char c = static_cast<unsigned char>(s[i]);
-        if      ((c & 0x80U) == 0U)   { i += 1; }
-        else if ((c & 0xE0U) == 0xC0U){ i += 2; }
-        else if ((c & 0xF0U) == 0xE0U){ i += 3; }
-        else                           { i += 4; }
-        ++n;
-    }
-    return n;
-}
-
 }  // namespace
 
 bool tryApplyCommittedSyllableRewrite(fcitx::InputContext* ic,
                                       const farolkey::config::RuntimeConfig& config,
-                                      const farolkey::core::KeyEvent& event,
-                                      const std::string& fallbackToken) {
+                                      const farolkey::core::KeyEvent& event) {
     if (!ic || !config.fcitx5CommittedRewrite || !isCommittedRewriteTrigger(config, event)) {
         return false;
     }
     if (!ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText)) {
-        // ── Fallback: no SurroundingText (Chrome/Electron contenteditable) ────────
-        // Use the last word committed by the IME as the token to rewrite.
-        // We emit N Backspaces to delete it, then commit the rewritten form.
-        // This is safe only when the cursor is immediately after the committed token
-        // (the most common case: user just committed a word and immediately rewrites it).
-        if (fallbackToken.empty()) {
-            return false;
-        }
-        const auto rewritten = farolkey::core::Engine::tryRewriteCommittedSyllable(
-            config, fallbackToken, event);
-        if (!rewritten) {
-            return false;
-        }
-        const int nChars = codepointCount(fallbackToken);
-        const fcitx::Key bsKey{FcitxKey_BackSpace, fcitx::KeyStates()};
-        for (int i = 0; i < nChars; ++i) {
-            ic->forwardKey(bsKey, /*isRelease=*/false);
-            ic->forwardKey(bsKey, /*isRelease=*/true);
-        }
-        ic->commitString(*rewritten);
-        return true;
+        return false;
     }
     // Ask fcitx to emit SurroundingTextUpdatedEvent so flaky clients (e.g. Electron/Teams) may
     // refresh cached surrounding before we read it.

@@ -31,16 +31,11 @@ public:
     /// M13: look up an En/Both abbreviation trigger (for English-mode surrounding-text rewrite).
     const farolkey::core::UserDictEntry* lookupEnglishAbbrev(const std::string& trigger) const;
 
-    /// Returns the last Vietnamese word committed by the IME (without trailing space/punct).
-    /// Used as fallback for committed-rewrite when SurroundingText is not available.
-    const std::string& lastCommittedViWord() const { return lastCommittedViWord_; }
-
 private:
     farolkey::config::RuntimeConfig config_;
     farolkey::core::Engine engine_;
     std::string preedit_;
     std::vector<std::string> committed_;
-    std::string lastCommittedViWord_;   // last VI-mode word committed (no suffix)
 };
 
 Bridge createBridgeFromConfigFile(const std::string& configPath);

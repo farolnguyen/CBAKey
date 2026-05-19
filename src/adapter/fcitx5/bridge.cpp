@@ -9,23 +9,6 @@ farolkey::core::ProcessResult Bridge::handleKey(const farolkey::core::KeyEvent& 
     preedit_ = result.preedit;
     if (!result.commit.empty()) {
         committed_.push_back(result.commit);
-        // Track the last committed Vietnamese word (strip trailing space/punct suffix)
-        // for use as a fallback in committed-rewrite when SurroundingText is absent.
-        if (!result.smartTemplateExpansion) {
-            std::string word = result.commit;
-            while (!word.empty() &&
-                   (word.back() == ' ' || word.back() == '\n' || word.back() == '\t')) {
-                word.pop_back();
-            }
-            if (!word.empty()) {
-                lastCommittedViWord_ = std::move(word);
-            }
-        }
-    } else if (!result.preedit.empty()) {
-        // New preedit started — old lastCommittedViWord still valid until next commit.
-    } else if (result.consumed && result.commit.empty() && result.preedit.empty()) {
-        // A non-commit key consumed (e.g. Backspace on empty buffer) — invalidate word.
-        lastCommittedViWord_.clear();
     }
     return result;
 }
