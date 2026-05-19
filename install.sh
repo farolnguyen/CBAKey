@@ -56,6 +56,7 @@ PKGS=(
     gnome-screenshot      # Screen capture on GNOME Wayland
     grim                  # Screen capture on wlroots Wayland (Sway/Hyprland)
     slurp                 # Region selector on wlroots Wayland
+    maim                  # Screen capture on X11
     python3-pynput        # Global hotkey listener
 
     # X11 global hotkey (Clipboard History Ctrl+Super+V on X11 sessions)
