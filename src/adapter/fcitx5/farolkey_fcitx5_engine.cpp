@@ -180,31 +180,6 @@ public:
         enIconPath_ = std::move(en);
         loadConfig();
         setupActions();
-
-        // Subscribe to cross-window focus changes.
-        // FocusGroupFocusChangedEvent fires on both X11 and Wayland whenever any
-        // InputContext loses focus — including Alt+Tab, keyboard-driven switches,
-        // and cross-app clicks.  This covers cases where reset()/deactivate() are
-        // not called because the IC is already unfocused.
-        focusChangeConn_ = instance_->watchEvent(
-            fcitx::EventType::FocusGroupFocusChanged,
-            fcitx::EventWatcherPhase::Default,
-            [this](fcitx::Event& e) {
-                auto& ev = static_cast<fcitx::FocusGroupFocusChangedEvent&>(e);
-                fcitx::InputContext* oldIc = ev.oldFocus();
-                if (!oldIc) return;
-                auto it = bridges_.find(oldIc);
-                if (it == bridges_.end()) return;
-                // Commit panel preedit before clearing state.
-                // Client preedit: the IM module in the app already commits it.
-                // Panel preedit: nothing commits it automatically → do it here.
-                commitPanelPreeditIfNeeded(oldIc, it->second);
-                pushPreedit(oldIc, "",
-                            it->second.config().fcitx5PreeditMode,
-                            config_.showPreeditUnderline.value());
-                composeAnchors_.erase(oldIc);
-                interceptor_->stopIntercepting();
-            });
     }
 
     ~FarolKeyFcitx5Engine() override {
@@ -297,8 +272,7 @@ public:
         const bool underline = config_.showPreeditUnderline.value();
 
         if (br.inputMode() == farolkey::core::InputMode::Vietnamese && br.preedit().empty()) {
-            if (farolkey::adapter::fcitx5::tryApplyCommittedSyllableRewrite(
-                    ic, br.config(), ev, br.lastCommittedViWord())) {
+            if (farolkey::adapter::fcitx5::tryApplyCommittedSyllableRewrite(ic, br.config(), ev)) {
                 pushPreedit(ic, "", br.config().fcitx5PreeditMode, underline);
                 keyEvent.filterAndAccept();
                 return;
@@ -343,11 +317,10 @@ public:
                 interceptor_->startIntercepting([this, ic]() {
                     auto it = bridges_.find(ic);
                     if (it == bridges_.end()) return;
-                    // Commit panel preedit here (fires before the click reaches the app).
-                    // Client preedit: fcitx5-gtk commits when it receives the "preedit cleared"
-                    //   notification — do NOT call commitString here (would double-commit).
-                    // Panel preedit: preedit lives in fcitx5 panel only, app has no copy;
-                    //   must commit manually before click proceeds to the new window.
+                    // Panel preedit: commit before the click reaches the new window.
+                    // Client preedit: fcitx5-gtk commits when it receives the
+                    //   "preedit cleared" signal — do NOT also call commitString
+                    //   (would double-commit: "koko" instead of "ko").
                     commitPanelPreeditIfNeeded(ic, it->second);
                     pushPreedit(ic, "", it->second.config().fcitx5PreeditMode,
                                 config_.showPreeditUnderline.value());
@@ -758,7 +731,6 @@ private:
     std::unordered_map<fcitx::InputContext*, farolkey::adapter::fcitx5::ComposeAnchorSnapshot>
                                                                                     composeAnchors_;
     std::unique_ptr<farolkey::adapter::fcitx5::X11ClickInterceptor>                  interceptor_;
-    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>                  focusChangeConn_;
 
     // Mode icon paths (SVG files written to ~/.cache/farolkey/ at startup)
     std::string viIconPath_;
