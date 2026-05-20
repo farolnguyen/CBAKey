@@ -401,7 +401,15 @@ ProcessResult Engine::processKey(const KeyEvent& event) {
 
     // Common application shortcuts (copy/paste, word navigation, etc.) should
     // bypass IME processing unless they are our explicit toggle hotkey.
+    // If preedit is active, commit it first so the app works on complete text
+    // (e.g. Ctrl+A selects all including the just-committed word).
     if (event.ctrl || event.alt) {
+        if (!preeditBuffer_.empty()) {
+            ProcessResult r;
+            r.commit   = takeCompositionForCommit();
+            r.consumed = false;   // let the Ctrl/Alt shortcut reach the app
+            return r;
+        }
         return ProcessResult{};
     }
 
@@ -566,11 +574,16 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         return ProcessResult{.preedit = preeditBuffer_, .commit = committedPrefix, .consumed = true};
     };
 
+    // VNI + numpad digit: digits on the numpad should never be treated as VNI
+    // tone/diacritic modifiers — they must always produce the literal digit.
+    // Commit any pending preedit first, then forward the key to the app.
     if (config_.method == farolkey::core::InputMethod::Vni && event.key_from_keypad &&
         event.aux == KeyAux::None && event.key != '\0' &&
-        std::isdigit(static_cast<unsigned char>(event.key)) != 0 && !preeditBuffer_.empty()) {
+        std::isdigit(static_cast<unsigned char>(event.key)) != 0) {
         ProcessResult r;
-        r.commit = takeCompositionForCommit();
+        if (!preeditBuffer_.empty()) {
+            r.commit = takeCompositionForCommit();
+        }
         r.consumed = true;
         r.forwardOriginalKey = true;
         return r;

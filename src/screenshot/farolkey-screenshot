@@ -55,6 +55,7 @@ _DEFAULTS = {
     'ask_before_save': 'true',
     'auto_save':       'false',
     'hotkey':          'super+shift+s',
+    'capture_mode':    'all',   # 'all' = all monitors (letterboxed) | 'cursor' = monitor with cursor
 }
 
 def load_conf() -> dict:
@@ -93,40 +94,101 @@ _GNOME_SS  = shutil.which('gnome-screenshot')
 class CaptureError(Exception):
     pass
 
-def capture_fullscreen() -> bytes:
+def _get_all_monitors_bounds():
+    """Return (x, y, total_width, total_height) of the bounding box of all monitors."""
+    display = Gdk.Display.get_default()
+    n = display.get_n_monitors()
+    if n == 0:
+        m = display.get_primary_monitor() or display.get_monitor(0)
+        geo = m.get_geometry()
+        return geo.x, geo.y, geo.width, geo.height
+    min_x = min_y = float('inf')
+    max_x = max_y = float('-inf')
+    for i in range(n):
+        geo = display.get_monitor(i).get_geometry()
+        min_x = min(min_x, geo.x)
+        min_y = min(min_y, geo.y)
+        max_x = max(max_x, geo.x + geo.width)
+        max_y = max(max_y, geo.y + geo.height)
+    return int(min_x), int(min_y), int(max_x - min_x), int(max_y - min_y)
+
+def _get_cursor_monitor_bounds():
+    """Return (x, y, width, height) of the monitor containing the pointer."""
+    display = Gdk.Display.get_default()
+    seat    = display.get_default_seat()
+    pointer = seat.get_pointer()
+    _, cx, cy = pointer.get_position()
+    monitor = display.get_monitor_at_point(cx, cy)
+    if monitor is None:
+        monitor = display.get_primary_monitor() or display.get_monitor(0)
+    geo = monitor.get_geometry()
+    return geo.x, geo.y, geo.width, geo.height
+
+def _gnome_capture(x: int, y: int, w: int, h: int) -> bytes:
+    """Capture a specific rectangle via gnome-screenshot or gdbus area screenshot."""
+    import tempfile
+    fd, tmp = tempfile.mkstemp(suffix='.png')
+    os.close(fd)
+    try:
+        # Try gdbus ScreenshotArea first (more precise for multi-monitor)
+        r = subprocess.run(
+            ['gdbus', 'call', '--session',
+             '--dest', 'org.gnome.Shell',
+             '--object-path', '/org/gnome/Shell/Screenshot',
+             '--method', 'org.gnome.Shell.Screenshot.ScreenshotArea',
+             str(x), str(y), str(w), str(h), 'false', tmp],
+            capture_output=True, timeout=10,
+        )
+        if r.returncode == 0 and Path(tmp).stat().st_size > 0:
+            return Path(tmp).read_bytes()
+        # Fallback: full screenshot via gnome-screenshot
+        if not _GNOME_SS:
+            raise CaptureError(
+                'GNOME Wayland cần gnome-screenshot.\n'
+                'Cài đặt: sudo apt install gnome-screenshot'
+            )
+        r2 = subprocess.run([_GNOME_SS, '--file', tmp],
+                            capture_output=True, timeout=10)
+        if r2.returncode != 0:
+            raise CaptureError(f'gnome-screenshot failed: {r2.stderr.decode().strip()}')
+        data = Path(tmp).read_bytes()
+        if not data:
+            raise CaptureError('gnome-screenshot returned empty file')
+        return data
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+def capture_fullscreen(capture_mode: str = 'all') -> bytes:
+    """Capture screenshot.
+    capture_mode='all'    — all monitors combined (default)
+    capture_mode='cursor' — only the monitor containing the cursor
+    """
+    if capture_mode == 'cursor':
+        x, y, w, h = _get_cursor_monitor_bounds()
+    else:
+        x, y, w, h = _get_all_monitors_bounds()
+
     if _IS_WAYLAND:
         if _IS_GNOME:
-            if not _GNOME_SS:
-                raise CaptureError(
-                    'GNOME Wayland cần gnome-screenshot.\n'
-                    'Cài đặt: sudo apt install gnome-screenshot'
-                )
-            import tempfile
-            fd, tmp = tempfile.mkstemp(suffix='.png')
-            os.close(fd)
-            try:
-                r = subprocess.run([_GNOME_SS, '--file', tmp],
-                                   capture_output=True, timeout=10)
-                if r.returncode != 0:
-                    raise CaptureError(
-                        f'gnome-screenshot failed: {r.stderr.decode().strip()}'
-                    )
-                data = Path(tmp).read_bytes()
-                if not data:
-                    raise CaptureError('gnome-screenshot returned empty file')
-                return data
-            finally:
-                if os.path.exists(tmp):
-                    os.unlink(tmp)
+            return _gnome_capture(x, y, w, h)
         if _GRIM:
-            r = subprocess.run([_GRIM, '-'], capture_output=True)
+            # grim supports -g "x,y WxH" for specific region
+            geo_arg = f'{x},{y} {w}x{h}'
+            r = subprocess.run([_GRIM, '-g', geo_arg, '-'], capture_output=True)
             if r.returncode != 0:
                 raise CaptureError(f'grim failed: {r.stderr.decode().strip()}')
             return r.stdout
         raise CaptureError('Cần cài grim: sudo apt install grim')
     if _MAIM:
-        # maim outputs PNG to stdout when no filename is given (don't pass '-')
-        r = subprocess.run([_MAIM], capture_output=True)
+        if capture_mode == 'cursor':
+            # maim supports --geometry=WxH+X+Y
+            r = subprocess.run(
+                [_MAIM, f'--geometry={w}x{h}+{x}+{y}'],
+                capture_output=True,
+            )
+        else:
+            r = subprocess.run([_MAIM], capture_output=True)
         if r.returncode != 0 or not r.stdout:
             raise CaptureError(f'maim failed: {r.stderr.decode().strip()}')
         return r.stdout
@@ -331,8 +393,22 @@ class CaptureReviewOverlay(Gtk.Window):
         loader = GdkPixbuf.PixbufLoader()
         loader.write(screenshot_bytes)
         loader.close()
-        self._pb    = loader.get_pixbuf()
-        self._scale = self._pb.get_width() / self._sw()
+        self._pb = loader.get_pixbuf()
+
+        # Calculate display dimensions and scale factor.
+        # For multi-monitor screenshots the pixbuf may be wider than one monitor.
+        # We letterbox (fit inside monitor, preserve aspect ratio) so the image
+        # is never stretched/squished regardless of monitor count.
+        mon_w, mon_h = self._sw(), self._sh()
+        pb_w, pb_h   = self._pb.get_width(), self._pb.get_height()
+        scale_fit    = min(mon_w / pb_w, mon_h / pb_h)
+        disp_w       = int(pb_w * scale_fit)
+        disp_h       = int(pb_h * scale_fit)
+        # Offset to center the letterboxed image on the monitor
+        self._offset_x = (mon_w - disp_w) // 2
+        self._offset_y = (mon_h - disp_h) // 2
+        # scale from display coords → pixbuf coords
+        self._scale    = pb_w / disp_w
 
         # CSS
         css = Gtk.CssProvider()
@@ -349,11 +425,14 @@ class CaptureReviewOverlay(Gtk.Window):
         # ── Widgets ───────────────────────────────────────────────────────────
         gtk_ov = Gtk.Overlay()
 
-        # Background: screenshot (slightly dimmed)
+        # Background: letterboxed screenshot centered on black background
         evbox = Gtk.EventBox()
         evbox.set_opacity(0.75)
-        scaled = self._pb.scale_simple(self._sw(), self._sh(), GdkPixbuf.InterpType.BILINEAR)
-        evbox.add(Gtk.Image.new_from_pixbuf(scaled))
+        scaled = self._pb.scale_simple(disp_w, disp_h, GdkPixbuf.InterpType.BILINEAR)
+        img_widget = Gtk.Image.new_from_pixbuf(scaled)
+        img_widget.set_halign(Gtk.Align.CENTER)
+        img_widget.set_valign(Gtk.Align.CENTER)
+        evbox.add(img_widget)
         gtk_ov.add(evbox)
 
         self._fixed = Gtk.Fixed()
@@ -491,6 +570,13 @@ class CaptureReviewOverlay(Gtk.Window):
         self._cy = event.y
         self._update_sel()
 
+    def _display_to_pixbuf(self, dx: float, dy: float):
+        """Convert display (window) coordinates → pixbuf coordinates, clamped."""
+        px = int((dx - self._offset_x) * self._scale)
+        py = int((dy - self._offset_y) * self._scale)
+        pw, ph = self._pb.get_width(), self._pb.get_height()
+        return max(0, min(px, pw)), max(0, min(py, ph))
+
     def _on_release(self, _w, event):
         if event.button != 1 or not self._drag or self._mode != 'selecting' or self._done:
             return
@@ -502,9 +588,9 @@ class CaptureReviewOverlay(Gtk.Window):
         rh = int(abs(event.y - self._sy))
         self.hide()
         if rw > 4 and rh > 4:
-            sx, sy = int(x * self._scale), int(y * self._scale)
-            sw, sh = int(rw * self._scale), int(rh * self._scale)
-            GLib.idle_add(self._crop_and_deliver, sx, sy, sw, sh)
+            sx, sy = self._display_to_pixbuf(x, y)
+            ex, ey = self._display_to_pixbuf(x + rw, y + rh)
+            GLib.idle_add(self._crop_and_deliver, sx, sy, ex - sx, ey - sy)
         else:
             GLib.idle_add(self._quit_clean)
 
@@ -537,7 +623,10 @@ class CaptureReviewOverlay(Gtk.Window):
             self._sel_box.set_size_request(rw, rh)
             self._sel_box.show()
 
-            self._size_lbl.set_text(f' {int(rw * self._scale)} × {int(rh * self._scale)} ')
+            # Size label shows actual pixel dimensions in the original screenshot
+            ex, ey = self._display_to_pixbuf(x + rw, y + rh)
+            sx2, sy2 = self._display_to_pixbuf(x, y)
+            self._size_lbl.set_text(f' {ex - sx2} × {ey - sy2} ')
             lw = self._size_lbl.get_preferred_size()[1].width
             lx = x + rw + 6
             if lx + lw > self._sw():
@@ -605,9 +694,11 @@ def main():
         if direct_region:
             GLib.idle_add(overlay._start_region)
 
+    capture_mode = conf.get('capture_mode', 'all')
+
     def _capture_thread():
         try:
-            png = capture_fullscreen()
+            png = capture_fullscreen(capture_mode)
             GLib.idle_add(_on_captured, png)
         except CaptureError as e:
             GLib.idle_add(show_error, str(e))

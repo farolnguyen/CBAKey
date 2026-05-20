@@ -106,6 +106,39 @@ class SettingsWindow(Gtk.Window):
             hint.set_margin_top(2)
             vbox.pack_start(hint, False, False, 0)
 
+        # ── Section: Chụp màn hình ────────────────────────────────────────────
+        vbox.pack_start(self._section_label('Chụp màn hình'), False, False, 0)
+
+        cap_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        cap_row.set_margin_top(6)
+        cap_lbl = Gtk.Label(label='Chế độ chụp:')
+        cap_lbl.set_xalign(0)
+        cap_lbl.set_size_request(200, -1)
+        cap_row.pack_start(cap_lbl, False, False, 0)
+
+        self._cap_all_radio = Gtk.RadioButton.new_with_label(None,
+            'Tất cả màn hình (letterbox)')
+        self._cap_cursor_radio = Gtk.RadioButton.new_with_label_from_widget(
+            self._cap_all_radio, 'Màn hình chứa con trỏ chuột')
+
+        current_cap = self._conf.get('capture_mode', 'all')
+        if current_cap == 'cursor':
+            self._cap_cursor_radio.set_active(True)
+        else:
+            self._cap_all_radio.set_active(True)
+
+        radio_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        radio_box.pack_start(self._cap_all_radio,    False, False, 0)
+        radio_box.pack_start(self._cap_cursor_radio, False, False, 0)
+        cap_row.pack_start(radio_box, True, True, 0)
+        vbox.pack_start(cap_row, False, False, 0)
+
+        cap_hint = Gtk.Label(label='Mặc định: chụp tất cả màn hình, user kéo chọn vùng (không bị bóp méo)')
+        cap_hint.get_style_context().add_class('hint')
+        cap_hint.set_xalign(0)
+        cap_hint.set_margin_top(2)
+        vbox.pack_start(cap_hint, False, False, 0)
+
         # ── Section: Lưu trữ ─────────────────────────────────────────────────
         vbox.pack_start(self._section_label('Lưu trữ'), False, False, 0)
 
@@ -236,6 +269,7 @@ class SettingsWindow(Gtk.Window):
         self._conf['save_path']       = self._path_entry.get_text().strip()
         self._conf['ask_before_save'] = 'true' if self._ask_switch.get_active() else 'false'
         self._conf['auto_save']       = 'true' if self._auto_switch.get_active() else 'false'
+        self._conf['capture_mode']    = 'cursor' if self._cap_cursor_radio.get_active() else 'all'
         save_conf(self._conf)
 
         hotkey_changed = self._conf['hotkey'] != old_hotkey
