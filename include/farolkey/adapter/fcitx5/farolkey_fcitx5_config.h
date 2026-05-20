@@ -32,6 +32,10 @@ FCITX_CONFIGURATION(
         this, "CommittedRewrite",
         N_("Allow modifying committed text via surrounding-text (experimental)"),
         true};
+
+    fcitx::ExternalOption exportLog{
+        this, "ExportLog", N_("Export log bundle (for bug reports)"),
+        "farolkey-export-log"};
 )
 
 }  // namespace farolkey::adapter::fcitx5

@@ -27,6 +27,16 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+# farolkey_log lives alongside this script (in the same bin/ directory)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from farolkey_log import get_logger as _get_logger, export_log_bundle as _export_log_bundle
+    log = _get_logger('clipboard')
+except Exception:
+    import logging
+    log = logging.getLogger('farolkey.clipboard')
+    _export_log_bundle = None
+
 # ---------------------------------------------------------------------------
 # Paths & constants
 # ---------------------------------------------------------------------------
@@ -423,14 +433,20 @@ class ClipboardMonitor:
                 h = _pixbuf_hash(pixbuf)
                 if h and h != self._last_hash:
                     self._last_hash = h
-                    return self._history.add_image(pixbuf)
+                    added = self._history.add_image(pixbuf)
+                    if added:
+                        log.debug('clipboard captured: image')
+                    return added
                 return False
             text = self._clipboard.wait_for_text()
             if text:
                 h = _text_hash(text)
                 if h != self._last_hash:
                     self._last_hash = h
-                    return self._history.add_text(text)
+                    added = self._history.add_text(text)
+                    if added:
+                        log.debug('clipboard captured: text %d chars', len(text))
+                    return added
         except Exception:
             pass
         return False
@@ -677,10 +693,18 @@ class ClipboardPopup(Gtk.Window):
                 _set_clipboard_image(e.image_path)
 
     def _on_activate(self, listbox, row):
+        entries = self._history.all_entries()
+        if 0 <= row._orig_idx < len(entries):
+            e = entries[row._orig_idx]
+            if e.type == 'text':
+                log.info('item selected: text %d chars', len(e.text))
+            else:
+                log.info('item selected: image')
         self._do_copy(row._orig_idx)
         # Close popup (returns focus to previous app), then send Ctrl+V.
         # 300ms delay: allows WM to complete focus transfer before keypress.
         self.destroy()
+        log.debug('auto-paste launched')
         threading.Thread(target=lambda: _try_auto_paste(300), daemon=True).start()
 
     def _on_pin(self, btn, orig_idx):
@@ -779,6 +803,24 @@ class ClipboardPopup(Gtk.Window):
             hint.get_style_context().add_class('dim-label')
             box.pack_start(hint, False, False, 0)
 
+        box.pack_start(Gtk.Separator(), False, False, 4)
+
+        # ── Debug ─────────────────────────────────────────────────────────────
+        box.pack_start(Gtk.Label(label='Debug:', xalign=0), False, False, 0)
+        debug_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        debug_lbl = Gtk.Label(label='Export log bundle for bug reports:')
+        debug_lbl.set_xalign(0)
+        debug_row.pack_start(debug_lbl, True, True, 0)
+        export_btn = Gtk.Button(label='Export log…')
+        export_btn.connect('clicked', lambda *_: self._do_export_log(dlg))
+        debug_row.pack_start(export_btn, False, False, 0)
+        box.pack_start(debug_row, False, False, 0)
+        hint2 = Gtk.Label(label='Creates a .zip with log files — send to developer when reporting a bug')
+        hint2.set_xalign(0)
+        hint2.set_line_wrap(True)
+        hint2.get_style_context().add_class('dim-label')
+        box.pack_start(hint2, False, False, 0)
+
         dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL,
                         'Save',   Gtk.ResponseType.OK)
         dlg.get_widget_for_response(Gtk.ResponseType.OK) \
@@ -844,8 +886,9 @@ class ClipboardPopup(Gtk.Window):
             xd.set_input_focus(xid, X.RevertToParent, X.CurrentTime)
             xd.flush()
             xd.close()
+            log.debug('X11 focus set via XSetInputFocus')
         except Exception as e:
-            print(f'[clipboard] X11 focus failed: {e}', file=sys.stderr)
+            log.error('X11 focus failed: %s', e)
             # Fallback: GDK built-in (less reliable for UTILITY windows)
             gdk_win.focus(0)
 
@@ -856,8 +899,9 @@ class ClipboardPopup(Gtk.Window):
             seat.grab(gdk_win, Gdk.SeatCapabilities.ALL,
                       True, None, None, None, None)
             self._grab_ok = True
+            log.debug('Wayland seat grab ok')
         except Exception as e:
-            print(f'[clipboard] Wayland seat grab failed: {e}', file=sys.stderr)
+            log.error('Wayland seat grab failed: %s', e)
             self._grab_ok = False
 
     def _release_seat_grab(self):
@@ -906,6 +950,47 @@ class ClipboardPopup(Gtk.Window):
                     self.destroy()
             return True   # consume outside click
         return False
+
+    def _do_export_log(self, parent):
+        default_name = f'farolkey_log_{time.strftime("%Y%m%d_%H%M%S")}.zip'
+        fc = Gtk.FileChooserDialog(
+            title='Save log bundle',
+            parent=parent,
+            action=Gtk.FileChooserAction.SAVE,
+        )
+        fc.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
+        fc.set_current_name(default_name)
+        desktop = Path.home() / 'Desktop'
+        fc.set_current_folder(str(desktop) if desktop.exists() else str(Path.home()))
+        fc.set_do_overwrite_confirmation(True)
+        if fc.run() == Gtk.ResponseType.OK and _export_log_bundle:
+            dest = fc.get_filename()
+            fc.destroy()
+            try:
+                _export_log_bundle(dest)
+                info = Gtk.MessageDialog(
+                    parent=parent,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text='Log exported successfully',
+                    secondary_text=f'File saved to:\n{dest}\n\nSend this file to the developer.',
+                )
+                info.run()
+                info.destroy()
+                subprocess.Popen(['xdg-open', str(Path(dest).parent)],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                err = Gtk.MessageDialog(
+                    parent=parent,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text='Export failed',
+                    secondary_text=str(e),
+                )
+                err.run()
+                err.destroy()
+        else:
+            fc.destroy()
 
     def _on_drag(self, widget, event):
         if event.button == 1:
@@ -989,6 +1074,7 @@ class PopupServer:
                         _active_monitor.capture_now()
                     self._popup_ref._rebuild()
                     self._popup_ref.present()
+                    log.debug('popup re-raised')
                     return False
             except Exception:
                 pass
@@ -996,6 +1082,8 @@ class PopupServer:
 
         # Fresh popup — do NOT capture here; wait for the 'map' signal instead.
         # On Wayland, wait_for_text() requires the surface to be mapped first.
+        n = len(self._history.all_entries())
+        log.info('popup opened, %d items', n)
         popup = ClipboardPopup(self._history)
         popup.connect('destroy', lambda *_: self._on_popup_closed())
         popup.connect('map', lambda *_: self._on_popup_mapped())
@@ -1021,6 +1109,7 @@ class PopupServer:
                 pass
 
     def _on_popup_closed(self):
+        log.debug('popup closed')
         self._popup_ref = None
         if _active_monitor:
             _active_monitor.set_popup_notify(None)
@@ -1077,6 +1166,7 @@ def run_daemon():
     global _active_monitor
     history = ClipboardHistory()
     _active_monitor = ClipboardMonitor(history)
+    log.info('daemon started, history: %d items', len(history._entries))
 
     server = PopupServer(history)
     server.start()
@@ -1092,6 +1182,7 @@ def run_daemon():
     GLib.idle_add(_init)
 
     def _cleanup(*_):
+        log.info('daemon stopping')
         server.stop()
         Gtk.main_quit()
 
@@ -1105,9 +1196,11 @@ def run_daemon():
 def run_show():
     """Show popup. Signals existing server if any; otherwise becomes the singleton."""
     global _active_monitor
+    log.info('show requested')
 
     # Signal existing daemon / popup process
     if _send_show():
+        log.debug('signalled existing daemon')
         return
 
     # We are the singleton for this session

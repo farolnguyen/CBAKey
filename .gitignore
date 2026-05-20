@@ -48,6 +48,6 @@ Thumbs.db
 # Claude AI session files and project planning notes (not for public repo)
 /.claude/
 /.rules/
-
+/.feedback/
 # ── Temp / Test files ─────────────────────────────────────────────────────────
 /test.txt

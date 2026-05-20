@@ -8,7 +8,15 @@ from gi.repository import Gtk, Gdk
 
 import os
 import subprocess
+import sys
+import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from farolkey_log import export_log_bundle
+except Exception:
+    export_log_bundle = None
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 
@@ -220,6 +228,23 @@ class SettingsWindow(Gtk.Window):
             tools_box.pack_start(col, False, False, 0)
         vbox.pack_start(tools_box, False, False, 0)
 
+        # ── Section: Debug ────────────────────────────────────────────────────
+        vbox.pack_start(self._section_label('Debug'), False, False, 0)
+        debug_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        debug_row.set_margin_top(4)
+        debug_lbl = Gtk.Label(label='Export log bundle for bug reports:')
+        debug_lbl.set_xalign(0)
+        debug_row.pack_start(debug_lbl, True, True, 0)
+        export_btn = Gtk.Button(label='Export log…')
+        export_btn.connect('clicked', self._on_export_log)
+        debug_row.pack_start(export_btn, False, False, 0)
+        vbox.pack_start(debug_row, False, False, 0)
+        hint = Gtk.Label(label='Creates a .zip with log files — send to developer when reporting a bug')
+        hint.get_style_context().add_class('hint')
+        hint.set_xalign(0)
+        hint.set_margin_top(2)
+        vbox.pack_start(hint, False, False, 0)
+
         # ── Buttons ───────────────────────────────────────────────────────────
         vbox.pack_start(Gtk.Separator(), False, False, 14)
         btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -311,6 +336,48 @@ class SettingsWindow(Gtk.Window):
             return False, err or 'Lỗi không xác định.'
         except Exception as e:
             return False, str(e)
+
+    def _on_export_log(self, *_):
+        default_name = f'farolkey_log_{time.strftime("%Y%m%d_%H%M%S")}.zip'
+        dlg = Gtk.FileChooserDialog(
+            title='Save log bundle',
+            parent=self,
+            action=Gtk.FileChooserAction.SAVE,
+        )
+        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
+        dlg.set_current_name(default_name)
+        dlg.set_current_folder(str(Path.home() / 'Desktop')
+                               if (Path.home() / 'Desktop').exists()
+                               else str(Path.home()))
+        dlg.set_do_overwrite_confirmation(True)
+        if dlg.run() == Gtk.ResponseType.OK and export_log_bundle:
+            dest = dlg.get_filename()
+            dlg.destroy()
+            try:
+                export_log_bundle(dest)
+                info = Gtk.MessageDialog(
+                    parent=self,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text='Log exported successfully',
+                    secondary_text=f'File saved to:\n{dest}\n\nSend this file to the developer.',
+                )
+                info.run()
+                info.destroy()
+                subprocess.Popen(['xdg-open', str(Path(dest).parent)],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                err = Gtk.MessageDialog(
+                    parent=self,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text='Export failed',
+                    secondary_text=str(e),
+                )
+                err.run()
+                err.destroy()
+        else:
+            dlg.destroy()
 
     def _on_test(self, *_):
         import shutil as sh

@@ -12,7 +12,7 @@ Bộ gõ tiếng Việt (Telex / VNI) chạy trên Fcitx5, hỗ trợ Ubuntu/Deb
 - **Clipboard History** — lịch sử clipboard kiểu Windows (Ctrl+Super+V)
 - **Screenshot** — chụp màn hình vùng chọn / toàn màn hình (Super+Shift+S, tự vào clipboard)
 - **Dictionary Manager** — giao diện quản lý gõ tắt & template trực quan
-- **C1** — sửa từ đã gõ mà không cần xóa lại
+- **Committed-rewrite** — sửa từ đã gõ mà không cần xóa
 
 ---
 
@@ -118,3 +118,36 @@ Vui lòng cung cấp:
 - Phiên bản Fcitx5: `fcitx5 --version`
 - Tên ứng dụng gặp lỗi
 - Chuỗi gõ tái hiện lỗi
+
+---
+
+## 🔒 Debug Log — Hỗ trợ điều tra lỗi
+
+> ## ⚠️ FarolKey KHÔNG lưu bất kỳ nội dung nào bạn gõ
+>
+> Log chỉ ghi **metadata kỹ thuật**: số ký tự commit, trạng thái chuyển mode, lỗi hệ thống, thông tin công cụ. **Tuyệt đối không có** văn bản bạn gõ, nội dung clipboard, hay từ điển cá nhân trong file log.
+
+### Log ghi những gì?
+
+| Có trong log | Không có trong log |
+|---|---|
+| "commit: 5 bytes" (chỉ số lượng) | Nội dung chữ bạn vừa gõ |
+| "mode toggled: VI→EN" | Clipboard history của bạn |
+| "popup opened, 12 items" | Từ điển gõ tắt / template |
+| Thông báo lỗi hệ thống | Bất kỳ văn bản cá nhân nào |
+
+### Cách xuất log để gửi báo lỗi
+
+1. Mở **Fcitx5 Configuration** → chọn **FarolKey** → nhấn **Configure**
+2. Kéo xuống phần **Debug** → nhấn **"Export log bundle (for bug reports)"**
+3. Chọn log cần xuất (bộ gõ / công cụ / cả hai) và thư mục lưu
+4. Gửi file `.zip` (hoặc `.log`) đính kèm vào issue
+
+### File log nằm ở đâu?
+
+```
+~/.cache/farolkey/farolkey.log   # bộ gõ (C++ engine)
+~/.cache/farolkey/tools.log      # clipboard & screenshot (Python)
+```
+
+File tối đa **5 MB**, tự xoay vòng — không chiếm dung lượng đáng kể.

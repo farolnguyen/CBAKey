@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""FarolKey Export Log — launched by the Export button in fcitx5-configtool.
+
+Shows a dialog to choose which log files to export and where to save them.
+"""
+
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk
+
+import os
+import shutil
+import subprocess
+import sys
+import time
+import zipfile
+from pathlib import Path
+
+# farolkey_log.py lives alongside this script in the same bin/ directory
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from farolkey_log import _cache_dir
+except Exception:
+    def _cache_dir():
+        xdg = os.environ.get('XDG_CACHE_HOME', '')
+        return (Path(xdg) if xdg else Path.home() / '.cache') / 'farolkey'
+
+
+def _system_info() -> str:
+    import platform, subprocess as sp, shutil as sh
+    lines = [
+        f'date:         {time.strftime("%Y-%m-%d %H:%M:%S")}',
+        f'os:           {platform.freedesktop_os_release().get("PRETTY_NAME", platform.system())}',
+        f'kernel:       {platform.release()}',
+        f'session_type: {os.environ.get("XDG_SESSION_TYPE", "unknown")}',
+        f'desktop:      {os.environ.get("XDG_CURRENT_DESKTOP", "unknown")}',
+    ]
+    try:
+        r = sp.run(['fcitx5', '--version'], capture_output=True, text=True, timeout=3)
+        lines.append(f'fcitx5:       {(r.stdout or r.stderr).strip()}')
+    except Exception:
+        lines.append('fcitx5:       not found')
+    for tool in ('grim', 'maim', 'wl-copy', 'xclip', 'xdotool', 'wtype'):
+        lines.append(f'  {"✓" if sh.which(tool) else "✗"} {tool}')
+    return '\n'.join(lines) + '\n'
+
+
+class ExportDialog(Gtk.Dialog):
+    def __init__(self):
+        super().__init__(title='FarolKey — Export log')
+        self.set_resizable(False)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_keep_above(True)
+        self.set_border_width(12)
+
+        cache = _cache_dir()
+        self._log_engine = cache / 'farolkey.log'
+        self._log_tools  = cache / 'tools.log'
+
+        box = self.get_content_area()
+        box.set_spacing(8)
+
+        # ── Which logs ────────────────────────────────────────────────────────
+        box.pack_start(Gtk.Label(label='<b>Select log files to export:</b>',
+                                  use_markup=True, xalign=0), False, False, 0)
+
+        self._cb_engine = Gtk.CheckButton(
+            label=f'IME engine log  (farolkey.log)')
+        self._cb_engine.set_active(self._log_engine.exists())
+        self._cb_engine.set_sensitive(self._log_engine.exists())
+        if not self._log_engine.exists():
+            self._cb_engine.set_label('IME engine log  (farolkey.log) — not found')
+        box.pack_start(self._cb_engine, False, False, 0)
+
+        self._cb_tools = Gtk.CheckButton(
+            label=f'Tools log  (tools.log — clipboard, screenshot)')
+        self._cb_tools.set_active(self._log_tools.exists())
+        self._cb_tools.set_sensitive(self._log_tools.exists())
+        if not self._log_tools.exists():
+            self._cb_tools.set_label('Tools log  (tools.log) — not found')
+        box.pack_start(self._cb_tools, False, False, 0)
+
+        box.pack_start(Gtk.Separator(), False, False, 4)
+
+        # ── Save location ─────────────────────────────────────────────────────
+        box.pack_start(Gtk.Label(label='<b>Save location:</b>',
+                                  use_markup=True, xalign=0), False, False, 0)
+
+        path_row = Gtk.Box(spacing=6)
+        self._path_entry = Gtk.Entry()
+        self._path_entry.set_hexpand(True)
+        desktop = Path.home() / 'Desktop'
+        default_dir = str(desktop) if desktop.exists() else str(Path.home())
+        self._path_entry.set_text(default_dir)
+        browse_btn = Gtk.Button(label='…')
+        browse_btn.connect('clicked', self._on_browse)
+        path_row.pack_start(self._path_entry, True, True, 0)
+        path_row.pack_start(browse_btn, False, False, 0)
+        box.pack_start(path_row, False, False, 0)
+
+        hint = Gtk.Label(xalign=0)
+        hint.set_markup('<small><i>Single log → saved as-is. Both logs → saved as .zip</i></small>')
+        box.pack_start(hint, False, False, 0)
+
+        box.show_all()
+
+        self.add_buttons('Cancel', Gtk.ResponseType.CANCEL,
+                         'Export', Gtk.ResponseType.OK)
+        ok_btn = self.get_widget_for_response(Gtk.ResponseType.OK)
+        ok_btn.get_style_context().add_class('suggested-action')
+        self._update_ok(ok_btn)
+        self._cb_engine.connect('toggled', lambda *_: self._update_ok(ok_btn))
+        self._cb_tools.connect('toggled',  lambda *_: self._update_ok(ok_btn))
+
+    def _update_ok(self, btn):
+        btn.set_sensitive(self._cb_engine.get_active() or self._cb_tools.get_active())
+
+    def _on_browse(self, *_):
+        fc = Gtk.FileChooserDialog(
+            title='Choose save folder',
+            parent=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER,
+        )
+        fc.add_buttons('Cancel', Gtk.ResponseType.CANCEL,
+                       'Choose', Gtk.ResponseType.OK)
+        fc.set_current_folder(self._path_entry.get_text())
+        if fc.run() == Gtk.ResponseType.OK:
+            self._path_entry.set_text(fc.get_filename())
+        fc.destroy()
+
+    @property
+    def want_engine(self) -> bool:
+        return self._cb_engine.get_active()
+
+    @property
+    def want_tools(self) -> bool:
+        return self._cb_tools.get_active()
+
+    @property
+    def save_dir(self) -> str:
+        return self._path_entry.get_text().strip()
+
+
+def main():
+    dlg = ExportDialog()
+    resp = dlg.run()
+    want_engine = dlg.want_engine
+    want_tools  = dlg.want_tools
+    save_dir    = dlg.save_dir
+    dlg.destroy()
+
+    if resp != Gtk.ResponseType.OK:
+        return
+
+    cache    = _cache_dir()
+    out_dir  = Path(save_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp    = time.strftime('%Y%m%d_%H%M%S')
+
+    try:
+        # Both selected → zip
+        if want_engine and want_tools:
+            dest = out_dir / f'farolkey_log_{stamp}.zip'
+            with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as zf:
+                engine_log = cache / 'farolkey.log'
+                tools_log  = cache / 'tools.log'
+                if engine_log.exists():
+                    zf.write(engine_log, 'farolkey.log')
+                backup = cache / 'farolkey.log.1'
+                if backup.exists():
+                    zf.write(backup, 'farolkey.log.1')
+                if tools_log.exists():
+                    zf.write(tools_log, 'tools.log')
+                backup2 = cache / 'tools.log.1'
+                if backup2.exists():
+                    zf.write(backup2, 'tools.log.1')
+                zf.writestr('system_info.txt', _system_info())
+            label = str(dest)
+
+        # Only engine log
+        elif want_engine:
+            src  = cache / 'farolkey.log'
+            dest = out_dir / f'farolkey_{stamp}.log'
+            shutil.copy2(src, dest)
+            label = str(dest)
+
+        # Only tools log
+        else:
+            src  = cache / 'tools.log'
+            dest = out_dir / f'farolkey_tools_{stamp}.log'
+            shutil.copy2(src, dest)
+            label = str(dest)
+
+    except Exception as e:
+        err = Gtk.MessageDialog(
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text='Export failed',
+            secondary_text=str(e),
+        )
+        err.run()
+        err.destroy()
+        return
+
+    info = Gtk.MessageDialog(
+        message_type=Gtk.MessageType.INFO,
+        buttons=Gtk.ButtonsType.OK,
+        text='Log exported successfully',
+        secondary_text=f'Saved to:\n{label}\n\nSend this file to the developer.',
+    )
+    info.run()
+    info.destroy()
+
+    subprocess.Popen(['xdg-open', str(out_dir)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+if __name__ == '__main__':
+    main()

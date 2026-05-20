@@ -31,6 +31,7 @@
 #include "farolkey/adapter/fcitx5/compose_anchor_fcitx5.h"
 #include "farolkey/adapter/fcitx5/preedit_strategy.h"
 #include "farolkey/adapter/fcitx5/x11_click_interceptor.h"
+#include "farolkey/common/logger.h"
 #include "farolkey/config/config.h"
 #include "farolkey/core/types.h"
 
@@ -180,6 +181,7 @@ public:
         enIconPath_ = std::move(en);
         loadConfig();
         setupActions();
+        farolkey::common::logInfo("engine", "FarolKey IME initialized");
     }
 
     ~FarolKeyFcitx5Engine() override {
@@ -257,6 +259,9 @@ public:
             globalMode_ = (globalMode_ == farolkey::core::InputMode::Vietnamese)
                               ? farolkey::core::InputMode::English
                               : farolkey::core::InputMode::Vietnamese;
+            farolkey::common::logInfo("engine",
+                std::string("mode toggled: ") +
+                (globalMode_ == farolkey::core::InputMode::Vietnamese ? "EN->VI" : "VI->EN"));
             for (auto& [_, br_] : bridges_) br_.setInputMode(globalMode_);
             refreshModeAction(ic_);
             refreshAllStatusAreas();
@@ -301,8 +306,12 @@ public:
                                                                 snapshotCaps(ic)),
             ev.aux, result.commit);
 
-        if (!dispatch.commit.empty() && ic)
+        if (!dispatch.commit.empty() && ic) {
+            // Log char count only — never log content (privacy).
+            farolkey::common::logDebug("engine",
+                "commit: " + std::to_string(dispatch.commit.size()) + " bytes");
             ic->commitString(dispatch.commit);
+        }
 
         pushPreedit(ic, br.preedit(), br.config().fcitx5PreeditMode, underline);
 
@@ -344,6 +353,7 @@ public:
         auto* ic  = event.inputContext();
         auto& br  = bridgeFor(ic);
         br.reset();
+        farolkey::common::logDebug("engine", "context activated");
         interceptor_->stopIntercepting();
         composeAnchors_.erase(ic);
 
@@ -371,6 +381,7 @@ public:
                     fcitx::InputContextEvent& event) override {
         FCITX_UNUSED(entry);
         auto* ic = event.inputContext();
+        farolkey::common::logDebug("engine", "context deactivated");
         flushAndCleanup(ic);
         pushPreedit(ic, "", farolkey::config::Fcitx5PreeditMode::Auto,
                     config_.showPreeditUnderline.value());
@@ -380,6 +391,7 @@ public:
                fcitx::InputContextEvent& event) override {
         FCITX_UNUSED(entry);
         auto* ic = event.inputContext();
+        farolkey::common::logDebug("engine", "state reset");
         auto  it = bridges_.find(ic);
         if (it != bridges_.end()) {
             commitPanelPreeditIfNeeded(ic, it->second);

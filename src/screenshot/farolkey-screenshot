@@ -29,6 +29,15 @@ import time
 from pathlib import Path
 from typing import Optional, Callable
 
+# farolkey_log lives alongside this script (in the same bin/ directory)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from farolkey_log import get_logger as _get_logger
+    log = _get_logger('screenshot')
+except Exception:
+    import logging
+    log = logging.getLogger('farolkey.screenshot')
+
 # ─── Paths ────────────────────────────────────────────────────────────────────
 
 def _config_dir() -> Path:
@@ -169,15 +178,20 @@ def capture_fullscreen(capture_mode: str = 'all') -> bytes:
     else:
         x, y, w, h = _get_all_monitors_bounds()
 
+    log.info('capture start: mode=%s, region=%dx%d+%d+%d', capture_mode, w, h, x, y)
+
     if _IS_WAYLAND:
         if _IS_GNOME:
-            return _gnome_capture(x, y, w, h)
+            data = _gnome_capture(x, y, w, h)
+            log.info('capture ok: %d bytes (gnome)', len(data))
+            return data
         if _GRIM:
             # grim supports -g "x,y WxH" for specific region
             geo_arg = f'{x},{y} {w}x{h}'
             r = subprocess.run([_GRIM, '-g', geo_arg, '-'], capture_output=True)
             if r.returncode != 0:
                 raise CaptureError(f'grim failed: {r.stderr.decode().strip()}')
+            log.info('capture ok: %d bytes (grim)', len(r.stdout))
             return r.stdout
         raise CaptureError('Cần cài grim: sudo apt install grim')
     if _MAIM:
@@ -191,6 +205,7 @@ def capture_fullscreen(capture_mode: str = 'all') -> bytes:
             r = subprocess.run([_MAIM], capture_output=True)
         if r.returncode != 0 or not r.stdout:
             raise CaptureError(f'maim failed: {r.stderr.decode().strip()}')
+        log.info('capture ok: %d bytes (maim)', len(r.stdout))
         return r.stdout
     raise CaptureError('Cần cài maim: sudo apt install maim')
 
@@ -238,12 +253,17 @@ def save_file(png: bytes, path: str) -> str:
     p.mkdir(parents=True, exist_ok=True)
     fp = p / f'screenshot_{time.strftime("%Y%m%d_%H%M%S")}.png'
     fp.write_bytes(png)
+    log.info('file saved: %s', str(fp))
     return str(fp)
 
 # ─── Post-capture: clipboard + optional save dialog ──────────────────────────
 
 def finish(png: bytes, conf: dict):
     """Copy to clipboard, notify, optionally save."""
+    log.info('finish: %d bytes, auto_save=%s, ask=%s',
+             len(png),
+             conf.get('auto_save', 'false'),
+             conf.get('ask_before_save', 'true'))
     copy_to_clipboard(png)
     ping_clipboard_daemon()
     notify('Screenshot copied')
@@ -252,7 +272,8 @@ def finish(png: bytes, conf: dict):
     ask  = conf.get('ask_before_save', 'true').lower() == 'true'
 
     if auto:
-        save_file(png, conf['save_path'])
+        fp = save_file(png, conf['save_path'])
+        log.info('auto-saved: %s', fp)
         Gtk.main_quit()
         return
 
@@ -265,7 +286,10 @@ def finish(png: bytes, conf: dict):
             conf['ask_before_save'] = 'false'
             save_conf(conf)
         if resp == Gtk.ResponseType.YES:
-            save_file(png, conf['save_path'])
+            fp = save_file(png, conf['save_path'])
+            log.info('saved: %s', fp)
+        else:
+            log.info('save declined')
 
     Gtk.main_quit()
 
@@ -543,6 +567,8 @@ class CaptureReviewOverlay(Gtk.Window):
         if self._done:
             return
         self._done = True
+        log.info('full image selected: %dx%d px',
+                 self._pb.get_width(), self._pb.get_height())
         self.hide()
         GLib.idle_add(self._deliver, self._full)
 
@@ -550,6 +576,7 @@ class CaptureReviewOverlay(Gtk.Window):
         if self._done:
             return
         self._done = True
+        log.info('capture cancelled')
         self.hide()
         GLib.idle_add(self._quit_clean)
 
@@ -640,10 +667,12 @@ class CaptureReviewOverlay(Gtk.Window):
     # ── Delivery ──────────────────────────────────────────────────────────────
 
     def _crop_and_deliver(self, x, y, w, h):
+        log.info('region selected: %dx%d at (%d,%d)', w, h, x, y)
         self.destroy()
         try:
             png = crop_pixbuf(self._pb, x, y, w, h)
         except Exception as e:
+            log.error('crop failed: %s', e)
             show_error(str(e))
             return False
         finish(png, self._conf)
@@ -700,12 +729,15 @@ def _acquire_lock() -> bool:
 def main():
     if not _acquire_lock():
         # A screenshot overlay is already open — silently ignore the new request.
+        log.debug('another instance running, exiting')
         sys.exit(0)
 
     conf = load_conf()
 
-    skip_review  = '--fullscreen' in sys.argv
-    direct_region = '--region'    in sys.argv
+    skip_review   = '--fullscreen' in sys.argv
+    direct_region = '--region'     in sys.argv
+    capture_mode  = conf.get('capture_mode', 'all')
+    log.info('screenshot started: capture_mode=%s, skip_review=%s', capture_mode, skip_review)
 
     def _on_captured(png: bytes):
         if skip_review:
@@ -716,13 +748,12 @@ def main():
         if direct_region:
             GLib.idle_add(overlay._start_region)
 
-    capture_mode = conf.get('capture_mode', 'all')
-
     def _capture_thread():
         try:
             png = capture_fullscreen(capture_mode)
             GLib.idle_add(_on_captured, png)
         except CaptureError as e:
+            log.error('capture failed: %s', e)
             GLib.idle_add(show_error, str(e))
 
     # Capture immediately (in background thread so GTK loop can start)
