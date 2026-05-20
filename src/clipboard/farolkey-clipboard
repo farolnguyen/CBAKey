@@ -451,21 +451,24 @@ class ClipboardPopup(Gtk.Window):
         self.set_keep_above(True)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
-        # UTILITY: no system notification, proper floating window.
-        # Keyboard focus + click-outside detection handled via Gdk.Seat.grab().
+        # UTILITY: no system notification, no taskbar entry.
+        # Keyboard focus is obtained via XSetInputFocus (X11) or Gdk.Seat.grab (Wayland).
         self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
 
         self._settings_open = False
+        self._dragging      = False
         self._grab_ok       = False
 
         self._apply_css()
         self._position_window()
         self._build_ui()
         self.connect('key-press-event',   self._on_key_press)
+        self.connect('focus-out-event',   self._on_focus_out)
         self.connect('button-press-event', self._on_button_press_outside)
         self.show_all()
         self._search.grab_focus()
-        GLib.idle_add(self._do_seat_grab)
+        # Focus after window is mapped (50ms gives the WM time to process the map)
+        GLib.timeout_add(50, self._take_focus)
 
     def _apply_css(self):
         css = b"""
@@ -783,24 +786,47 @@ class ClipboardPopup(Gtk.Window):
         idx = rows.index(sel) if sel in rows else (-1 if d > 0 else len(rows))
         self._listbox.select_row(rows[max(0, min(len(rows) - 1, idx + d))])
 
-    def _do_seat_grab(self):
-        """Grab keyboard + pointer so: (a) key events reach us regardless of WM focus,
-        (b) clicks outside our window are detectable via button-press-event."""
+    # ── Focus management ──────────────────────────────────────────────────────
+
+    def _take_focus(self):
+        """Force keyboard focus to this window. Called 50ms after show_all()."""
         gdk_win = self.get_window()
         if not gdk_win:
             return False
+        if _is_wayland():
+            self._wayland_seat_grab(gdk_win)
+        else:
+            self._x11_set_focus(gdk_win)
+        self._search.grab_focus()
+        return False   # don't repeat
+
+    def _x11_set_focus(self, gdk_win):
+        """Use XSetInputFocus via python-xlib — works regardless of window type hint."""
+        try:
+            from gi.repository import GdkX11
+            from Xlib.display import Display as XDisplay
+            from Xlib import X
+            xid = GdkX11.X11Window.get_xid(gdk_win)
+            xd  = XDisplay()
+            # RevertToParent: if our window is unmapped, focus goes to parent
+            xd.set_input_focus(xid, X.RevertToParent, X.CurrentTime)
+            xd.flush()
+            xd.close()
+        except Exception as e:
+            print(f'[clipboard] X11 focus failed: {e}', file=sys.stderr)
+            # Fallback: GDK built-in (less reliable for UTILITY windows)
+            gdk_win.focus(0)
+
+    def _wayland_seat_grab(self, gdk_win):
+        """Grab keyboard + pointer via Gdk.Seat (Wayland focus mechanism)."""
         try:
             seat   = Gdk.Display.get_default().get_default_seat()
-            status = seat.grab(
-                gdk_win,
-                Gdk.SeatCapabilities.ALL,
-                True,   # owner_events: inside clicks delivered normally to children
-                None, None, None, None,
-            )
+            seat.grab(gdk_win, Gdk.SeatCapabilities.ALL,
+                      True, None, None, None, None)
             self._grab_ok = True
-        except Exception:
+        except Exception as e:
+            print(f'[clipboard] Wayland seat grab failed: {e}', file=sys.stderr)
             self._grab_ok = False
-        return False
 
     def _release_seat_grab(self):
         if self._grab_ok:
@@ -814,32 +840,55 @@ class ClipboardPopup(Gtk.Window):
         self._release_seat_grab()
         super().destroy()
 
+    # ── Click-outside detection ────────────────────────────────────────────────
+
+    def _on_focus_out(self, widget, event):
+        """X11: window loses real focus when user clicks elsewhere."""
+        if _is_wayland() or self._dragging or self._settings_open:
+            return False
+        conf = load_clipboard_conf()
+        if conf.get('close_on_click_outside', 'true') == 'true':
+            # Short delay: WM may briefly steal focus during drag/menu operations
+            GLib.timeout_add(120, self._maybe_close_focus_out)
+        return False
+
+    def _maybe_close_focus_out(self):
+        if not self._dragging and not self._settings_open and not self.is_active():
+            self.destroy()
+        return False
+
     def _on_button_press_outside(self, widget, event):
-        """Detect clicks outside the popup window (delivered via seat grab).
-        Inside clicks propagate from child widgets — their event.window differs from ours."""
-        # Events from inside children have event.window set to the child GDK window.
-        # Outside clicks (delivered by seat grab) have event.window == our GDK window.
+        """Wayland only: outside clicks are delivered to our window via seat grab.
+        Inside clicks go to child widgets (event.window != our window)."""
+        if not _is_wayland():
+            return False
         if event.window != self.get_window():
-            return False   # Click inside a child widget — don't interfere
+            return False   # propagated from a child widget — inside click
         alloc = self.get_allocation()
-        outside = (event.x < 0 or event.y < 0 or
-                   event.x > alloc.width or event.y > alloc.height)
-        if outside and not self._settings_open:
-            conf = load_clipboard_conf()
-            if conf.get('close_on_click_outside', 'true') == 'true':
-                self._release_seat_grab()
-                self.destroy()
-            return True   # consume the outside click
+        if (event.x < 0 or event.y < 0 or
+                event.x > alloc.width or event.y > alloc.height):
+            if not self._settings_open:
+                conf = load_clipboard_conf()
+                if conf.get('close_on_click_outside', 'true') == 'true':
+                    self._release_seat_grab()
+                    self.destroy()
+            return True   # consume outside click
         return False
 
     def _on_drag(self, widget, event):
         if event.button == 1:
-            # Release grab so the WM can take over the move-drag gesture.
-            # Re-grab after the drag completes (WM returns control).
-            self._release_seat_grab()
+            self._dragging = True
+            if _is_wayland():
+                self._release_seat_grab()
             self.begin_move_drag(event.button, int(event.x_root),
                                  int(event.y_root), event.time)
-            GLib.timeout_add(600, self._do_seat_grab)
+            # Re-acquire focus/grab after drag completes
+            GLib.timeout_add(700, self._end_drag)
+
+    def _end_drag(self):
+        self._dragging = False
+        GLib.idle_add(self._take_focus)
+        return False
 
 # ---------------------------------------------------------------------------
 # Helpers
