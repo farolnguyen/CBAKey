@@ -582,10 +582,17 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         std::isdigit(static_cast<unsigned char>(event.key)) != 0) {
         ProcessResult r;
         if (!preeditBuffer_.empty()) {
+            // Commit pending preedit, then forward the numpad key explicitly.
+            // forwardOriginalKey works here because there is existing state to flush.
             r.commit = takeCompositionForCommit();
+            r.consumed = true;
+            r.forwardOriginalKey = true;
+        } else {
+            // No preedit: let the key pass through fcitx5 naturally (consumed=false).
+            // forwardKey(KP_1) strips Num Lock state → app sees navigation key instead
+            // of digit; the natural path preserves the full key context.
+            r.consumed = false;
         }
-        r.consumed = true;
-        r.forwardOriginalKey = true;
         return r;
     }
 
