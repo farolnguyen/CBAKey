@@ -61,6 +61,8 @@ class SettingsWindow(Gtk.Window):
         self.set_default_size(460, 380)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_resizable(False)
+        # Always appear on top — needed when opened from the fullscreen overlay
+        self.set_keep_above(True)
 
         css = Gtk.CssProvider()
         css.load_from_data(_CSS)
