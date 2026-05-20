@@ -451,18 +451,20 @@ class ClipboardPopup(Gtk.Window):
         self.set_keep_above(True)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
-        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        # DIALOG (not UTILITY): clipboard needs keyboard focus so Up/Down/Enter work
+        # and focus-out-event fires when user clicks elsewhere.
+        self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
 
-        self._dragging       = False   # True while user is dragging the popup
-        self._settings_open  = False   # True while settings dialog is open
+        self._settings_open = False   # True while settings dialog is open
 
         self._apply_css()
         self._position_window()
         self._build_ui()
-        self.connect('key-press-event',    self._on_key_press)
-        self.connect('button-release-event', self._on_button_release)
-        self.connect('focus-out-event',    self._on_focus_out)
+        self.connect('key-press-event', self._on_key_press)
+        self.connect('focus-out-event', self._on_focus_out)
         self.show_all()
+        # present() requests keyboard focus from the WM (required for focus-out to work)
+        self.present()
         self._search.grab_focus()
 
     def _apply_css(self):
@@ -673,14 +675,11 @@ class ClipboardPopup(Gtk.Window):
 
     def _on_activate(self, listbox, row):
         self._do_copy(row._orig_idx)
-        if _has_auto_paste_tool():
-            # Close popup first so focus returns to previous app, then paste
-            self.destroy()
-            threading.Thread(target=_try_auto_paste, daemon=True).start()
-        else:
-            # Show brief "Copied!" status then close
-            self._footer.set_text('✓ Copied — press Ctrl+V to paste')
-            GLib.timeout_add(500, self.destroy)
+        # Always close then auto-paste: closing returns focus to previous app,
+        # then _try_auto_paste sends Ctrl+V.  If no paste tool exists it falls
+        # back gracefully and the user still has the item in the clipboard.
+        self.destroy()
+        threading.Thread(target=_try_auto_paste, daemon=True).start()
 
     def _on_pin(self, btn, orig_idx):
         self._history.toggle_pin(orig_idx)
@@ -712,7 +711,7 @@ class ClipboardPopup(Gtk.Window):
         current_close  = conf.get('close_on_click_outside', 'true') == 'true'
 
         self._settings_open = True
-        dlg = Gtk.Dialog(title='Cài đặt Clipboard History', transient_for=self,
+        dlg = Gtk.Dialog(title='Clipboard History Settings', transient_for=self,
                          flags=Gtk.DialogFlags.MODAL)
         dlg.set_resizable(False)
         box = dlg.get_content_area()
@@ -738,7 +737,7 @@ class ClipboardPopup(Gtk.Window):
 
         # ── Đóng khi click ngoài ──────────────────────────────────────────────
         close_cb = Gtk.CheckButton(
-            label='Tự đóng khi click bên ngoài clipboard (như Windows)')
+            label='Closes automatically when clicked outside the clipboard.')
         close_cb.set_active(current_close)
         close_cb.set_tooltip_text(
             'Bật: click bất kỳ vùng nào bên ngoài sẽ đóng clipboard.\n'
@@ -768,12 +767,8 @@ class ClipboardPopup(Gtk.Window):
             row = self._listbox.get_selected_row()
             if row:
                 self._do_copy(row._orig_idx)
-                if _has_auto_paste_tool():
-                    self.destroy()
-                    threading.Thread(target=_try_auto_paste, daemon=True).start()
-                else:
-                    self._footer.set_text('✓ Copied — press Ctrl+V to paste')
-                    GLib.timeout_add(500, self.destroy)
+                self.destroy()
+                threading.Thread(target=_try_auto_paste, daemon=True).start()
                 return True
         if k == Gdk.KEY_Up:
             self._move_sel(-1); return True
@@ -790,29 +785,24 @@ class ClipboardPopup(Gtk.Window):
 
     def _on_drag(self, widget, event):
         if event.button == 1:
-            self._dragging = True
             self.begin_move_drag(event.button, int(event.x_root),
                                  int(event.y_root), event.time)
 
-    def _on_button_release(self, widget, event):
-        """Reset dragging flag when mouse button is released after a drag."""
-        if event.button == 1 and self._dragging:
-            self._dragging = False
-
     def _on_focus_out(self, widget, event):
-        """Close popup when user clicks outside — unless dragging or settings open."""
+        """Close popup when it loses focus (user clicked elsewhere)."""
+        if self._settings_open:
+            return False
         conf = load_clipboard_conf()
         if conf.get('close_on_click_outside', 'true') != 'true':
             return False
-        if self._dragging or self._settings_open:
-            return False
-        # Small delay: let GTK settle (e.g. internal focus moves don't trigger close)
-        GLib.timeout_add(120, self._maybe_close_on_focus_out)
+        # Short delay: the WM may briefly hand focus to itself during a window drag
+        # before returning it to us — waiting avoids a false-positive close.
+        GLib.timeout_add(150, self._maybe_close_on_focus_out)
         return False
 
     def _maybe_close_on_focus_out(self):
-        """Destroy popup only if it is truly no longer active."""
-        if not self._dragging and not self._settings_open and not self.is_active():
+        """Destroy only if still not active (focus truly moved to another window)."""
+        if not self._settings_open and not self.is_active():
             self.destroy()
         return False
 
