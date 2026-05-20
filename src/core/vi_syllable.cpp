@@ -713,13 +713,22 @@ bool normalizeTelexBuffer(std::u32string& buffer) {
     return replaceWithSetPreserveTone(buffer, span->medial_end, 10);
 }
 
-bool normalizeVniUoTransform(std::u32string& buffer) {
-    // After VNI '7' transforms 'uo' → 'uơ' (only 'o' → 'ơ'), this function
-    // completes the transform by converting 'u' → 'ư' — but ONLY when:
-    //   • the nucleus is exactly "uơ" (size == 2, NOT "uơi"/"uơu"/etc.), AND
-    //   • there is a coda (i.e. not an open syllable like "thuơ" → "thuở").
-    // This avoids breaking "cuoi717" → "cưới" (nucleus "uơi", size 3)
-    // and "thuơ" → "thuở" (no coda).
+bool normalizeVniUoTransform(std::u32string& buffer, bool fromPushPath) {
+    // Completes the VNI 'uo'+'7' → 'ươ' transform (only 'o'→'ơ' fires initially;
+    // this function converts the remaining 'u'→'ư').
+    //
+    // Protected case — open-syllable "uơ" (size==2, hasCoda=false):
+    //   Skipped in BOTH paths. "thuơ" (for "thuở") must keep plain 'u' as glide;
+    //   if we normalize to "thươ" then tone '3' gives wrong "thướ" instead of "thuở".
+    //
+    // "uơ" + coda (size==2, hasCoda=true): handled in both paths (e.g. "tương", "được").
+    //
+    // "uơi" (size==3): handled in both paths.
+    //   - After push path: "nguo7i" → 'i' pushed → "nguơi" → normalize → "ngươi" → tone → "người"
+    //   - After transform path: "nguoi7" → '7' transforms → "nguơi" → normalize → "ngươi" → tone → "người"
+    //     Also: "cuoi7" → "cuơi" → normalize → "cươi" → "1" → "cưới" (canonical cuoi71 works).
+    //     Note: "cuoi717" workaround no longer needed; cuoi71 gives correct "cưới" directly.
+    (void)fromPushPath;  // both paths now use the same logic
     normalizeVietnameseNfc(buffer);
     const auto span = findLastSyllable(buffer);
     if (!span) return false;
@@ -727,10 +736,17 @@ bool normalizeVniUoTransform(std::u32string& buffer) {
     const std::u32string tonePattern = baseSlice(buffer, span->medial_end, span->nucleus_end);
     const bool hasCoda = span->nucleus_end < span->end;
 
-    if (tonePattern.size() != 2 || !hasCoda) return false;
-    if (!startsWith(tonePattern, U"uơ")) return false;
+    // "uơ" + coda: được, tương (after coda added), ước, etc.
+    if (tonePattern.size() == 2 && hasCoda && startsWith(tonePattern, U"uơ")) {
+        return replaceWithSetPreserveTone(buffer, span->medial_end, 10);  // u → ư
+    }
 
-    return replaceWithSetPreserveTone(buffer, span->medial_end, 10);  // u → ư
+    // "uơi": người, tươi, cưới families — always normalize in both paths.
+    if (tonePattern.size() == 3 && startsWith(tonePattern, U"uơi")) {
+        return replaceWithSetPreserveTone(buffer, span->medial_end, 10);  // u → ư
+    }
+
+    return false;
 }
 
 bool removeVietnameseDiacritics(std::u32string& buffer) {

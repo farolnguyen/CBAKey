@@ -769,6 +769,9 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     decoded.push_back(static_cast<unsigned char>(raw));
     if (config_.method == farolkey::core::InputMethod::Telex) {
         vi_syllable::normalizeTelexBuffer(decoded);
+    } else {
+        // fromPushPath=true: also normalizes "uơi"→"ươi" (e.g. "người" from "nguo7i").
+        vi_syllable::normalizeVniUoTransform(decoded, /*fromPushPath=*/true);
     }
     preeditBuffer_ = encodeUtf8(decoded);
     if (const auto split = maybeAutoCommitStablePrefix(decoded)) {
@@ -781,13 +784,20 @@ ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
     clearRepeatTransformState();
     clearPendingLiteralEscape();
 
-    // Flush the EN word buffer: check EN/Both dict entries, then commit.
+    // EN mode uses immediate-commit: each character is committed to the app
+    // immediately (no preedit), so it appears in terminal without waiting for space.
+    // preeditBuffer_ is kept as an internal word-tracking buffer only.
+    // On word boundary, if the tracked word matches a dict/template entry,
+    // deleteSurroundingBefore instructs the adapter to delete the already-committed
+    // characters before inserting the expansion.
+
     auto flushEnBuffer = [this](std::string suffix) -> ProcessResult {
         ProcessResult r;
         if (!preeditBuffer_.empty()) {
             if (config_.enableUserDictionary && !userDict_.empty() && !passwordField_) {
                 if (const UserDictEntry* e = userDict_.lookup(preeditBuffer_)) {
                     if (e->abbrev_mode == AbbrevMode::En || e->abbrev_mode == AbbrevMode::Both) {
+                        r.deleteSurroundingBefore = static_cast<int>(preeditBuffer_.size());
                         r.commit = e->expansion + suffix;
                         preeditBuffer_.clear();
                         r.consumed = true;
@@ -799,25 +809,26 @@ ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
             if (config_.enableSmartTemplates && !passwordField_) {
                 const std::string expanded = tryParametricExpand(preeditBuffer_, "en");
                 if (!expanded.empty()) {
-                    r.commit = expanded;  // template defines its own output; no suffix
+                    r.deleteSurroundingBefore = static_cast<int>(preeditBuffer_.size());
+                    r.commit = expanded;
                     preeditBuffer_.clear();
                     r.consumed = true;
                     r.smartTemplateExpansion = true;
                     return r;
                 }
             }
-            r.commit = std::move(preeditBuffer_) + suffix;
+            // No match: chars already committed individually — just commit suffix.
             preeditBuffer_.clear();
+            if (!suffix.empty()) r.commit = suffix;
         } else if (!suffix.empty()) {
-            r.commit = std::move(suffix);
+            r.commit = suffix;
         }
         r.consumed = true;
         return r;
     };
 
     if (event.aux != KeyAux::None) {
-        // Non-printable key (Tab, Enter, arrow, etc.): flush buffer without
-        // consuming the key so the app still receives it.
+        // Non-printable key (Tab, Enter, arrow, etc.): flush tracker, forward key.
         if (!preeditBuffer_.empty()) {
             auto r = flushEnBuffer("");
             r.forwardOriginalKey = true;
@@ -827,28 +838,30 @@ ProcessResult Engine::processEnglishKey(const KeyEvent& event) {
     }
 
     if (event.key == '\0') {
-        return ProcessResult{.preedit = "", .commit = "", .consumed = false};
+        return ProcessResult{};
     }
 
     const auto uc = static_cast<unsigned char>(event.key);
     if (uc < 0x20 || event.key == '\x7F') {
-        // Backspace: remove last char from the EN word buffer.
+        // Backspace: remove from internal tracker, let the app handle the visual deletion.
         if (event.key == '\b' && !preeditBuffer_.empty()) {
             preeditBuffer_.pop_back();
-            return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
         }
-        return ProcessResult{.preedit = "", .commit = "", .consumed = false};
+        return ProcessResult{};
     }
 
-    // Space (and any non-letter word boundary) flushes the buffer.
+    // Space (and any non-letter word boundary) flushes the tracker.
     if (event.key == ' ') {
         return flushEnBuffer(" ");
     }
 
-    // Printable non-space: accumulate in buffer, show as preedit so the user
-    // can see what they are typing before the word boundary fires.
+    // Printable non-space: commit immediately so it appears in the app (terminal)
+    // without waiting for a word boundary. Also add to tracker for dict lookup.
     preeditBuffer_ += event.key;
-    return ProcessResult{.preedit = preeditBuffer_, .commit = "", .consumed = true};
+    ProcessResult r;
+    r.commit   = std::string(1, event.key);
+    r.consumed = true;
+    return r;
 }
 
 void Engine::seedPreeditForCommittedRewrite(std::string utf8) {

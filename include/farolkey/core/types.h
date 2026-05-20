@@ -48,6 +48,10 @@ struct ProcessResult {
     /// M15: commit came from a Smart Template expansion (may be multi-line).
     /// Adapter should prefer wl-copy + auto-paste over inline commitString.
     bool smartTemplateExpansion = false;
+    /// EN mode: delete this many committed characters before the cursor before
+    /// committing `commit`.  Used for abbreviation/template expansion when chars
+    /// were already individually committed (immediate-commit EN mode).
+    int deleteSurroundingBefore = 0;
 };
 
 }  // namespace farolkey::core

@@ -47,9 +47,12 @@ bool applyTelexTransform(std::u32string& buffer, char key);
 // extra vowel.
 bool normalizeTelexBuffer(std::u32string& buffer);
 
-// VNI: completes 'uơ'→'ươ' (u→ư) only when nucleus is exactly "uơ" + has coda.
-// Safe to call after any VNI vowel-transform; no-ops for "uơi", "uơu", open syllables.
-bool normalizeVniUoTransform(std::u32string& buffer);
+// VNI: completes 'uơ'→'ươ' (u→ư).
+//   fromPushPath=false (after transform key): only handles "uơ" + hasCoda.
+//     Skips open-syllable "uơ" (e.g. "thuơ"→"thuở") and "uơi" (preserves "cuoi717" flow).
+//   fromPushPath=true (after regular char push): also handles "uơi" nucleus extension
+//     (e.g. "ngươi" for "người") since at push time we know the 'i' was added AFTER '7'.
+bool normalizeVniUoTransform(std::u32string& buffer, bool fromPushPath = false);
 
 // Normalizes Vietnamese text into an NFC-like precomposed form for the rows
 // the engine handles (`ă â ê ô ơ ư` plus tone marks).

@@ -306,12 +306,16 @@ public:
                                                                 snapshotCaps(ic)),
             ev.aux, result.commit);
 
-        if (!dispatch.commit.empty() && ic) {
-            // Log char count only — never log content (privacy).
-            farolkey::common::logDebug("engine",
-                "commit: " + std::to_string(dispatch.commit.size()) + " bytes");
-            ic->commitString(dispatch.commit);
+        // EN immediate-commit: delete already-committed chars before inserting expansion.
+        if (result.deleteSurroundingBefore > 0 && ic &&
+            ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) &&
+            ic->surroundingText().isValid()) {
+            ic->deleteSurroundingText(-result.deleteSurroundingBefore,
+                                       result.deleteSurroundingBefore);
         }
+
+        if (!dispatch.commit.empty() && ic)
+            ic->commitString(dispatch.commit);
 
         pushPreedit(ic, br.preedit(), br.config().fcitx5PreeditMode, underline);
 
@@ -326,11 +330,13 @@ public:
                 interceptor_->startIntercepting([this, ic]() {
                     auto it = bridges_.find(ic);
                     if (it == bridges_.end()) return;
-                    // Panel preedit: commit before the click reaches the new window.
-                    // Client preedit: fcitx5-gtk commits when it receives the
-                    //   "preedit cleared" signal — do NOT also call commitString
-                    //   (would double-commit: "koko" instead of "ko").
-                    commitPanelPreeditIfNeeded(ic, it->second);
+                    // Commit preedit before the click is forwarded to the app.
+                    // commitForFocusLoss handles per-frontend commit strategy:
+                    //   - Panel clients: always commit.
+                    //   - XIM clients (Chrome): explicit commit (no auto-commit).
+                    //   - D-Bus clients (fcitx5-gtk): skip commit, rely on
+                    //     auto-commit via preedit_changed signal.
+                    commitForFocusLoss(ic, it->second);
                     pushPreedit(ic, "", it->second.config().fcitx5PreeditMode,
                                 config_.showPreeditUnderline.value());
                     composeAnchors_.erase(ic);
@@ -394,7 +400,12 @@ public:
         farolkey::common::logDebug("engine", "state reset");
         auto  it = bridges_.find(ic);
         if (it != bridges_.end()) {
-            commitPanelPreeditIfNeeded(ic, it->second);
+            // Use commitForFocusLoss (not commitPanelPreeditIfNeeded) so that
+            // XIM/Wayland clients (Chrome) get the preedit committed here.
+            // Reset is often called BEFORE deactivate; if we only clear the
+            // bridge without committing (old behaviour), deactivate's
+            // commitForFocusLoss sees an empty bridge and commits nothing.
+            commitForFocusLoss(ic, it->second);
         }
         composeAnchors_.erase(ic);
         interceptor_->stopIntercepting();
@@ -700,10 +711,50 @@ private:
         }
     }
 
+    // Commit preedit on focus loss for clients that do NOT auto-commit when
+    // preedit is cleared (unlike fcitx5-gtk which auto-commits on preedit_changed).
+    //
+    // GTK apps with fcitx5-gtk (frontend="dbus"): auto-commit via preedit_changed
+    //   signal → we must NOT call commitString (would double-commit → "koko").
+    //
+    // XIM clients like Chrome/Chromium (frontend="xim"): no auto-commit on
+    //   preedit_changed → must call commitString explicitly here.
+    //   This fixes Google Sheets / browser-based apps where click-away loses preedit.
+    //
+    // Panel-mode clients (Preedit capability not set): handled by commitPanelPreeditIfNeeded.
+    void commitForFocusLoss(fcitx::InputContext* ic,
+                             farolkey::adapter::fcitx5::Bridge& bridge) {
+        using farolkey::adapter::fcitx5::PreeditPresentation;
+        const auto presentation = farolkey::adapter::fcitx5::choosePreeditPresentation(
+            bridge.config().fcitx5PreeditMode, snapshotCaps(ic));
+        const std::string pending = bridge.takeCompositionForCommit();
+        if (pending.empty()) return;
+
+        if (presentation == PreeditPresentation::Panel) {
+            // Panel clients: commit directly (same as before).
+            ic->commitString(pending);
+        } else {
+            // Client (inline) preedit: check if this client auto-commits on
+            // preedit-clear (fcitx5-gtk does) or needs explicit commit (XIM/Chrome).
+            // fcitx5-gtk uses the "dbus" frontend; XIM clients use "xim".
+            const std::string_view fe = ic->frontendName();
+            if (fe == "xim" || fe == "waylandim" || fe == "fcitx4") {
+                // These frontends do NOT auto-commit preedit on focus-loss:
+                //   "xim"      — Chrome/Firefox on X11 via XIM protocol
+                //   "waylandim"— Chrome/Firefox on Wayland via text-input protocol
+                //   "fcitx4"   — Chrome/Firefox via fcitx4 compatibility protocol
+                // All browser-based apps fall into one of the above categories.
+                ic->commitString(pending);
+            }
+            // "dbus" (fcitx5-gtk, GTK apps): auto-commits via preedit_changed →
+            // explicit commit would double-commit ("koko"). Leave it to fcitx5-gtk.
+        }
+    }
+
     void flushAndCleanup(fcitx::InputContext* ic) {
         auto iter = bridges_.find(ic);
         if (iter != bridges_.end()) {
-            commitPanelPreeditIfNeeded(ic, iter->second);
+            commitForFocusLoss(ic, iter->second);
             bridges_.erase(iter);
         }
         composeAnchors_.erase(ic);
