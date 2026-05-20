@@ -44,7 +44,10 @@ CLIPBOARD_CONF = _config_dir() / 'clipboard.conf'
 POPUP_POSITION_DEFAULT = 'mouse'
 
 def load_clipboard_conf() -> dict:
-    conf = {'popup_position': POPUP_POSITION_DEFAULT}
+    conf = {
+        'popup_position':       POPUP_POSITION_DEFAULT,
+        'close_on_click_outside': 'true',
+    }
     if CLIPBOARD_CONF.exists():
         for line in CLIPBOARD_CONF.read_text().splitlines():
             line = line.strip()
@@ -449,12 +452,16 @@ class ClipboardPopup(Gtk.Window):
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
         self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
-        # No focus-out-event → destroy: closing only via Esc / ✕ / item select.
+
+        self._dragging       = False   # True while user is dragging the popup
+        self._settings_open  = False   # True while settings dialog is open
 
         self._apply_css()
         self._position_window()
         self._build_ui()
-        self.connect('key-press-event', self._on_key_press)
+        self.connect('key-press-event',    self._on_key_press)
+        self.connect('button-release-event', self._on_button_release)
+        self.connect('focus-out-event',    self._on_focus_out)
         self.show_all()
         self._search.grab_focus()
 
@@ -581,6 +588,10 @@ class ClipboardPopup(Gtk.Window):
         for orig_idx, entry in filtered:
             self._listbox.add(self._make_row(orig_idx, entry))
         self._listbox.show_all()
+        # Auto-select first row so user can press Enter immediately
+        rows = self._listbox.get_children()
+        if rows:
+            self._listbox.select_row(rows[0])
         n = len(entries); s = len(filtered)
         self._footer.set_text(f'{s}/{n} items' if query else
                               f'{n} item{"s" if n != 1 else ""}')
@@ -697,8 +708,10 @@ class ClipboardPopup(Gtk.Window):
 
     def _on_settings(self, btn):
         conf = load_clipboard_conf()
-        current = conf.get('popup_position', POPUP_POSITION_DEFAULT)
+        current_pos    = conf.get('popup_position', POPUP_POSITION_DEFAULT)
+        current_close  = conf.get('close_on_click_outside', 'true') == 'true'
 
+        self._settings_open = True
         dlg = Gtk.Dialog(title='Cài đặt Clipboard History', transient_for=self,
                          flags=Gtk.DialogFlags.MODAL)
         dlg.set_resizable(False)
@@ -707,21 +720,30 @@ class ClipboardPopup(Gtk.Window):
         box.set_margin_top(16); box.set_margin_bottom(8)
         box.set_margin_start(16); box.set_margin_end(16)
 
+        # ── Vị trí popup ──────────────────────────────────────────────────────
         box.pack_start(Gtk.Label(label='Vị trí hiển thị popup:', xalign=0),
                        False, False, 0)
-
         radio_mouse = Gtk.RadioButton.new_with_label(None,
             '🖱  Gần con trỏ chuột (mặc định)')
         radio_corner = Gtk.RadioButton.new_with_label_from_widget(radio_mouse,
             '📐  Góc dưới-phải màn hình')
-
-        if current == 'corner':
+        if current_pos == 'corner':
             radio_corner.set_active(True)
         else:
             radio_mouse.set_active(True)
-
         box.pack_start(radio_mouse,  False, False, 0)
         box.pack_start(radio_corner, False, False, 0)
+
+        box.pack_start(Gtk.Separator(), False, False, 4)
+
+        # ── Đóng khi click ngoài ──────────────────────────────────────────────
+        close_cb = Gtk.CheckButton(
+            label='Tự đóng khi click bên ngoài clipboard (như Windows)')
+        close_cb.set_active(current_close)
+        close_cb.set_tooltip_text(
+            'Bật: click bất kỳ vùng nào bên ngoài sẽ đóng clipboard.\n'
+            'Tắt: chỉ đóng bằng Esc hoặc nút ✕.')
+        box.pack_start(close_cb, False, False, 0)
 
         dlg.add_buttons('Huỷ', Gtk.ResponseType.CANCEL,
                         'Lưu', Gtk.ResponseType.OK)
@@ -730,9 +752,11 @@ class ClipboardPopup(Gtk.Window):
         dlg.show_all()
         resp = dlg.run()
         if resp == Gtk.ResponseType.OK:
-            conf['popup_position'] = 'corner' if radio_corner.get_active() else 'mouse'
+            conf['popup_position']       = 'corner' if radio_corner.get_active() else 'mouse'
+            conf['close_on_click_outside'] = 'true' if close_cb.get_active() else 'false'
             save_clipboard_conf(conf)
         dlg.destroy()
+        self._settings_open = False
 
     # ---- Keyboard ----
 
@@ -766,8 +790,31 @@ class ClipboardPopup(Gtk.Window):
 
     def _on_drag(self, widget, event):
         if event.button == 1:
+            self._dragging = True
             self.begin_move_drag(event.button, int(event.x_root),
                                  int(event.y_root), event.time)
+
+    def _on_button_release(self, widget, event):
+        """Reset dragging flag when mouse button is released after a drag."""
+        if event.button == 1 and self._dragging:
+            self._dragging = False
+
+    def _on_focus_out(self, widget, event):
+        """Close popup when user clicks outside — unless dragging or settings open."""
+        conf = load_clipboard_conf()
+        if conf.get('close_on_click_outside', 'true') != 'true':
+            return False
+        if self._dragging or self._settings_open:
+            return False
+        # Small delay: let GTK settle (e.g. internal focus moves don't trigger close)
+        GLib.timeout_add(120, self._maybe_close_on_focus_out)
+        return False
+
+    def _maybe_close_on_focus_out(self):
+        """Destroy popup only if it is truly no longer active."""
+        if not self._dragging and not self._settings_open and not self.is_active():
+            self.destroy()
+        return False
 
 # ---------------------------------------------------------------------------
 # Helpers
