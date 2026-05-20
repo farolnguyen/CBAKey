@@ -52,9 +52,11 @@ PKGS=(
     # Jinja2 template engine (Smart Templates)
     python3-jinja2
 
-    # Clipboard write tools
+    # Clipboard write + auto-paste tools
     wl-clipboard          # wl-copy: copy text/images on Wayland
     xclip                 # copy text/images on X11
+    xdotool               # auto-paste Ctrl+V simulation on X11
+    wtype                 # auto-paste Ctrl+V simulation on Wayland
 
     # Screenshot tool dependencies
     gnome-screenshot      # Screen capture on GNOME Wayland
