@@ -183,18 +183,18 @@ if(FAROLKEY_BUILD_TESTS)
     add_test(NAME farolkey_corpus_test COMMAND farolkey_corpus_test WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endif()
 
+# M13.4: farolkey-abbrev CLI — user-facing tool, always built with the project.
+add_executable(farolkey_abbrev tools/farolkey_abbrev_main.cpp)
+target_link_libraries(farolkey_abbrev PRIVATE farolkey_core)
+target_include_directories(farolkey_abbrev PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_options(farolkey_abbrev PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(farolkey_abbrev PROPERTIES OUTPUT_NAME "farolkey-abbrev")
+
 if(FAROLKEY_BUILD_CORPUS_TOOLS)
     add_executable(farolkey_corpus_bfs tools/corpus_bfs_main.cpp)
     target_link_libraries(farolkey_corpus_bfs PRIVATE farolkey_core)
     target_include_directories(farolkey_corpus_bfs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_options(farolkey_corpus_bfs PRIVATE -Wall -Wextra -Wpedantic)
-
-    # M13.4: farolkey-abbrev CLI management tool
-    add_executable(farolkey_abbrev tools/farolkey_abbrev_main.cpp)
-    target_link_libraries(farolkey_abbrev PRIVATE farolkey_core)
-    target_include_directories(farolkey_abbrev PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_compile_options(farolkey_abbrev PRIVATE -Wall -Wextra -Wpedantic)
-    set_target_properties(farolkey_abbrev PROPERTIES OUTPUT_NAME "farolkey-abbrev")
 
     if(FAROLKEY_BUILD_TESTS)
         add_executable(farolkey_m1_fallback_audit tools/m1_fallback_audit.cpp)
@@ -262,6 +262,12 @@ if(FAROLKEY_BUILD_FCITX5_PLUGIN)
     install(PROGRAMS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/clipboard/farolkey-clipboard"
         DESTINATION "bin"
+        COMPONENT runtime
+    )
+
+    # Abbreviation manager CLI (M13)
+    install(TARGETS farolkey_abbrev
+        RUNTIME DESTINATION "bin"
         COMPONENT runtime
     )
 
