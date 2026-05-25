@@ -510,6 +510,7 @@ class ClipboardPopup(Gtk.Window):
 
         self._settings_open = False
         self._dragging      = False
+        self._current_row: 'Gtk.ListBoxRow | None' = None
 
         self._apply_css()
         self._position_window()
@@ -524,21 +525,31 @@ class ClipboardPopup(Gtk.Window):
 
     def _apply_css(self):
         css = b"""
-        window { border: 1px solid @borders; border-radius: 8px; background-color: @theme_bg_color; }
-        .cb-header { background-color: @theme_selected_bg_color; padding: 8px 10px; border-radius: 8px 8px 0 0; }
+        window { border: 1px solid @borders; border-radius: 8px;
+                 background-color: @theme_bg_color; }
+        .cb-header { background-color: @theme_selected_bg_color;
+                     padding: 8px 10px; border-radius: 8px 8px 0 0; }
         .cb-title  { color: @theme_selected_fg_color; font-weight: bold; font-size: 13px; }
-        .cb-hbtn   { color: @theme_selected_fg_color; background: none; border: none; padding: 0 4px; font-size: 11px; min-height: 0; min-width: 0; }
-        .cb-item   { padding: 5px 8px; border-bottom: 1px solid alpha(@borders, 0.4); }
-        .cb-item:selected { background-color: alpha(@theme_selected_bg_color, 0.18); }
+        .cb-hbtn   { color: @theme_selected_fg_color; background: none; border: none;
+                     padding: 0 4px; font-size: 11px; min-height: 0; min-width: 0; }
+        .cb-item   { padding: 5px 8px; border-bottom: 1px solid alpha(@borders, 0.5); }
+        row.cb-current { background-color: @theme_selected_bg_color;
+                         background-image: none; }
+        row.cb-current label { color: @theme_selected_fg_color; }
+        row.cb-current .cb-ts { color: alpha(@theme_selected_fg_color, 0.75); }
         .cb-text   { font-size: 12px; }
-        .cb-ts     { font-size: 10px; color: alpha(@theme_fg_color, 0.45); }
-        .cb-footer { padding: 3px 8px; font-size: 10px; color: alpha(@theme_fg_color, 0.5); }
+        .cb-ts     { font-size: 10px; color: alpha(@theme_fg_color, 0.60); }
+        .cb-footer { padding: 3px 8px; font-size: 10px;
+                     color: alpha(@theme_fg_color, 0.65); }
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(), provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        screen = Gdk.Screen.get_default()
+        Gtk.StyleContext.add_provider_for_screen(screen, provider, 800)
+        # Remove this provider when the popup closes so it doesn't accumulate
+        # across daemon restarts (GdkScreen holds strong refs to providers).
+        self.connect('destroy', lambda *_:
+            Gtk.StyleContext.remove_provider_for_screen(screen, provider))
 
     def _position_window(self):
         conf = load_clipboard_conf()
@@ -619,7 +630,7 @@ class ClipboardPopup(Gtk.Window):
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
         self._listbox = Gtk.ListBox()
-        self._listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         self._listbox.connect('row-activated', self._on_activate)
         scroll.add(self._listbox)
         root.pack_start(scroll, True, True, 0)
@@ -646,13 +657,19 @@ class ClipboardPopup(Gtk.Window):
         for orig_idx, entry in filtered:
             self._listbox.add(self._make_row(orig_idx, entry))
         self._listbox.show_all()
-        # Auto-select first row so user can press Enter immediately
         rows = self._listbox.get_children()
         if rows:
-            self._listbox.select_row(rows[0])
+            self._set_current_row(rows[0])
         n = len(entries); s = len(filtered)
         self._footer.set_text(f'{s}/{n} items' if query else
                               f'{n} item{"s" if n != 1 else ""}')
+
+    def _set_current_row(self, row: 'Gtk.ListBoxRow | None'):
+        if self._current_row is not None:
+            self._current_row.get_style_context().remove_class('cb-current')
+        self._current_row = row
+        if row is not None:
+            row.get_style_context().add_class('cb-current')
 
     def _make_row(self, orig_idx: int, entry: ClipboardEntry) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow()
@@ -883,7 +900,7 @@ class ClipboardPopup(Gtk.Window):
         if k == Gdk.KEY_Escape:
             self.destroy(); return True
         if k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
-            row = self._listbox.get_selected_row()
+            row = self._current_row
             if row:
                 self._do_copy(row._orig_idx)
                 self.destroy()
@@ -899,13 +916,10 @@ class ClipboardPopup(Gtk.Window):
     def _move_sel(self, d: int):
         rows = self._listbox.get_children()
         if not rows: return
-        sel = self._listbox.get_selected_row()
-        idx = rows.index(sel) if sel in rows else (-1 if d > 0 else len(rows))
+        cur = self._current_row
+        idx = rows.index(cur) if cur in rows else (-1 if d > 0 else len(rows))
         new_row = rows[max(0, min(len(rows) - 1, idx + d))]
-        self._listbox.select_row(new_row)
-        # Defer scroll until after GTK finishes the layout pass triggered by select_row.
-        # Necessary on X11 where get_allocation() may return stale values if called
-        # synchronously before the relayout completes.
+        self._set_current_row(new_row)
         GLib.idle_add(self._scroll_to_row, new_row)
 
     def _scroll_to_row(self, row: Gtk.ListBoxRow) -> bool:

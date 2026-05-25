@@ -351,12 +351,12 @@ class SaveDialog(Gtk.Dialog):
     def no_ask_checked(self) -> bool:
         return self._cb.get_active()
 
-# ─── Capture Review Overlay ───────────────────────────────────────────────────
-# Shows captured screenshot fullscreen. User picks: crop region or use full image.
+# ─── Multi-Monitor Capture Overlay ───────────────────────────────────────────
+# One fullscreen MonitorOverlay per monitor. Shared _SelState holds absolute
+# logical coords so a drag starting on monitor A continues correctly on monitor B.
 
 _OVERLAY_CSS = b"""
 window.review-win { background-color: black; }
-
 box.toolbar-box {
     background-color: rgba(28, 28, 28, 0.95);
     border-radius: 10px;
@@ -373,7 +373,6 @@ button.tb {
 button.tb:hover { background-color: rgba(255,255,255,0.15); }
 button.tb.ok     { color: #69db7c; }
 button.tb.cancel { color: #ff6b6b; }
-
 box.sel-box {
     border: 2px solid rgba(60, 140, 255, 0.95);
     background-color: rgba(60, 140, 255, 0.12);
@@ -395,96 +394,94 @@ label.hint-lbl {
 }
 """
 
-class CaptureReviewOverlay(Gtk.Window):
-    """Fullscreen overlay with the captured screenshot as background.
 
-    Toolbar at top-centre:
-      [✂ Vùng chọn]  → rubber-band crop
-      [✓ Dùng ảnh này] → use full image
-      [✕ Huỷ]
-    """
+class _SelState:
+    """Selection state shared across all MonitorOverlay windows (absolute logical coords)."""
+    __slots__ = ('mode', 'dragging', 'sx', 'sy', 'ex', 'ey')
 
-    def __init__(self, screenshot_bytes: bytes, conf: dict):
+    def __init__(self):
+        self.mode     = 'toolbar'   # 'toolbar' | 'selecting'
+        self.dragging = False
+        self.sx = self.sy = self.ex = self.ey = 0
+
+    def rect(self):
+        """Return (x, y, w, h) in absolute logical coords, normalised."""
+        x = min(self.sx, self.ex)
+        y = min(self.sy, self.ey)
+        return x, y, abs(self.ex - self.sx), abs(self.ey - self.sy)
+
+
+class MonitorOverlay(Gtk.Window):
+    """One fullscreen overlay window for a single monitor."""
+
+    def __init__(self, mon_idx: int, geo,
+                 mon_pb: 'GdkPixbuf.Pixbuf',
+                 has_toolbar: bool,
+                 sel: '_SelState', overlays: list,
+                 on_confirm, on_cancel):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
-        self._conf   = conf
-        self._full   = screenshot_bytes      # original fullscreen PNG
-        self._done   = False
-        self._mode   = 'toolbar'             # 'toolbar' | 'selecting'
-        self._drag   = False
-        self._sx = self._sy = self._cx = self._cy = 0.0
+        self._idx        = mon_idx
+        self._geo        = geo       # Gdk.Rectangle in logical coords
+        self._pb         = mon_pb    # already sized to geo.width × geo.height
+        self._sel        = sel
+        self._overlays   = overlays  # shared list; populated after all overlays built
+        self._on_confirm = on_confirm
+        self._on_cancel  = on_cancel
+        self._done       = False
 
-        # Load pixbuf
-        loader = GdkPixbuf.PixbufLoader()
-        loader.write(screenshot_bytes)
-        loader.close()
-        self._pb = loader.get_pixbuf()
-
-        # Calculate display dimensions and scale factor.
-        # For multi-monitor screenshots the pixbuf may be wider than one monitor.
-        # We letterbox (fit inside monitor, preserve aspect ratio) so the image
-        # is never stretched/squished regardless of monitor count.
-        mon_w, mon_h = self._sw(), self._sh()
-        pb_w, pb_h   = self._pb.get_width(), self._pb.get_height()
-        scale_fit    = min(mon_w / pb_w, mon_h / pb_h)
-        disp_w       = int(pb_w * scale_fit)
-        disp_h       = int(pb_h * scale_fit)
-        # Offset to center the letterboxed image on the monitor
-        self._offset_x = (mon_w - disp_w) // 2
-        self._offset_y = (mon_h - disp_h) // 2
-        # scale from display coords → pixbuf coords
-        self._scale    = pb_w / disp_w
-
-        # CSS
-        css = Gtk.CssProvider()
-        css.load_from_data(_OVERLAY_CSS)
+        _css = Gtk.CssProvider()
+        _css.load_from_data(_OVERLAY_CSS)
         Gtk.StyleContext.add_provider_for_screen(
-            self.get_screen(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            self.get_screen(), _css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
         self.get_style_context().add_class('review-win')
         self.set_decorated(False)
         self.set_keep_above(True)
         self.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
-        self.fullscreen()
+        self.fullscreen_on_monitor(self.get_screen(), mon_idx)
 
-        # ── Widgets ───────────────────────────────────────────────────────────
         gtk_ov = Gtk.Overlay()
 
-        # Background: letterboxed screenshot centered on black background
-        evbox = Gtk.EventBox()
-        evbox.set_opacity(0.75)
-        scaled = self._pb.scale_simple(disp_w, disp_h, GdkPixbuf.InterpType.BILINEAR)
-        img_widget = Gtk.Image.new_from_pixbuf(scaled)
-        img_widget.set_halign(Gtk.Align.CENTER)
-        img_widget.set_valign(Gtk.Align.CENTER)
-        evbox.add(img_widget)
-        gtk_ov.add(evbox)
+        # Background: screenshot at 75% opacity
+        bg_evbox = Gtk.EventBox()
+        bg_evbox.set_opacity(0.75)
+        self._bg_img = Gtk.Image.new_from_pixbuf(mon_pb)
+        bg_evbox.add(self._bg_img)
+        gtk_ov.add(bg_evbox)
 
         self._fixed = Gtk.Fixed()
         gtk_ov.add_overlay(self._fixed)
+        self.add(gtk_ov)
 
-        # Toolbar
-        self._toolbar_box = self._build_toolbar()
-        self._fixed.put(self._toolbar_box, 0, 0)
+        # Full-brightness sub-image inside the selection (sits on top of dimmed bg)
+        self._sel_img_box = Gtk.EventBox()
+        self._sel_img_box.set_no_show_all(True)
+        self._sel_img = Gtk.Image()
+        self._sel_img_box.add(self._sel_img)
+        self._fixed.put(self._sel_img_box, 0, 0)
 
-        # Selection box
+        # Selection border box (CSS .sel-box)
         self._sel_box = Gtk.Box()
         self._sel_box.get_style_context().add_class('sel-box')
         self._sel_box.set_no_show_all(True)
         self._fixed.put(self._sel_box, 0, 0)
 
-        # Size label
+        self._toolbar_box = None
+        if has_toolbar:
+            self._toolbar_box = self._build_toolbar()
+            self._fixed.put(self._toolbar_box, 0, 0)
+
         self._size_lbl = Gtk.Label()
         self._size_lbl.get_style_context().add_class('size-lbl')
         self._size_lbl.set_no_show_all(True)
         self._fixed.put(self._size_lbl, 0, 0)
 
-        # Hint label (visible only in selecting mode)
-        self._hint_lbl = Gtk.Label(label='Kéo chuột để chọn vùng  •  Esc để quay lại')
+        self._hint_lbl = Gtk.Label(
+            label='Kéo chuột để chọn vùng  •  Esc để huỷ'
+        )
         self._hint_lbl.get_style_context().add_class('hint-lbl')
         self._hint_lbl.set_no_show_all(True)
         self._fixed.put(self._hint_lbl, 0, 0)
-
-        self.add(gtk_ov)
 
         self.add_events(
             Gdk.EventMask.BUTTON_PRESS_MASK   |
@@ -498,197 +495,199 @@ class CaptureReviewOverlay(Gtk.Window):
         self.connect('key-press-event',      self._on_key)
         self.connect('realize',              self._on_realize)
 
-        self.show_all()
-        self._toolbar_box.show()
-        self._sel_box.hide()
-        self._size_lbl.hide()
-        self._hint_lbl.hide()
-
-    # ── Build toolbar ─────────────────────────────────────────────────────────
+    # ── Toolbar ───────────────────────────────────────────────────────────────
 
     def _build_toolbar(self) -> Gtk.Box:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         box.get_style_context().add_class('toolbar-box')
         box.set_margin_top(6); box.set_margin_bottom(6)
         box.set_margin_start(8); box.set_margin_end(8)
-
-        for label, style, cb in [
-            ('✂  Select area',    'tb',        self._start_region),
-            ('✓  Use this image', 'tb ok',     self._use_full),
-            ('✕  Cancel',          'tb cancel', self._cancel),
-            ('⚙  Settings',      'tb',        self._open_settings),
+        for lbl, style, cb in [
+            ('✂  Select area',    'tb',        self._act_start_region),
+            ('✓  Use this image', 'tb ok',     self._act_use_full),
+            ('✕  Cancel',          'tb cancel', self._act_cancel),
+            ('⚙  Settings',      'tb',        self._act_settings),
         ]:
-            btn = Gtk.Button(label=label)
+            btn = Gtk.Button(label=lbl)
             for cls in style.split():
                 btn.get_style_context().add_class(cls)
             btn.connect('clicked', lambda _b, c=cb: c())
             box.pack_start(btn, False, False, 0)
-
         return box
-
-    # ── Realize: position toolbar ─────────────────────────────────────────────
 
     def _on_realize(self, *_):
         self.show_all()
-        self._toolbar_box.show()
-        self._sel_box.hide()
         self._size_lbl.hide()
         self._hint_lbl.hide()
         GLib.idle_add(self._position_toolbar)
         GLib.idle_add(self._position_hint)
 
     def _position_toolbar(self):
-        w = self._toolbar_box.get_preferred_size()[1].width
-        self._fixed.move(self._toolbar_box, (self._sw() - w) // 2, 24)
+        if self._toolbar_box:
+            w = self._toolbar_box.get_preferred_size()[1].width
+            self._fixed.move(self._toolbar_box, (self._geo.width - w) // 2, 24)
         return False
 
     def _position_hint(self):
         w = self._hint_lbl.get_preferred_size()[1].width
         h = self._hint_lbl.get_preferred_size()[1].height
-        self._fixed.move(self._hint_lbl, (self._sw() - w) // 2, self._sh() - h - 40)
+        self._fixed.move(self._hint_lbl,
+                         (self._geo.width - w) // 2,
+                         self._geo.height - h - 40)
         return False
 
     # ── Toolbar actions ───────────────────────────────────────────────────────
 
-    def _open_settings(self):
-        settings_tool = shutil.which('farolkey-screenshot-settings') or str(
+    def _act_settings(self):
+        tool = shutil.which('farolkey-screenshot-settings') or str(
             Path(__file__).parent / 'farolkey-screenshot-settings'
         )
-        subprocess.Popen([settings_tool],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen([tool], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def _start_region(self):
-        self._mode = 'selecting'
-        self._toolbar_box.hide()
-        self._hint_lbl.show()
-        GLib.idle_add(self._set_cursor, Gdk.CursorType.CROSSHAIR)
+    def _act_start_region(self):
+        self._sel.mode = 'selecting'
+        for ov in self._overlays:
+            if ov._toolbar_box:
+                ov._toolbar_box.hide()
+            ov._hint_lbl.show()
+            ov._set_cursor(Gdk.CursorType.CROSSHAIR)
 
-    def _use_full(self):
-        if self._done:
-            return
-        self._done = True
-        log.info('full image selected: %dx%d px',
-                 self._pb.get_width(), self._pb.get_height())
-        self.hide()
-        GLib.idle_add(self._deliver, self._full)
+    def _act_use_full(self):
+        if self._done: return
+        self._set_done()
+        self._on_confirm(None)
 
-    def _cancel(self):
-        if self._done:
-            return
-        self._done = True
-        log.info('capture cancelled')
-        self.hide()
-        GLib.idle_add(self._quit_clean)
+    def _act_cancel(self):
+        if self._done: return
+        self._set_done()
+        self._on_cancel()
 
-    # ── Region selection mouse handlers ───────────────────────────────────────
+    def _set_done(self):
+        for ov in self._overlays:
+            ov._done = True
+
+    # ── Mouse handlers ────────────────────────────────────────────────────────
+
+    def _to_abs(self, lx, ly):
+        return self._geo.x + int(lx), self._geo.y + int(ly)
 
     def _on_press(self, _w, event):
-        if event.button != 1 or self._mode != 'selecting' or self._done:
+        if event.button != 1 or self._sel.mode != 'selecting' or self._done:
             return
-        self._drag = True
-        self._sx = self._cx = event.x
-        self._sy = self._cy = event.y
-        self._update_sel()
+        ax, ay = self._to_abs(event.x, event.y)
+        self._sel.dragging = True
+        self._sel.sx = self._sel.ex = ax
+        self._sel.sy = self._sel.ey = ay
+        self._update_all_sel_visuals()
 
     def _on_motion(self, _w, event):
-        if not self._drag or self._mode != 'selecting' or self._done:
+        if not self._sel.dragging or self._done:
             return
-        self._cx = event.x
-        self._cy = event.y
-        self._update_sel()
-
-    def _display_to_pixbuf(self, dx: float, dy: float):
-        """Convert display (window) coordinates → pixbuf coordinates, clamped."""
-        px = int((dx - self._offset_x) * self._scale)
-        py = int((dy - self._offset_y) * self._scale)
-        pw, ph = self._pb.get_width(), self._pb.get_height()
-        return max(0, min(px, pw)), max(0, min(py, ph))
+        ax, ay = self._to_abs(event.x, event.y)
+        self._sel.ex = ax
+        self._sel.ey = ay
+        self._update_all_sel_visuals()
+        self._update_size_labels()
 
     def _on_release(self, _w, event):
-        if event.button != 1 or not self._drag or self._mode != 'selecting' or self._done:
+        if event.button != 1 or not self._sel.dragging or self._done:
             return
-        self._done = True
-        self._drag = False
-        x  = int(min(self._sx, event.x))
-        y  = int(min(self._sy, event.y))
-        rw = int(abs(event.x - self._sx))
-        rh = int(abs(event.y - self._sy))
-        self.hide()
-        if rw > 4 and rh > 4:
-            sx, sy = self._display_to_pixbuf(x, y)
-            ex, ey = self._display_to_pixbuf(x + rw, y + rh)
-            GLib.idle_add(self._crop_and_deliver, sx, sy, ex - sx, ey - sy)
-        else:
-            GLib.idle_add(self._quit_clean)
+        ax, ay = self._to_abs(event.x, event.y)
+        self._sel.ex = ax
+        self._sel.ey = ay
+        self._sel.dragging = False
+        self._update_all_sel_visuals()
+        self._update_size_labels()
+        x, y, w, h = self._sel.rect()
+        if w > 4 and h > 4:
+            self._set_done()
+            GLib.idle_add(self._deliver_region, x, y, w, h)
 
     def _on_key(self, _w, event):
-        if event.keyval == Gdk.KEY_Escape:
-            if self._mode == 'selecting' and not self._done:
-                # Go back to toolbar
-                self._mode = 'toolbar'
-                self._drag = False
-                self._sel_box.hide()
-                self._size_lbl.hide()
-                self._hint_lbl.hide()
-                self._toolbar_box.show()
-                GLib.idle_add(self._set_cursor, Gdk.CursorType.ARROW)
+        k = event.keyval
+        if k == Gdk.KEY_Escape:
+            if self._sel.mode == 'selecting' and not self._done:
+                self._sel.mode     = 'toolbar'
+                self._sel.dragging = False
+                for ov in self._overlays:
+                    if ov._toolbar_box:
+                        ov._toolbar_box.show()
+                    ov._hint_lbl.hide()
+                    ov._size_lbl.hide()
+                    ov._sel_box.hide()
+                    ov._sel_img_box.hide()
+                    ov._set_cursor(Gdk.CursorType.ARROW)
             elif not self._done:
-                self._cancel()
+                self._act_cancel()
             return True
+        if k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            if self._sel.mode == 'selecting' and not self._done:
+                x, y, w, h = self._sel.rect()
+                if w > 4 and h > 4:
+                    self._set_done()
+                    GLib.idle_add(self._deliver_region, x, y, w, h)
+                return True
         return False
 
-    # ── Selection widget update ───────────────────────────────────────────────
+    def _deliver_region(self, ax, ay, aw, ah):
+        for ov in self._overlays:
+            ov.hide()
+        self._on_confirm((ax, ay, aw, ah))
+        return False
 
-    def _update_sel(self):
-        x  = int(min(self._sx, self._cx))
-        y  = int(min(self._sy, self._cy))
-        rw = int(abs(self._cx - self._sx))
-        rh = int(abs(self._cy - self._sy))
+    # ── Selection visuals ─────────────────────────────────────────────────────
 
-        if rw > 2 and rh > 2:
-            self._fixed.move(self._sel_box, x, y)
-            self._sel_box.set_size_request(rw, rh)
+    def _update_sel_visuals(self):
+        """Update the sel-box border and bright inner image for this monitor."""
+        sx, sy, sw, sh = self._sel.rect()
+        geo = self._geo
+        lx  = sx - geo.x
+        ly  = sy - geo.y
+        cx1 = max(0, lx)
+        cy1 = max(0, ly)
+        cx2 = min(lx + sw, geo.width)
+        cy2 = min(ly + sh, geo.height)
+        cw  = cx2 - cx1
+        ch  = cy2 - cy1
+        if cw > 2 and ch > 2:
+            # Bright sub-image (zero-copy view into the monitor pixbuf)
+            sub = self._pb.new_subpixbuf(cx1, cy1, cw, ch)
+            self._sel_img.set_from_pixbuf(sub)
+            self._fixed.move(self._sel_img_box, cx1, cy1)
+            self._sel_img_box.show()
+            # Border box
+            self._fixed.move(self._sel_box, cx1, cy1)
+            self._sel_box.set_size_request(cw, ch)
             self._sel_box.show()
-
-            # Size label shows actual pixel dimensions in the original screenshot
-            ex, ey = self._display_to_pixbuf(x + rw, y + rh)
-            sx2, sy2 = self._display_to_pixbuf(x, y)
-            self._size_lbl.set_text(f' {ex - sx2} × {ey - sy2} ')
-            lw = self._size_lbl.get_preferred_size()[1].width
-            lx = x + rw + 6
-            if lx + lw > self._sw():
-                lx = x - lw - 6
-            self._fixed.move(self._size_lbl, max(0, lx), y + 2)
-            self._size_lbl.show()
         else:
+            self._sel_img_box.hide()
             self._sel_box.hide()
-            self._size_lbl.hide()
 
-    # ── Delivery ──────────────────────────────────────────────────────────────
+    def _update_all_sel_visuals(self):
+        for ov in self._overlays:
+            ov._update_sel_visuals()
 
-    def _crop_and_deliver(self, x, y, w, h):
-        log.info('region selected: %dx%d at (%d,%d)', w, h, x, y)
-        self.destroy()
-        try:
-            png = crop_pixbuf(self._pb, x, y, w, h)
-        except Exception as e:
-            log.error('crop failed: %s', e)
-            show_error(str(e))
-            return False
-        finish(png, self._conf)
-        return False
-
-    def _deliver(self, png: bytes):
-        self.destroy()
-        finish(png, self._conf)
-        return False
-
-    def _quit_clean(self):
-        self.destroy()
-        Gtk.main_quit()
-        return False
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    def _update_size_labels(self):
+        sx, sy, sw, sh = self._sel.rect()
+        if sw < 4 or sh < 4:
+            for ov in self._overlays:
+                ov._size_lbl.hide()
+            return
+        ex, ey = self._sel.ex, self._sel.ey
+        for ov in self._overlays:
+            g = ov._geo
+            if g.x <= ex < g.x + g.width and g.y <= ey < g.y + g.height:
+                txt = f' {sw} × {sh} '
+                ov._size_lbl.set_text(txt)
+                lx = ex - g.x + 6
+                ly = ey - g.y - 20
+                lw = ov._size_lbl.get_preferred_size()[1].width
+                if lx + lw > g.width:
+                    lx = ex - g.x - lw - 6
+                ov._fixed.move(ov._size_lbl, max(0, lx), max(0, ly))
+                ov._size_lbl.show()
+            else:
+                ov._size_lbl.hide()
 
     def _set_cursor(self, cursor_type):
         gdk_win = self.get_window()
@@ -696,15 +695,109 @@ class CaptureReviewOverlay(Gtk.Window):
             gdk_win.set_cursor(
                 Gdk.Cursor.new_for_display(Gdk.Display.get_default(), cursor_type)
             )
-        return False
 
-    def _sw(self) -> int:
-        m = Gdk.Display.get_default().get_primary_monitor() or Gdk.Display.get_default().get_monitor(0)
-        return m.get_geometry().width
 
-    def _sh(self) -> int:
-        m = Gdk.Display.get_default().get_primary_monitor() or Gdk.Display.get_default().get_monitor(0)
-        return m.get_geometry().height
+class CaptureReviewOverlay:
+    """Manages one MonitorOverlay per monitor for multi-monitor capture review.
+
+    Public API matches the old single-window class so main() needs no changes:
+      overlay = CaptureReviewOverlay(png, conf)
+      overlay.show_all()
+      overlay._start_region()   # optional
+    """
+
+    def __init__(self, screenshot_bytes: bytes, conf: dict):
+        self._conf = conf
+        self._full = screenshot_bytes
+        self._done = False
+
+        loader = GdkPixbuf.PixbufLoader()
+        loader.write(screenshot_bytes)
+        loader.close()
+        self._pb = loader.get_pixbuf()
+
+        display  = Gdk.Display.get_default()
+        n        = max(1, display.get_n_monitors())
+        geos     = [display.get_monitor(i).get_geometry() for i in range(n)]
+        pb_ox    = min(g.x for g in geos)
+        pb_oy    = min(g.y for g in geos)
+        self._pb_ox = pb_ox
+        self._pb_oy = pb_oy
+
+        # Toolbar goes on the monitor that contains the cursor
+        seat = display.get_default_seat()
+        _, cx, cy = seat.get_pointer().get_position()
+        cursor_mon = next(
+            (i for i, g in enumerate(geos)
+             if g.x <= cx < g.x + g.width and g.y <= cy < g.y + g.height),
+            0
+        )
+
+        sel            = _SelState()
+        self._overlays: list = []
+        pb_w = self._pb.get_width()
+        pb_h = self._pb.get_height()
+
+        for i, geo in enumerate(geos):
+            # Slice the combined pixbuf to this monitor's area
+            sx_ = max(0, geo.x - pb_ox)
+            sy_ = max(0, geo.y - pb_oy)
+            sw_ = min(geo.width,  pb_w - sx_)
+            sh_ = min(geo.height, pb_h - sy_)
+            if sw_ <= 0 or sh_ <= 0:
+                sw_ = sh_ = 1
+            mon_pb = self._pb.new_subpixbuf(sx_, sy_, sw_, sh_)
+            # Scale to logical window size if capture resolution differs (HiDPI)
+            if sw_ != geo.width or sh_ != geo.height:
+                mon_pb = mon_pb.scale_simple(
+                    geo.width, geo.height, GdkPixbuf.InterpType.BILINEAR
+                )
+            ov = MonitorOverlay(
+                mon_idx=i, geo=geo,
+                mon_pb=mon_pb,
+                has_toolbar=(i == cursor_mon),
+                sel=sel, overlays=self._overlays,
+                on_confirm=self._on_confirm,
+                on_cancel=self._on_cancel,
+            )
+            self._overlays.append(ov)
+
+    def show_all(self):
+        for ov in self._overlays:
+            ov.show_all()
+
+    def _start_region(self):
+        if self._overlays:
+            self._overlays[0]._act_start_region()
+
+    def _on_confirm(self, region):
+        if self._done: return
+        self._done = True
+        for ov in self._overlays:
+            ov.destroy()
+        if region is None:
+            log.info('full image used: %d bytes', len(self._full))
+            finish(self._full, self._conf)
+            return
+        ax, ay, aw, ah = region
+        px = ax - self._pb_ox
+        py = ay - self._pb_oy
+        log.info('region selected: %dx%d abs=(%d,%d) pb=(%d,%d)', aw, ah, ax, ay, px, py)
+        try:
+            png = crop_pixbuf(self._pb, px, py, aw, ah)
+        except Exception as e:
+            log.error('crop failed: %s', e)
+            show_error(str(e))
+            return
+        finish(png, self._conf)
+
+    def _on_cancel(self):
+        if self._done: return
+        self._done = True
+        log.info('capture cancelled')
+        for ov in self._overlays:
+            ov.destroy()
+        Gtk.main_quit()
 
 # ─── Single-instance lock ────────────────────────────────────────────────────
 
