@@ -186,37 +186,74 @@ def _set_clipboard_image(image_path: str):
 
 def _try_auto_paste(delay_ms: int = 150) -> bool:
     """Simulate Ctrl+V in the previously-focused window after a short delay.
-    Returns True if a paste tool was found and launched (not guaranteed to succeed).
+    Returns True if a tool succeeded.
+
+    Tool priority on Wayland (GNOME):
+      1. ydotool  — needs ydotoold daemon or /dev/uinput access (udev rule)
+      2. wtype    — needs wlr-virtual-keyboard (wlroots compositors, NOT GNOME)
+      3. xdotool  — uses XWayland; works for apps running under XWayland on GNOME
+      4. fallback — desktop notification "Ctrl+V to paste"
     """
     time.sleep(delay_ms / 1000.0)
     if _is_wayland():
-        # ydotool needs ydotoold daemon; KEY_LEFTCTRL=29, KEY_V=47
+        # 1. ydotool — works if ydotoold daemon is running or uinput accessible.
+        #    Modern ydotool (1.x) uses XKB keysym names, NOT raw evdev CODE:VALUE.
         if _YDOTOOL:
             try:
-                subprocess.run(
-                    ['ydotool', 'key', '29:1', '47:1', '47:0', '29:0'],
+                r = subprocess.run(
+                    ['ydotool', 'key', '--key-delay', '50', 'ctrl+v'],
                     capture_output=True, timeout=2)
-                return True
+                if r.returncode == 0:
+                    return True
             except Exception:
                 pass
-        # wtype: simple Wayland keyboard emulator
+        # 2. wtype — wlroots compositors only (fails on GNOME Wayland)
         if _WTYPE:
             try:
-                subprocess.run(['wtype', '-M', 'ctrl', 'v', '-m', 'ctrl'],
-                               capture_output=True, timeout=2)
-                return True
+                r = subprocess.run(['wtype', '-M', 'ctrl', 'v', '-m', 'ctrl'],
+                                   capture_output=True, timeout=2)
+                if r.returncode == 0:
+                    return True
             except Exception:
                 pass
-    else:
+        # 3. xdotool via XWayland — best-effort for XWayland-backed apps.
+        #    Does NOT suppress the fallback notification: on GNOME Wayland,
+        #    xdotool exits 0 even when it cannot reach a native-Wayland window,
+        #    so its return code is not a reliable signal that paste succeeded.
         if _XDOTOOL:
             try:
                 subprocess.run(
                     ['xdotool', 'key', '--clearmodifiers', 'ctrl+v'],
                     capture_output=True, timeout=2)
-                return True
+            except Exception:
+                pass
+        # ydotool / wtype unavailable or failed — notify user to press Ctrl+V
+        _notify_paste_fallback()
+        return False
+    else:
+        if _XDOTOOL:
+            try:
+                r = subprocess.run(
+                    ['xdotool', 'key', '--clearmodifiers', 'ctrl+v'],
+                    capture_output=True, timeout=2)
+                if r.returncode == 0:
+                    return True
             except Exception:
                 pass
     return False
+
+
+def _notify_paste_fallback():
+    """Show a notification when auto-paste is not available (e.g. GNOME Wayland)."""
+    try:
+        notify = shutil.which('notify-send')
+        if notify:
+            subprocess.Popen(
+                [notify, '-a', 'FarolKey', '-t', '2500',
+                 'Clipboard', 'Đã copy — nhấn Ctrl+V để dán'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 
 def _has_auto_paste_tool() -> bool:
@@ -473,7 +510,6 @@ class ClipboardPopup(Gtk.Window):
 
         self._settings_open = False
         self._dragging      = False
-        self._grab_ok       = False
 
         self._apply_css()
         self._position_window()
@@ -578,7 +614,8 @@ class ClipboardPopup(Gtk.Window):
         root.pack_start(self._search, False, False, 0)
 
         # List
-        scroll = Gtk.ScrolledWindow()
+        self._scroll = Gtk.ScrolledWindow()
+        scroll = self._scroll
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
         self._listbox = Gtk.ListBox()
@@ -705,7 +742,10 @@ class ClipboardPopup(Gtk.Window):
         # 300ms delay: allows WM to complete focus transfer before keypress.
         self.destroy()
         log.debug('auto-paste launched')
-        threading.Thread(target=lambda: _try_auto_paste(300), daemon=True).start()
+        # Wayland needs more time for focus to return to the previous app
+        # after keyboard grab is released and popup window is destroyed.
+        delay = 500 if _is_wayland() else 300
+        threading.Thread(target=lambda: _try_auto_paste(delay), daemon=True).start()
 
     def _on_pin(self, btn, orig_idx):
         self._history.toggle_pin(orig_idx)
@@ -723,8 +763,10 @@ class ClipboardPopup(Gtk.Window):
                                 buttons=Gtk.ButtonsType.YES_NO,
                                 text='Clear all unpinned items?')
         dlg.format_secondary_text('Pinned items will be kept.')
+        self._settings_open = True   # prevent focus-out from closing popup
         resp = dlg.run()
         dlg.destroy()
+        self._settings_open = False
         if resp == Gtk.ResponseType.YES:
             if _active_monitor:
                 _active_monitor.suppress(500)
@@ -845,7 +887,8 @@ class ClipboardPopup(Gtk.Window):
             if row:
                 self._do_copy(row._orig_idx)
                 self.destroy()
-                threading.Thread(target=lambda: _try_auto_paste(300), daemon=True).start()
+                delay = 500 if _is_wayland() else 300
+                threading.Thread(target=lambda: _try_auto_paste(delay), daemon=True).start()
                 return True
         if k == Gdk.KEY_Up:
             self._move_sel(-1); return True
@@ -858,17 +901,40 @@ class ClipboardPopup(Gtk.Window):
         if not rows: return
         sel = self._listbox.get_selected_row()
         idx = rows.index(sel) if sel in rows else (-1 if d > 0 else len(rows))
-        self._listbox.select_row(rows[max(0, min(len(rows) - 1, idx + d))])
+        new_row = rows[max(0, min(len(rows) - 1, idx + d))]
+        self._listbox.select_row(new_row)
+        # Defer scroll until after GTK finishes the layout pass triggered by select_row.
+        # Necessary on X11 where get_allocation() may return stale values if called
+        # synchronously before the relayout completes.
+        GLib.idle_add(self._scroll_to_row, new_row)
+
+    def _scroll_to_row(self, row: Gtk.ListBoxRow) -> bool:
+        """Ensure row is visible in the scrolled window. Called via GLib.idle_add."""
+        adj = self._scroll.get_vadjustment()
+        alloc = row.get_allocation()
+        val = adj.get_value()
+        page = adj.get_page_size()
+        if alloc.y < val:
+            adj.set_value(max(alloc.y, adj.get_lower()))
+        elif alloc.y + alloc.height > val + page:
+            adj.set_value(min(alloc.y + alloc.height - page,
+                              adj.get_upper() - page))
+        return False  # do not repeat
 
     # ── Focus management ──────────────────────────────────────────────────────
 
     def _take_focus(self):
-        """Force keyboard focus to this window. Called 50ms after show_all()."""
+        """Request keyboard focus. Called 50ms after show_all()."""
         gdk_win = self.get_window()
         if not gdk_win:
             return False
         if _is_wayland():
-            self._wayland_seat_grab(gdk_win)
+            # On Wayland we do NOT use Gdk.Seat.grab — it triggers a GNOME
+            # permission dialog ("Allow inhibiting shortcuts?") which dismisses
+            # instantly and fires focus-out-event, closing the popup.
+            # present() asks the compositor to raise and focus the window;
+            # the search widget then gets keyboard events normally.
+            self.present()
         else:
             self._x11_set_focus(gdk_win)
         self._search.grab_focus()
@@ -892,35 +958,19 @@ class ClipboardPopup(Gtk.Window):
             # Fallback: GDK built-in (less reliable for UTILITY windows)
             gdk_win.focus(0)
 
-    def _wayland_seat_grab(self, gdk_win):
-        """Grab keyboard + pointer via Gdk.Seat (Wayland focus mechanism)."""
-        try:
-            seat   = Gdk.Display.get_default().get_default_seat()
-            seat.grab(gdk_win, Gdk.SeatCapabilities.ALL,
-                      True, None, None, None, None)
-            self._grab_ok = True
-            log.debug('Wayland seat grab ok')
-        except Exception as e:
-            log.error('Wayland seat grab failed: %s', e)
-            self._grab_ok = False
-
-    def _release_seat_grab(self):
-        if self._grab_ok:
-            try:
-                Gdk.Display.get_default().get_default_seat().ungrab()
-            except Exception:
-                pass
-            self._grab_ok = False
-
     def destroy(self):
-        self._release_seat_grab()
         super().destroy()
 
     # ── Click-outside detection ────────────────────────────────────────────────
 
     def _on_focus_out(self, widget, event):
-        """X11: window loses real focus when user clicks elsewhere."""
-        if _is_wayland() or self._dragging or self._settings_open:
+        """Close popup when focus moves elsewhere (X11 and Wayland).
+
+        On Wayland: works because we grab KEYBOARD only — clicking outside
+        gives keyboard focus to the other window, firing this event.
+        On X11: same mechanism via XSetInputFocus.
+        """
+        if self._dragging or self._settings_open:
             return False
         conf = load_clipboard_conf()
         if conf.get('close_on_click_outside', 'true') == 'true':
@@ -934,21 +984,7 @@ class ClipboardPopup(Gtk.Window):
         return False
 
     def _on_button_press_outside(self, widget, event):
-        """Wayland only: outside clicks are delivered to our window via seat grab.
-        Inside clicks go to child widgets (event.window != our window)."""
-        if not _is_wayland():
-            return False
-        if event.window != self.get_window():
-            return False   # propagated from a child widget — inside click
-        alloc = self.get_allocation()
-        if (event.x < 0 or event.y < 0 or
-                event.x > alloc.width or event.y > alloc.height):
-            if not self._settings_open:
-                conf = load_clipboard_conf()
-                if conf.get('close_on_click_outside', 'true') == 'true':
-                    self._release_seat_grab()
-                    self.destroy()
-            return True   # consume outside click
+        """No-op: click-outside is handled via focus-out-event on both X11 and Wayland."""
         return False
 
     def _do_export_log(self, parent):
@@ -995,11 +1031,9 @@ class ClipboardPopup(Gtk.Window):
     def _on_drag(self, widget, event):
         if event.button == 1:
             self._dragging = True
-            if _is_wayland():
-                self._release_seat_grab()
             self.begin_move_drag(event.button, int(event.x_root),
                                  int(event.y_root), event.time)
-            # Re-acquire focus/grab after drag completes
+            # Re-acquire focus after drag completes
             GLib.timeout_add(700, self._end_drag)
 
     def _end_drag(self):
