@@ -193,6 +193,7 @@ public:
         ui.unregisterAction(&dictAction_);
         ui.unregisterAction(&clipboardAction_);
         ui.unregisterAction(&underlineAction_);
+        ui.unregisterAction(&versionAction_);
     }
 
     // ── Fcitx5 config framework ─────────────────────────────────────────────
@@ -379,6 +380,7 @@ public:
         sa.addAction(fcitx::StatusGroup::InputMethod, &dictAction_);
         sa.addAction(fcitx::StatusGroup::InputMethod, &clipboardAction_);
         sa.addAction(fcitx::StatusGroup::InputMethod, &screenshotAction_);
+        sa.addAction(fcitx::StatusGroup::InputMethod, &versionAction_);
 
         refreshModeAction(ic);
     }
@@ -558,6 +560,12 @@ private:
         });
         ui.registerAction("farolkey-underline", &underlineAction_);
         // underlineAction_ is registered but NOT added to statusArea (config-only).
+
+        // Version label — shown in systray so users can confirm which build is running.
+        versionAction_.setShortText("v" FAROLKEY_VERSION);
+        versionAction_.setLongText("FarolKey v" FAROLKEY_VERSION);
+        // No Activated handler: clicking the label is a no-op.
+        ui.registerAction("farolkey-version", &versionAction_);
 
     }
 
@@ -809,6 +817,7 @@ private:
     fcitx::SimpleAction clipboardAction_;
     fcitx::SimpleAction screenshotAction_;
     fcitx::SimpleAction underlineAction_;
+    fcitx::SimpleAction versionAction_;
 };
 
 // ── Factory ───────────────────────────────────────────────────────────────────

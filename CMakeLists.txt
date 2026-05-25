@@ -93,7 +93,10 @@ if(FAROLKEY_BUILD_FCITX5_PLUGIN)
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${FAROLKEY_X11_INCLUDE_DIRS}
     )
-    target_compile_definitions(farolkey_fcitx5plugin PRIVATE ${FAROLKEY_X11_DEFINITIONS})
+    target_compile_definitions(farolkey_fcitx5plugin PRIVATE
+        ${FAROLKEY_X11_DEFINITIONS}
+        FAROLKEY_VERSION="${PROJECT_VERSION}"
+    )
     target_link_libraries(farolkey_fcitx5plugin
         PRIVATE
             farolkey_fcitx5_adapter

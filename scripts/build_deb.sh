@@ -22,12 +22,18 @@ cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
 # Build the plugin.
 cmake --build "${BUILD_DIR}" --parallel "$(nproc)" --target farolkey_fcitx5plugin
 
+# Remove stale .deb files so the glob below always finds the freshly built one.
+rm -f "${BUILD_DIR}"/farolkey*.deb
+
 # Generate .deb via CPack.
 (cd "${BUILD_DIR}" && cpack -G DEB)
 
-DEB_FILE="$(ls "${BUILD_DIR}"/farolkey*.deb 2>/dev/null | head -1 || true)"
-if [[ -z "${DEB_FILE}" ]]; then
-    echo "ERROR: .deb not found in ${BUILD_DIR}"
+# Read version directly from CMakeLists to construct the exact expected filename.
+VERSION="$(grep -m1 'project(FarolKey VERSION' "${ROOT_DIR}/CMakeLists.txt" \
+           | sed 's/.*VERSION \([0-9.]*\).*/\1/')"
+DEB_FILE="${BUILD_DIR}/farolkey_${VERSION}_amd64.deb"
+if [[ ! -f "${DEB_FILE}" ]]; then
+    echo "ERROR: expected ${DEB_FILE} but file not found"
     exit 1
 fi
 
