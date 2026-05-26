@@ -471,6 +471,15 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             vi_syllable::normalizeTelexBuffer(decoded);
             preeditBuffer_ = encodeUtf8(decoded);
         }
+        // M17.3: Smart Tone Normalization — move misplaced tones and strip invalid glide diacritics.
+        // Runs for both Telex and VNI (e.g. "họăc" → "hoặc", "hơặc" → "hoặc").
+        {
+            auto decoded = decodeUtf8Normalized(preeditBuffer_);
+            if (const auto span = vi_syllable::findLastSyllable(decoded)) {
+                if (vi_syllable::normalizeSyllableTonePlacement(decoded, *span))
+                    preeditBuffer_ = encodeUtf8(decoded);
+            }
+        }
         // M8.2/M13: user dict / abbreviation expansion.
         // Expansion fires on word-boundary keys (space, enter, tab).
         // In Vietnamese mode only Vi/Both entries expand; password fields are skipped.

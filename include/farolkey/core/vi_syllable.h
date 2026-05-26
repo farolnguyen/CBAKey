@@ -69,4 +69,11 @@ bool removeVniDiacritics(std::u32string& buffer);
 // Returns false so callers can fall back to legacy heuristics.
 bool applyVniTransform(std::u32string& buffer, char key);
 
+// M17.2: Fixes tone placement and diacritics in the oaGlide nucleus pattern ("oa*").
+// The 'o' in "oa*" is always a labial semivowel — tone is moved to the 'a'/'ă' side,
+// and any horn/circumflex diacritic on the glide 'o' is stripped. Conservative: only
+// normalizes patterns where the correct placement is phonologically unambiguous.
+// Returns true if any change was made.
+bool normalizeSyllableTonePlacement(std::u32string& buffer, const SyllableSpan& span);
+
 }  // namespace farolkey::core::vi_syllable

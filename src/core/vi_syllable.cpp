@@ -488,6 +488,24 @@ std::optional<std::size_t> toneIndexForCombiningMark(char32_t mark) {
     }
 }
 
+// M17.1: Returns the absolute buffer index that should carry the tone for span's nucleus.
+// Returns nullopt when the correct position cannot be determined (caller must skip normalization).
+std::optional<std::size_t> correctToneBearingIndex(const std::u32string& buffer, const SyllableSpan& span) {
+    std::vector<std::size_t> indices;
+    std::u32string pattern;
+    for (std::size_t i = span.medial_end; i < span.nucleus_end; ++i) {
+        if (!isVowel(buffer[i])) return std::nullopt;
+        indices.push_back(i);
+        pattern.push_back(tonePatternBucket(buffer[i]));
+    }
+    if (indices.empty()) return std::nullopt;
+    if (indices.size() == 1) return indices[0];
+    const bool hasCoda = span.nucleus_end < span.end;
+    const auto offset = selectToneOffset(pattern, hasCoda);
+    if (!offset || *offset >= indices.size()) return std::nullopt;
+    return indices[*offset];
+}
+
 bool applyCombiningMark(char32_t& ch, char32_t mark) {
     if (const auto setIdx = transformedSetForCombiningMark(ch, mark)) {
         std::size_t oldSetIdx = 0;
@@ -948,6 +966,60 @@ bool applyVniTransform(std::u32string& buffer, char key) {
         return false;
     }
     return replaceWithSetPreserveTone(buffer, *pos, newSetIdx);
+}
+
+// M17.2: Fixes tone placement and diacritics in the oaGlide nucleus pattern.
+// The 'o' in "oa*" is always a labial semivowel — it must never bear the tone, and must
+// be plain 'o' (not 'ô' or 'ơ'). Tone is moved to the 'a'/'ă' side; any horn/circumflex
+// diacritic on the glide 'o' is stripped. Other patterns are left untouched (conservative).
+// Returns true if any change was made.
+bool normalizeSyllableTonePlacement(std::u32string& buffer, const SyllableSpan& span) {
+    if (span.nucleus_end - span.medial_end < 2) return false;
+
+    // Only handle oaGlide: nucleus[0] buckets to 'o', nucleus[1] buckets to 'a'.
+    // Examples: "hoa", "hoă", "hoặc" — 'o' is always a glide, never the tone-bearer.
+    if (tonePatternBucket(buffer[span.medial_end]) != U'o') return false;
+    if (tonePatternBucket(buffer[span.medial_end + 1]) != U'a') return false;
+
+    const auto correctPos = correctToneBearingIndex(buffer, span);
+    if (!correctPos) return false;
+
+    bool changed = false;
+
+    // Step 1: Move misplaced tone from 'o' glide to the correct 'a'/'ă' position.
+    std::size_t curTonePos = span.nucleus_end;  // sentinel: no tone found
+    std::size_t curToneIdx = 0;
+    for (std::size_t i = span.medial_end; i < span.nucleus_end; ++i) {
+        std::size_t ti = 0;
+        if (locateInToneSets(buffer[i], nullptr, &ti) && ti != 0) {
+            curTonePos = i;
+            curToneIdx = ti;
+            break;
+        }
+    }
+    if (curTonePos < span.nucleus_end && curTonePos != *correctPos) {
+        std::size_t si = 0;
+        if (locateInToneSets(buffer[curTonePos], &si, nullptr))
+            buffer[curTonePos] = toneSets()[si][0];  // strip tone → ngang
+        std::size_t cs = 0;
+        if (locateInToneSets(buffer[*correctPos], &cs, nullptr))
+            buffer[*correctPos] = toneSets()[cs][curToneIdx];  // apply to correct vowel
+        changed = true;
+    }
+
+    // Step 2: Strip invalid diacritics from 'o' glide (must be plain 'o', setIdx 6).
+    // Handles cases where 'w'/'7' key was applied to 'o' before 'a'/'ă' was entered.
+    std::size_t si = 0;
+    if (locateInToneSets(buffer[span.medial_end], &si, nullptr) && si != 6) {
+        const bool wasUpper = utf8CTypeIswupper(static_cast<std::wint_t>(buffer[span.medial_end])) != 0;
+        char32_t plain = toneSets()[6][0];
+        if (wasUpper)
+            plain = static_cast<char32_t>(utf8CTypeTowupper(static_cast<std::wint_t>(plain)));
+        buffer[span.medial_end] = plain;
+        changed = true;
+    }
+
+    return changed;
 }
 
 }  // namespace farolkey::core::vi_syllable

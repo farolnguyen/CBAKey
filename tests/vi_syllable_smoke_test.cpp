@@ -11,6 +11,7 @@ using farolkey::core::vi_syllable::normalizeVietnameseNfc;
 using farolkey::core::vi_syllable::removeTelexDiacritics;
 using farolkey::core::vi_syllable::removeVniDiacritics;
 using farolkey::core::vi_syllable::selectToneVowelIndex;
+using farolkey::core::vi_syllable::normalizeSyllableTonePlacement;
 using farolkey::core::vi_syllable::segmentWholeBufferPreferMaxSyllables;
 
 int main() {
@@ -375,6 +376,59 @@ int main() {
         std::u32string buf = U"d";
         assert(applyTelexTransform(buf, 'd'));
         assert(buf == U"đ");
+    }
+
+    // M17.2: normalizeSyllableTonePlacement — tone movement + glide diacritic strip.
+    // Case 1: tone on 'o' glide → move to 'ă' (e.g. Telex h→o→j→a→w→c, VNI h→o→5→a→8→c)
+    // "họăc" (h + ọ + ă + c) → "hoặc"
+    {
+        std::u32string s = U"họăc";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"hoặc");  // hoặc
+    }
+    // Case 2: horn diacritic on glide, tone already on correct 'ặ' → strip ơ→o
+    // "hơặc" → "hoặc"
+    {
+        std::u32string s = U"hơặc";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"hoặc");
+    }
+    // Case 3: horn diacritic on glide, no tone → strip ơ→o
+    // "hơăc" → "hoăc"
+    {
+        std::u32string s = U"hơăc";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"hoăc");
+    }
+    // Case 4: tone AND horn on glide (h→o→w→j→a→c) — "hợac" → "hoạc"
+    {
+        std::u32string s = U"hợac";  // hợac (ợ = ơ+nặng)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"hoạc");  // hoạc (ạ = a+nặng)
+    }
+    // Case 5: already correct → no change
+    {
+        std::u32string s = U"hoặc";  // hoặc
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"hoặc");
+    }
+    // Case 6: open syllable "họa" — tone on 'ọ' is correct (open "oa" → offset=0) → no change
+    {
+        std::u32string s = U"họa";  // họa
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"họa");
     }
 
     return 0;
