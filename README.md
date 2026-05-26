@@ -7,7 +7,7 @@ Bộ gõ tiếng Việt (Telex / VNI) chạy trên Fcitx5, hỗ trợ Ubuntu/Deb
 ## Tính năng chính
 
 - **Telex & VNI** — đặt dấu chính xác theo mô hình âm tiết
-- **Gõ tắt** — định nghĩa viết tắt riêng (vd: `ko` → `không`, `btv` → `Ban Tổ chức`)
+- **Gõ tắt** — định nghĩa viết tắt riêng (vd: `ko` → `không`, `btc` → `Ban Tổ chức`)
 - **Smart Templates** — mẫu gõ động với Jinja2 (vd: `[5++]` → danh sách 1–5)
 - **Clipboard History** — lịch sử clipboard kiểu Windows (Ctrl+Super+V)
 - **Screenshot** — chụp màn hình vùng chọn / toàn màn hình (Super+Shift+S, tự vào clipboard)
