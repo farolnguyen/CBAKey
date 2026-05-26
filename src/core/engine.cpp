@@ -583,6 +583,17 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         return ProcessResult{.preedit = preeditBuffer_, .commit = committedPrefix, .consumed = true};
     };
 
+    // M17.4: Realtime tone normalization — fires after every preedit update.
+    // Moves misplaced tones and strips invalid glide diacritics in the oaGlide pattern.
+    // Modifies decoded in-place so maybeAutoCommitStablePrefix sees the corrected form.
+    const auto applyPreeditNormalize = [&](std::u32string& dec) {
+        if (const auto span = vi_syllable::findLastSyllable(dec)) {
+            if (vi_syllable::normalizeSyllableTonePlacement(dec, *span)) {
+                preeditBuffer_ = encodeUtf8(dec);
+            }
+        }
+    };
+
     // VNI + numpad digit: digits on the numpad should never be treated as VNI
     // tone/diacritic modifiers — they must always produce the literal digit.
     // Commit any pending preedit first, then forward the key to the app.
@@ -783,6 +794,7 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         vi_syllable::normalizeVniUoTransform(decoded, /*fromPushPath=*/true);
     }
     preeditBuffer_ = encodeUtf8(decoded);
+    applyPreeditNormalize(decoded);
     if (const auto split = maybeAutoCommitStablePrefix(decoded)) {
         return *split;
     }
