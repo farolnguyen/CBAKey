@@ -665,25 +665,36 @@ bool applyTelexTransform(std::u32string& buffer, char key) {
         pos = rightmostNucleusCharWithBase(buffer, *span, U"o");
         newSetIdx = 7;
     } else if (key == 'w') {
-        // Priority: u→ư and o→ơ (horn diacritic) before a→ă (breve).
-        // This handles typing order variations like "nuaxw" → "nữa" where u has
-        // a tone mark already (ũ) but should still be the w target, not the 'a'.
-        pos = rightmostNucleusCharWithBase(buffer, *span, U"ou");
-        if (!pos) {
-            pos = rightmostNucleusCharWithBase(buffer, *span, U"a");
-        }
-        if (!pos) {
-            return false;
-        }
-        const char32_t base = baseChar(buffer[*pos]);
-        if (base == U'a') {
-            newSetIdx = 1;
-        } else if (base == U'o') {
-            newSetIdx = 8;
-        } else if (base == U'u') {
-            newSetIdx = 10;
+        // In an "oa"-glide nucleus ('o' is a labial semivowel followed by an
+        // 'a'-bucket vowel, e.g. "hoa"→"hoă" for "hoặc"), 'w' targets the
+        // 'a'/'ă' vowel (breve), NOT the leading 'o' (horn).
+        // In all other nuclei: u→ư and o→ơ (horn) take priority over a→ă (breve).
+        // (This handles "nuaxw"→"nữa" where ũ must still be the w target.)
+        const std::size_t nucleusLen = span->nucleus_end - span->medial_end;
+        const bool oaGlide = nucleusLen >= 2 &&
+            tonePatternBucket(buffer[span->medial_end]) == U'o' &&
+            tonePatternBucket(buffer[span->medial_end + 1]) == U'a';
+        if (oaGlide) {
+            pos = rightmostNucleusCharWithBase(buffer, *span, U"aă");  // 'a' or 'ă'
+            newSetIdx = 1;  // → ă (breve)
         } else {
-            return false;
+            pos = rightmostNucleusCharWithBase(buffer, *span, U"ou");
+            if (!pos) {
+                pos = rightmostNucleusCharWithBase(buffer, *span, U"a");
+            }
+            if (!pos) {
+                return false;
+            }
+            const char32_t base = baseChar(buffer[*pos]);
+            if (base == U'a') {
+                newSetIdx = 1;
+            } else if (base == U'o') {
+                newSetIdx = 8;
+            } else if (base == U'u') {
+                newSetIdx = 10;
+            } else {
+                return false;
+            }
         }
     } else {
         return false;

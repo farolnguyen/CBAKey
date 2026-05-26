@@ -30,10 +30,11 @@ def _config_dir() -> Path:
 SCREENSHOT_CONF = _config_dir() / 'screenshot.conf'
 
 _DEFAULTS = {
-    'save_path':       str(Path.home() / 'Pictures' / 'Screenshots'),
-    'ask_before_save': 'true',
-    'auto_save':       'false',
-    'hotkey':          'super+shift+s',
+    'save_path':        str(Path.home() / 'Pictures' / 'Screenshots'),
+    'ask_before_save':  'true',
+    'auto_save':        'false',
+    'hotkey':           'super+shift+s',
+    'instant_capture':  'false',
 }
 
 def load_conf() -> dict:
@@ -148,6 +149,28 @@ class SettingsWindow(Gtk.Window):
         cap_hint.set_xalign(0)
         cap_hint.set_margin_top(2)
         vbox.pack_start(cap_hint, False, False, 0)
+
+        # Instant capture toggle
+        vbox.pack_start(Gtk.Separator(), False, False, 8)
+        instant_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        instant_lbl = Gtk.Label(label='Chụp ngay khi thả chuột')
+        instant_lbl.set_xalign(0)
+        instant_row.pack_start(instant_lbl, True, True, 0)
+        self._instant_switch = Gtk.Switch()
+        self._instant_switch.set_active(
+            self._conf.get('instant_capture', 'false').lower() == 'true'
+        )
+        self._instant_switch.set_valign(Gtk.Align.CENTER)
+        instant_row.pack_start(self._instant_switch, False, False, 0)
+        vbox.pack_start(instant_row, False, False, 0)
+
+        instant_hint = Gtk.Label(
+            label='Nếu bật: ảnh chụp ngay sau khi thả chuột — không có chế độ xem trước / chỉnh vùng'
+        )
+        instant_hint.get_style_context().add_class('hint')
+        instant_hint.set_xalign(0)
+        instant_hint.set_margin_top(2)
+        vbox.pack_start(instant_hint, False, False, 0)
 
         # ── Section: Lưu trữ ─────────────────────────────────────────────────
         vbox.pack_start(self._section_label('Save'), False, False, 0)
@@ -292,11 +315,12 @@ class SettingsWindow(Gtk.Window):
 
     def _on_save(self, *_):
         old_hotkey = self._conf.get('hotkey', '')
-        self._conf['hotkey']          = self._hotkey_entry.get_text().strip()
-        self._conf['save_path']       = self._path_entry.get_text().strip()
-        self._conf['ask_before_save'] = 'true' if self._ask_switch.get_active() else 'false'
-        self._conf['auto_save']       = 'true' if self._auto_switch.get_active() else 'false'
-        self._conf['capture_mode']    = 'cursor' if self._cap_cursor_radio.get_active() else 'all'
+        self._conf['hotkey']           = self._hotkey_entry.get_text().strip()
+        self._conf['save_path']        = self._path_entry.get_text().strip()
+        self._conf['ask_before_save']  = 'true' if self._ask_switch.get_active() else 'false'
+        self._conf['auto_save']        = 'true' if self._auto_switch.get_active() else 'false'
+        self._conf['capture_mode']     = 'cursor' if self._cap_cursor_radio.get_active() else 'all'
+        self._conf['instant_capture']  = 'true' if self._instant_switch.get_active() else 'false'
         save_conf(self._conf)
 
         hotkey_changed = self._conf['hotkey'] != old_hotkey

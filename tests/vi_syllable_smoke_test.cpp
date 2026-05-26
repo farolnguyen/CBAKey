@@ -195,6 +195,14 @@ int main() {
     assert(applyTelexTransform(thuo, 'w'));
     assert(thuo == U"thuơ");
 
+    // Bug fix: "oa"-glide nucleus — 'w' targets 'a'→'ă', not 'o'→'ơ'.
+    // Typing "hoặc": hoa + w → hoă (not hơa), then j → hoặ, then c → hoặc.
+    {
+        std::u32string hoaw = U"hoa";
+        assert(applyTelexTransform(hoaw, 'w'));
+        assert(hoaw == U"hoă");  // hoă (U+0103), NOT hơa
+    }
+
     std::u32string gau = U"ga";
     assert(applyTelexTransform(gau, 'a'));
     assert(gau == U"gâ");

@@ -60,11 +60,12 @@ SOCKET_PATH     = _data_dir() / 'clipboard.sock'
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 _DEFAULTS = {
-    'save_path':       str(Path.home() / 'Pictures' / 'Screenshots'),
-    'ask_before_save': 'true',
-    'auto_save':       'false',
-    'hotkey':          'super+shift+s',
-    'capture_mode':    'all',   # 'all' = all monitors (letterboxed) | 'cursor' = monitor with cursor
+    'save_path':        str(Path.home() / 'Pictures' / 'Screenshots'),
+    'ask_before_save':  'true',
+    'auto_save':        'false',
+    'hotkey':           'super+shift+s',
+    'capture_mode':     'all',   # 'all' = all monitors | 'cursor' = monitor with cursor
+    'instant_capture':  'false', # 'true' = confirm on mouse release; 'false' = review mode
 }
 
 def load_conf() -> dict:
@@ -418,16 +419,19 @@ class MonitorOverlay(Gtk.Window):
                  mon_pb: 'GdkPixbuf.Pixbuf',
                  has_toolbar: bool,
                  sel: '_SelState', overlays: list,
-                 on_confirm, on_cancel):
+                 on_confirm, on_cancel,
+                 instant_capture: bool = False):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
-        self._idx        = mon_idx
-        self._geo        = geo       # Gdk.Rectangle in logical coords
-        self._pb         = mon_pb    # already sized to geo.width × geo.height
-        self._sel        = sel
-        self._overlays   = overlays  # shared list; populated after all overlays built
-        self._on_confirm = on_confirm
-        self._on_cancel  = on_cancel
-        self._done       = False
+        self._idx             = mon_idx
+        self._geo             = geo       # Gdk.Rectangle in logical coords
+        self._pb              = mon_pb    # already sized to geo.width × geo.height
+        self._sel             = sel
+        self._overlays        = overlays  # shared list; populated after all overlays built
+        self._on_confirm      = on_confirm
+        self._on_cancel       = on_cancel
+        self._done            = False
+        self._instant_capture = instant_capture
+        self._rev_drag        = None  # dict when dragging in review mode
 
         _css = Gtk.CssProvider()
         _css.load_from_data(_OVERLAY_CSS)
@@ -566,42 +570,168 @@ class MonitorOverlay(Gtk.Window):
         for ov in self._overlays:
             ov._done = True
 
+    # ── Review-mode helpers ───────────────────────────────────────────────────
+
+    _REVIEW_HANDLE = 14  # px — hit zone for corner / edge handles
+
+    def _review_hit_test(self, ax, ay):
+        """Return (hit_type, ox1, oy1, ox2, oy2) for review-mode interaction.
+
+        hit_type: 'move' | 'corner-tl/tr/bl/br' | 'edge-t/b/l/r' | None
+        ox1/oy1/ox2/oy2: normalised selection rect at call time.
+        """
+        H = self._REVIEW_HANDLE
+        sx, sy, sw, sh = self._sel.rect()
+        x1, y1 = sx, sy
+        x2, y2 = sx + sw, sy + sh
+        # Corners (checked before edges to avoid overlap)
+        if abs(ax - x1) <= H and abs(ay - y1) <= H: return 'corner-tl', x1, y1, x2, y2
+        if abs(ax - x2) <= H and abs(ay - y1) <= H: return 'corner-tr', x1, y1, x2, y2
+        if abs(ax - x1) <= H and abs(ay - y2) <= H: return 'corner-bl', x1, y1, x2, y2
+        if abs(ax - x2) <= H and abs(ay - y2) <= H: return 'corner-br', x1, y1, x2, y2
+        # Edges
+        if x1 <= ax <= x2 and abs(ay - y1) <= H:    return 'edge-t', x1, y1, x2, y2
+        if x1 <= ax <= x2 and abs(ay - y2) <= H:    return 'edge-b', x1, y1, x2, y2
+        if y1 <= ay <= y2 and abs(ax - x1) <= H:    return 'edge-l', x1, y1, x2, y2
+        if y1 <= ay <= y2 and abs(ax - x2) <= H:    return 'edge-r', x1, y1, x2, y2
+        # Interior
+        if x1 <= ax <= x2 and y1 <= ay <= y2:       return 'move',   x1, y1, x2, y2
+        return None, x1, y1, x2, y2
+
+    def _update_cursor_for_review(self, ax, ay):
+        if ax is None:
+            self._set_cursor(Gdk.CursorType.CROSSHAIR)
+            return
+        hit, *_ = self._review_hit_test(ax, ay)
+        self._set_cursor({
+            'corner-tl': Gdk.CursorType.TOP_LEFT_CORNER,
+            'corner-tr': Gdk.CursorType.TOP_RIGHT_CORNER,
+            'corner-bl': Gdk.CursorType.BOTTOM_LEFT_CORNER,
+            'corner-br': Gdk.CursorType.BOTTOM_RIGHT_CORNER,
+            'edge-t':    Gdk.CursorType.TOP_SIDE,
+            'edge-b':    Gdk.CursorType.BOTTOM_SIDE,
+            'edge-l':    Gdk.CursorType.LEFT_SIDE,
+            'edge-r':    Gdk.CursorType.RIGHT_SIDE,
+            'move':      Gdk.CursorType.FLEUR,
+        }.get(hit, Gdk.CursorType.CROSSHAIR))
+
     # ── Mouse handlers ────────────────────────────────────────────────────────
 
     def _to_abs(self, lx, ly):
         return self._geo.x + int(lx), self._geo.y + int(ly)
 
     def _on_press(self, _w, event):
-        if event.button != 1 or self._sel.mode != 'selecting' or self._done:
+        if event.button != 1 or self._done:
             return
         ax, ay = self._to_abs(event.x, event.y)
-        self._sel.dragging = True
-        self._sel.sx = self._sel.ex = ax
-        self._sel.sy = self._sel.ey = ay
-        self._update_all_sel_visuals()
+
+        if self._sel.mode == 'selecting':
+            self._sel.dragging = True
+            self._sel.sx = self._sel.ex = ax
+            self._sel.sy = self._sel.ey = ay
+            self._update_all_sel_visuals()
+
+        elif self._sel.mode == 'review':
+            hit, ox1, oy1, ox2, oy2 = self._review_hit_test(ax, ay)
+            if hit is None:
+                # Click outside selection → start a fresh drag
+                self._sel.mode = 'selecting'
+                self._rev_drag = None
+                _sel_hint = 'Kéo chuột để chọn vùng  •  Esc để huỷ'
+                for ov in self._overlays:
+                    ov._hint_lbl.set_text(_sel_hint)
+                    ov._size_lbl.hide()
+                    ov._sel_box.hide()
+                    ov._sel_img_box.hide()
+                    ov._set_cursor(Gdk.CursorType.CROSSHAIR)
+                    GLib.idle_add(ov._position_hint)
+                self._sel.dragging = True
+                self._sel.sx = self._sel.ex = ax
+                self._sel.sy = self._sel.ey = ay
+            else:
+                self._rev_drag = {
+                    'mode': hit,
+                    'start_ax': ax, 'start_ay': ay,
+                    'ox1': ox1, 'oy1': oy1, 'ox2': ox2, 'oy2': oy2,
+                }
 
     def _on_motion(self, _w, event):
-        if not self._sel.dragging or self._done:
-            return
         ax, ay = self._to_abs(event.x, event.y)
-        self._sel.ex = ax
-        self._sel.ey = ay
-        self._update_all_sel_visuals()
-        self._update_size_labels()
+
+        if self._sel.mode == 'selecting' and self._sel.dragging and not self._done:
+            self._sel.ex = ax
+            self._sel.ey = ay
+            self._update_all_sel_visuals()
+            self._update_size_labels()
+
+        elif self._sel.mode == 'review' and not self._done:
+            if self._rev_drag:
+                d = self._rev_drag
+                m = d['mode']
+                ox1, oy1, ox2, oy2 = d['ox1'], d['oy1'], d['ox2'], d['oy2']
+                if m == 'move':
+                    dx = ax - d['start_ax']; dy = ay - d['start_ay']
+                    self._sel.sx = ox1 + dx; self._sel.sy = oy1 + dy
+                    self._sel.ex = ox2 + dx; self._sel.ey = oy2 + dy
+                elif m == 'corner-tl':
+                    self._sel.sx = ax;  self._sel.sy = ay
+                    self._sel.ex = ox2; self._sel.ey = oy2
+                elif m == 'corner-tr':
+                    self._sel.sx = ox1; self._sel.sy = ay
+                    self._sel.ex = ax;  self._sel.ey = oy2
+                elif m == 'corner-bl':
+                    self._sel.sx = ax;  self._sel.sy = oy1
+                    self._sel.ex = ox2; self._sel.ey = ay
+                elif m == 'corner-br':
+                    self._sel.sx = ox1; self._sel.sy = oy1
+                    self._sel.ex = ax;  self._sel.ey = ay
+                elif m == 'edge-t':
+                    self._sel.sx = ox1; self._sel.sy = ay
+                    self._sel.ex = ox2; self._sel.ey = oy2
+                elif m == 'edge-b':
+                    self._sel.sx = ox1; self._sel.sy = oy1
+                    self._sel.ex = ox2; self._sel.ey = ay
+                elif m == 'edge-l':
+                    self._sel.sx = ax;  self._sel.sy = oy1
+                    self._sel.ex = ox2; self._sel.ey = oy2
+                elif m == 'edge-r':
+                    self._sel.sx = ox1; self._sel.sy = oy1
+                    self._sel.ex = ax;  self._sel.ey = oy2
+                self._update_all_sel_visuals()
+                self._update_size_labels()
+            else:
+                self._update_cursor_for_review(ax, ay)
 
     def _on_release(self, _w, event):
-        if event.button != 1 or not self._sel.dragging or self._done:
+        if event.button != 1 or self._done:
             return
         ax, ay = self._to_abs(event.x, event.y)
-        self._sel.ex = ax
-        self._sel.ey = ay
-        self._sel.dragging = False
-        self._update_all_sel_visuals()
-        self._update_size_labels()
-        x, y, w, h = self._sel.rect()
-        if w > 4 and h > 4:
-            self._set_done()
-            GLib.idle_add(self._deliver_region, x, y, w, h)
+
+        if self._sel.mode == 'selecting' and self._sel.dragging:
+            self._sel.ex = ax
+            self._sel.ey = ay
+            self._sel.dragging = False
+            self._update_all_sel_visuals()
+            self._update_size_labels()
+            x, y, w, h = self._sel.rect()
+            if w > 4 and h > 4:
+                if self._instant_capture:
+                    self._set_done()
+                    GLib.idle_add(self._deliver_region, x, y, w, h)
+                else:
+                    self._sel.mode = 'review'
+                    _hint = ('Kéo góc/cạnh để chỉnh  •  Kéo trong vùng để di chuyển'
+                             '  •  Enter để xác nhận  •  Esc để chọn lại')
+                    for ov in self._overlays:
+                        ov._hint_lbl.set_text(_hint)
+                        ov._hint_lbl.show()
+                        ov._rev_drag = None
+                        GLib.idle_add(ov._position_hint)
+                    self._update_cursor_for_review(ax, ay)
+
+        elif self._sel.mode == 'review' and self._rev_drag:
+            self._rev_drag = None
+            self._update_cursor_for_review(ax, ay)
 
     def _on_key(self, _w, event):
         k = event.keyval
@@ -617,11 +747,25 @@ class MonitorOverlay(Gtk.Window):
                     ov._sel_box.hide()
                     ov._sel_img_box.hide()
                     ov._set_cursor(Gdk.CursorType.ARROW)
+                    ov._rev_drag = None
+            elif self._sel.mode == 'review' and not self._done:
+                # Return to selecting mode — clear selection, allow a new drag
+                self._sel.mode     = 'selecting'
+                self._sel.dragging = False
+                _sel_hint = 'Kéo chuột để chọn vùng  •  Esc để huỷ'
+                for ov in self._overlays:
+                    ov._hint_lbl.set_text(_sel_hint)
+                    ov._size_lbl.hide()
+                    ov._sel_box.hide()
+                    ov._sel_img_box.hide()
+                    ov._set_cursor(Gdk.CursorType.CROSSHAIR)
+                    ov._rev_drag = None
+                    GLib.idle_add(ov._position_hint)
             elif not self._done:
                 self._act_cancel()
             return True
         if k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
-            if self._sel.mode == 'selecting' and not self._done:
+            if self._sel.mode in ('selecting', 'review') and not self._done:
                 x, y, w, h = self._sel.rect()
                 if w > 4 and h > 4:
                     self._set_done()
@@ -733,6 +877,8 @@ class CaptureReviewOverlay:
             0
         )
 
+        instant_capture = conf.get('instant_capture', 'false').lower() == 'true'
+
         sel            = _SelState()
         self._overlays: list = []
         pb_w = self._pb.get_width()
@@ -759,6 +905,7 @@ class CaptureReviewOverlay:
                 sel=sel, overlays=self._overlays,
                 on_confirm=self._on_confirm,
                 on_cancel=self._on_cancel,
+                instant_capture=instant_capture,
             )
             self._overlays.append(ov)
 
