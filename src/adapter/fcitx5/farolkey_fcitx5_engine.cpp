@@ -331,16 +331,19 @@ public:
                 interceptor_->startIntercepting([this, ic]() {
                     auto it = bridges_.find(ic);
                     if (it == bridges_.end()) return;
-                    // Commit preedit before the click is forwarded to the app.
-                    // commitForFocusLoss handles per-frontend commit strategy:
-                    //   - Panel clients: always commit.
-                    //   - XIM clients (Chrome): explicit commit (no auto-commit).
-                    //   - D-Bus clients (fcitx5-gtk): skip commit, rely on
-                    //     auto-commit via preedit_changed signal.
-                    commitForFocusLoss(ic, it->second);
-                    pushPreedit(ic, "", it->second.config().fcitx5PreeditMode,
-                                config_.showPreeditUnderline.value());
-                    composeAnchors_.erase(ic);
+                    // ClientUnfocusCommit clients (e.g. GTK/fcitx5-gtk) will
+                    // auto-commit their own preedit on FocusOut — don't commit
+                    // explicitly here or we'll race with their auto-commit ("koko").
+                    // Non-ClientUnfocusCommit clients (e.g. Chrome on X11/dbus)
+                    // won't auto-commit, so we do it now while the app is still
+                    // focused (pointer frozen by the interceptor).
+                    if (!ic->capabilityFlags().test(
+                            fcitx::CapabilityFlag::ClientUnfocusCommit)) {
+                        commitForFocusLoss(ic, it->second, /*fromInterceptor=*/true);
+                        pushPreedit(ic, "", it->second.config().fcitx5PreeditMode,
+                                    config_.showPreeditUnderline.value());
+                        composeAnchors_.erase(ic);
+                    }
                     interceptor_->stopIntercepting();
                 });
             }
@@ -730,32 +733,36 @@ private:
     //   This fixes Google Sheets / browser-based apps where click-away loses preedit.
     //
     // Panel-mode clients (Preedit capability not set): handled by commitPanelPreeditIfNeeded.
+    // fromInterceptor=true: called from X11 click interceptor — the app is still
+    // focused (click not yet delivered). Safe to commit for ALL frontends including
+    // "dbus" because the commit arrives before focus changes.
+    //
+    // fromInterceptor=false (default): called from reset/deactivate — focus already
+    // lost. "dbus" (fcitx5-gtk) auto-commits via preedit_changed; explicit commit
+    // here would double-commit ("koko").
     void commitForFocusLoss(fcitx::InputContext* ic,
-                             farolkey::adapter::fcitx5::Bridge& bridge) {
+                             farolkey::adapter::fcitx5::Bridge& bridge,
+                             bool fromInterceptor = false) {
         using farolkey::adapter::fcitx5::PreeditPresentation;
         const auto presentation = farolkey::adapter::fcitx5::choosePreeditPresentation(
             bridge.config().fcitx5PreeditMode, snapshotCaps(ic));
         const std::string pending = bridge.takeCompositionForCommit();
+        const std::string_view fe = ic->frontendName();
         if (pending.empty()) return;
 
         if (presentation == PreeditPresentation::Panel) {
-            // Panel clients: commit directly (same as before).
             ic->commitString(pending);
         } else {
-            // Client (inline) preedit: check if this client auto-commits on
-            // preedit-clear (fcitx5-gtk does) or needs explicit commit (XIM/Chrome).
-            // fcitx5-gtk uses the "dbus" frontend; XIM clients use "xim".
-            const std::string_view fe = ic->frontendName();
-            if (fe == "xim" || fe == "waylandim" || fe == "fcitx4") {
-                // These frontends do NOT auto-commit preedit on focus-loss:
-                //   "xim"      — Chrome/Firefox on X11 via XIM protocol
-                //   "waylandim"— Chrome/Firefox on Wayland via text-input protocol
-                //   "fcitx4"   — Chrome/Firefox via fcitx4 compatibility protocol
-                // All browser-based apps fall into one of the above categories.
+            if (fe == "xim" || fe == "waylandim" || fe == "fcitx4" || fe == "ibus" ||
+                (fromInterceptor && fe == "dbus")) {
+                // Non-auto-committing frontends always need explicit commit.
+                // "dbus" (Chrome on X11): explicit commit is safe only from the
+                // interceptor path because the app is still focused — commit
+                // arrives before the click unfreezes. In reset/deactivate path,
+                // fcitx5-gtk already auto-committed via preedit_changed, so we
+                // skip explicit commit to avoid double-commit.
                 ic->commitString(pending);
             }
-            // "dbus" (fcitx5-gtk, GTK apps): auto-commits via preedit_changed →
-            // explicit commit would double-commit ("koko"). Leave it to fcitx5-gtk.
         }
     }
 
