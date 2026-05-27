@@ -266,6 +266,13 @@ public:
             for (auto& [_, br_] : bridges_) br_.setInputMode(globalMode_);
             refreshModeAction(ic_);
             refreshAllStatusAreas();
+            // Clear any stale preedit display left over from the previous mode.
+            // Without this, the old preedit text remains visible in the app and
+            // gets auto-committed by GTK when the next character's commitString
+            // arrives — producing doubled text (e.g. VI "chao" preedit → EN "chao"
+            // typed → app sees "chaochao").
+            pushPreedit(ic_, "", bridgeFor(ic_).config().fcitx5PreeditMode,
+                        config_.showPreeditUnderline.value());
             keyEvent.filterAndAccept();
             return;
         }
@@ -318,7 +325,12 @@ public:
         if (!dispatch.commit.empty() && ic)
             ic->commitString(dispatch.commit);
 
-        pushPreedit(ic, br.preedit(), br.config().fcitx5PreeditMode, underline);
+        // Skip pushPreedit when preedit was and remains empty (e.g. every EN-mode
+        // character). Calling updatePreedit() with empty→empty generates a spurious
+        // preedit_changed signal which can trigger GTK to auto-commit a stale preedit
+        // in some toolkit/fcitx5-gtk version combinations, causing doubled text.
+        if (hadPreedit || !br.preedit().empty())
+            pushPreedit(ic, br.preedit(), br.config().fcitx5PreeditMode, underline);
 
         if (br.preedit().empty()) {
             composeAnchors_.erase(ic);

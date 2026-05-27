@@ -384,6 +384,18 @@ bool Engine::isAsciiSeparatorCommit(char ch) {
 }
 
 std::string Engine::takeCompositionForCommit() {
+    // EN mode preeditBuffer_ is a word-tracking buffer only — each character
+    // was already committed individually via commitString.  Returning it here
+    // would cause a second commit (double-text) when the IM is reset, e.g.
+    // Firefox/fcitx4 calls XIM ResetIC after passing a native key event
+    // (like Backspace) back to the app, which triggers our reset() handler.
+    if (mode_ == InputMode::English) {
+        preeditBuffer_.clear();
+        preeditHistory_.clear();
+        clearRepeatTransformState();
+        clearPendingLiteralEscape();
+        return "";
+    }
     std::string out = std::move(preeditBuffer_);
     preeditHistory_.clear();
     clearRepeatTransformState();
