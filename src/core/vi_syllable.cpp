@@ -383,7 +383,7 @@ std::optional<std::size_t> selectToneOffset(const std::u32string& tonePattern, b
     }
 
     static constexpr TonePatternRule kToneRules[] = {
-        {U"oa", 0, 1},   {U"oe", 0, 1},   {U"ue", 1, 1},   {U"uê", 1, 1},   {U"uy", 1, 1},
+        {U"oa", 0, 1},   {U"oe", 1, 1},   {U"ue", 1, 1},   {U"uê", 1, 1},   {U"uy", 1, 1},
         {U"ao", 0, 0},   {U"au", 0, 0},   {U"âu", 0, 0},   {U"ay", 0, 0},
         {U"ây", 0, 0},   {U"ai", 0, 0},   {U"eo", 0, 0},   {U"eu", 0, 0},
         {U"êu", 0, 0},   {U"oi", 0, 0},   {U"ôi", 0, 0},
@@ -968,25 +968,81 @@ bool applyVniTransform(std::u32string& buffer, char key) {
     return replaceWithSetPreserveTone(buffer, *pos, newSetIdx);
 }
 
-// M17.2: Fixes tone placement and diacritics in the oaGlide nucleus pattern.
-// The 'o' in "oa*" is always a labial semivowel — it must never bear the tone, and must
-// be plain 'o' (not 'ô' or 'ơ'). Tone is moved to the 'a'/'ă' side; any horn/circumflex
-// diacritic on the glide 'o' is stripped. Other patterns are left untouched (conservative).
+// M17.2: Fixes tone placement and diacritics in glide-first nucleus patterns.
+//
+// Nine patterns are handled:
+//   iMedial:  'i' (after 'g') or 'u' (after 'q') is the semivowel medial — never
+//             tone-bearing. Tone placed on the medial is moved to the correct nucleus
+//             position regardless of nucleus length.
+//             Examples: "gíup"→"giúp", "qúa"→"quá", "qùyên"→"quyền".
+//   oaGlide:  'o' is a labial semivowel in "oa*"; tone must go to 'a'/'ă' side.
+//             Any horn/circumflex diacritic on the 'o' glide is also stripped (Step 2).
+//             Examples: "họăc"→"hoặc", "hơặc"→"hoặc".
+//   oeGlide:  'o' is a labial semivowel in "oe"; tone must go to 'e' (both open and closed).
+//             kToneRules "oe" → offset=1 always — unlike "oa", the 'e' is always the peak.
+//             Examples: "khóe"→"khoé", "xòe"→"xoè", "khỏe"→"khoẻ".
+//   uaGlide:  'u'/'ư' is a labial glide in "ua"/"ưa"; tone follows selectToneOffset rule:
+//             open → 'u'/'ư' (offset=0), closed → 'a' (offset=1).
+//             Examples (closed): "túan"→"tuán". Examples (open): "muá"→"múa".
+//   yGlide:   'y' is a palatal semivowel; tone must go to the following 'ê'/'e'.
+//             Example: "quỳên"→"quyền".
+//   uGlide:   'u'/'ư' is a labial semivowel when followed by an 'o'-family vowel (ô/ơ/o);
+//             tone must go to that 'o'-family vowel.
+//             Examples: "cứơi"→"cưới", "hứơng"→"hướng".
+//   uyGlide:  'u' is a labial semivowel in "uy*" (nucleusLen≥3); tone must go to 'ê'/'e'.
+//             "uy" alone (2-char) is excluded — both "úy" and "uý" are valid words.
+//             Examples: "ngùyên"→"nguyền", "nguỳên"→"nguyền".
+//   ieGlide:  'i' is a palatal semivowel in "ie*"/"iê*"; tone must go to 'ê'/'e'.
+//             Examples: "tíêng"→"tiếng", "mìên"→"miền".
+//             Note: "ia" (b1='a') is correctly excluded — tone on 'i' is right in open "ia".
+//   ueGlide:  'u' is a labial semivowel in "ue"/"uê"; tone must go to 'ê'/'e'.
+//             "ua"/"ưa" (b1='a') and "uo*" (b1='o') are handled by other patterns.
+//             Examples: "thúê"→"thuế", "tụê"→"tuệ".
+//
 // Returns true if any change was made.
 bool normalizeSyllableTonePlacement(std::u32string& buffer, const SyllableSpan& span) {
+    // iMedial/uMedial: tone misplaced on the semivowel medial rather than the nucleus.
+    // The parser only creates a medial for 'u' after 'q' and 'i' after 'g', both of which
+    // are always non-tone-bearing. Move any tone found there to correctToneBearingIndex.
+    if (span.medial_end > span.onset_end && span.nucleus_end > span.medial_end) {
+        const std::size_t medialPos = span.medial_end - 1;
+        std::size_t medialSetIdx = 0;
+        std::size_t medialToneIdx = 0;
+        if (locateInToneSets(buffer[medialPos], &medialSetIdx, &medialToneIdx) && medialToneIdx != 0) {
+            const auto correctPos = correctToneBearingIndex(buffer, span);
+            if (correctPos) {
+                buffer[medialPos] = toneSets()[medialSetIdx][0];
+                std::size_t cs = 0;
+                if (locateInToneSets(buffer[*correctPos], &cs, nullptr))
+                    buffer[*correctPos] = toneSets()[cs][medialToneIdx];
+                return true;
+            }
+        }
+    }
+
     if (span.nucleus_end - span.medial_end < 2) return false;
 
-    // Only handle oaGlide: nucleus[0] buckets to 'o', nucleus[1] buckets to 'a'.
-    // Examples: "hoa", "hoă", "hoặc" — 'o' is always a glide, never the tone-bearer.
-    if (tonePatternBucket(buffer[span.medial_end]) != U'o') return false;
-    if (tonePatternBucket(buffer[span.medial_end + 1]) != U'a') return false;
+    const std::size_t nucleusLen = span.nucleus_end - span.medial_end;
+    const char32_t b0 = tonePatternBucket(buffer[span.medial_end]);
+    const char32_t b1 = tonePatternBucket(buffer[span.medial_end + 1]);
+
+    const bool oaGlide  = (b0 == U'o' && b1 == U'a');
+    const bool oeGlide  = (b0 == U'o' && b1 == U'e');
+    const bool uaGlide  = (b0 == U'u' && b1 == U'a');
+    const bool yGlide   = (b0 == U'y');
+    const bool uGlide   = (b0 == U'u' && b1 == U'o');
+    const bool uyGlide  = (nucleusLen >= 3 && b0 == U'u' && b1 == U'y');
+    const bool ieGlide  = (b0 == U'i' && b1 == U'e');
+    const bool ueGlide  = (b0 == U'u' && b1 == U'e');
+
+    if (!oaGlide && !oeGlide && !uaGlide && !yGlide && !uGlide && !uyGlide && !ieGlide && !ueGlide) return false;
 
     const auto correctPos = correctToneBearingIndex(buffer, span);
     if (!correctPos) return false;
 
     bool changed = false;
 
-    // Step 1: Move misplaced tone from 'o' glide to the correct 'a'/'ă' position.
+    // Step 1: Move misplaced tone from the glide to the correct position.
     std::size_t curTonePos = span.nucleus_end;  // sentinel: no tone found
     std::size_t curToneIdx = 0;
     for (std::size_t i = span.medial_end; i < span.nucleus_end; ++i) {
@@ -1007,16 +1063,18 @@ bool normalizeSyllableTonePlacement(std::u32string& buffer, const SyllableSpan& 
         changed = true;
     }
 
-    // Step 2: Strip invalid diacritics from 'o' glide (must be plain 'o', setIdx 6).
-    // Handles cases where 'w'/'7' key was applied to 'o' before 'a'/'ă' was entered.
-    std::size_t si = 0;
-    if (locateInToneSets(buffer[span.medial_end], &si, nullptr) && si != 6) {
-        const bool wasUpper = utf8CTypeIswupper(static_cast<std::wint_t>(buffer[span.medial_end])) != 0;
-        char32_t plain = toneSets()[6][0];
-        if (wasUpper)
-            plain = static_cast<char32_t>(utf8CTypeTowupper(static_cast<std::wint_t>(plain)));
-        buffer[span.medial_end] = plain;
-        changed = true;
+    // Step 2: Strip invalid diacritics from 'o' glide (oaGlide only).
+    // The 'o' in "oa*" must be plain 'o' (setIdx 6) — not 'ô' or 'ơ'.
+    if (oaGlide) {
+        std::size_t si = 0;
+        if (locateInToneSets(buffer[span.medial_end], &si, nullptr) && si != 6) {
+            const bool wasUpper = utf8CTypeIswupper(static_cast<std::wint_t>(buffer[span.medial_end])) != 0;
+            char32_t plain = toneSets()[6][0];
+            if (wasUpper)
+                plain = static_cast<char32_t>(utf8CTypeTowupper(static_cast<std::wint_t>(plain)));
+            buffer[span.medial_end] = plain;
+            changed = true;
+        }
     }
 
     return changed;

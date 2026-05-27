@@ -82,7 +82,7 @@ int main() {
     assert(selectToneVowelIndex(U"tui") == 1);
     assert(selectToneVowelIndex(U"gưi") == 1);
     assert(selectToneVowelIndex(U"xoa") == 1);
-    assert(selectToneVowelIndex(U"khoe") == 2);
+    assert(selectToneVowelIndex(U"khoe") == 3);  // kh+oe: tone on 'e' (index 3)
     assert(selectToneVowelIndex(U"toan") == 2);
     assert(selectToneVowelIndex(U"gai") == 1);
     assert(selectToneVowelIndex(U"may") == 1);
@@ -94,7 +94,7 @@ int main() {
     assert(selectToneVowelIndex(U"chau") == 2);
     assert(selectToneVowelIndex(U"beo") == 1);
     assert(selectToneVowelIndex(U"kia") == 1);
-    assert(selectToneVowelIndex(U"xoe") == 1);
+    assert(selectToneVowelIndex(U"xoe") == 2);  // x+oe: tone on 'e' (index 2)
     assert(selectToneVowelIndex(U"huê") == 2);
     assert(selectToneVowelIndex(U"buôn") == 2);
     assert(selectToneVowelIndex(U"bưa") == 1);
@@ -429,6 +429,279 @@ int main() {
         assert(sp.has_value());
         assert(!normalizeSyllableTonePlacement(s, *sp));
         assert(s == U"họa");
+    }
+
+    // M17 yGlide: tone misplaced on 'y' glide → move to 'ê'.
+    // Case 7: "quỳên" → "quyền" (huyền on ỳ → ề)
+    {
+        std::u32string s = U"quỳên";  // quỳên (ỳ=U+1EF3, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"quyền");  // quyền (ề=U+1EC1)
+    }
+    // Case 8: "quyền" already correct → no change
+    {
+        std::u32string s = U"quyền";  // quyền
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"quyền");
+    }
+
+    // M17 uGlide: tone misplaced on 'ư' → move to 'ơ'-family vowel.
+    // Case 9: "cứơi" → "cưới" (sắc on ứ → ớ, nucleus "ươi")
+    {
+        std::u32string s = U"cứơi";  // cứơi (ứ=U+1EE9, ơ=U+01A1)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"cưới");  // cưới (ư=U+01B0, ớ=U+1EDB)
+    }
+    // Case 10: "cưới" already correct → no change
+    {
+        std::u32string s = U"cưới";  // cưới
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"cưới");
+    }
+    // Case 11: "hứơng" → "hướng" (sắc on ứ → ớ, nucleus "ươ" + coda "ng")
+    {
+        std::u32string s = U"hứơng";  // hứơng
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"hướng");  // hướng (ư=U+01B0, ớ=U+1EDB)
+    }
+    // Case 12: "thuỷ" — nucleus "uy" (b1='y') → NOT uGlide → no change
+    {
+        std::u32string s = U"thuỷ";  // thuỷ (ỷ=U+1EF7 = y+hỏi)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"thuỷ");
+    }
+
+    // M17.6 uyGlide: "uy*" nucleus (nucleusLen≥3) — tone misplaced on u or y → move to ê.
+    // Case 13: "ngùyên" → "nguyền" (huyền on 'u' at nucleus[0], moves to 'ê' at [2])
+    {
+        std::u32string s = U"ngùyên";  // ngùyên (ù=U+00F9, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"nguyền");  // nguyền (ề=U+1EC1)
+    }
+    // Case 14: "nguỳên" → "nguyền" (huyền on 'y' at nucleus[1], moves to 'ê' at [2])
+    {
+        std::u32string s = U"nguỳên";  // nguỳên (ỳ=U+1EF3, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"nguyền");  // nguyền
+    }
+    // Case 15: "nguyền" already correct → no change
+    {
+        std::u32string s = U"nguyền";  // nguyền
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"nguyền");
+    }
+    // Case 16: "thủy" — nucleusLen=2 → uyGlide NOT triggered → no change
+    {
+        std::u32string s = U"thủy";  // thủy (ủ=U+1EE7)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"thủy");
+    }
+
+    // M17.7 ieGlide: tone misplaced on 'i' in "ie*"/"iê*" nucleus → move to 'ê'.
+    // Case 17: "tíêng" → "tiếng" (sắc on 'i', 2-char nucleus + coda "ng")
+    {
+        std::u32string s = U"tíêng";  // tíêng (í=U+00ED, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"tiếng");  // tiếng (ế=U+1EBF)
+    }
+    // Case 18: "tiếng" already correct → no change
+    {
+        std::u32string s = U"tiếng";  // tiếng
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"tiếng");
+    }
+    // Case 19: "mìên" → "miền" (huyền on 'i', 2-char nucleus + coda "n")
+    {
+        std::u32string s = U"mìên";  // mìên (ì=U+00EC, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"miền");  // miền (ề=U+1EC1)
+    }
+    // Case 20: "miền" already correct → no change
+    {
+        std::u32string s = U"miền";  // miền
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"miền");
+    }
+
+    // M17.8 ueGlide: tone misplaced on 'u' in "ue"/"uê" nucleus → move to 'ê'.
+    // Case 21: "thúê" → "thuế" (sắc on 'u', open nucleus "uê")
+    {
+        std::u32string s = U"thúê";  // thúê (ú=U+00FA, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"thuế");  // thuế (ế=U+1EBF)
+    }
+    // Case 22: "thuế" already correct → no change
+    {
+        std::u32string s = U"thuế";  // thuế
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"thuế");
+    }
+    // Case 23: "tụê" → "tuệ" (nặng on 'u', open nucleus "uê")
+    {
+        std::u32string s = U"tụê";  // tụê (ụ=U+1EE5, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"tuệ");  // tuệ (ệ=U+1EC7)
+    }
+    // Case 24: "tuệ" already correct → no change
+    {
+        std::u32string s = U"tuệ";  // tuệ
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"tuệ");
+    }
+
+    // M17.10 oeGlide: 'o' is glide in "oe"; tone always goes to 'e' (open and closed).
+    // Case 31: "khóe" → "khoé" (sắc on 'o', open syllable)
+    {
+        std::u32string s = U"khóe";  // khóe (ó=U+00F3)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"khoé");  // khoé (é=U+00E9)
+    }
+    // Case 32: "khoé" already correct → no change
+    {
+        std::u32string s = U"khoé";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"khoé");
+    }
+    // Case 33: "xòe" → "xoè" (huyền on 'o', open syllable)
+    {
+        std::u32string s = U"xòe";  // xòe (ò=U+00F2)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"xoè");  // xoè (è=U+00E8)
+    }
+    // Case 34: "xoè" already correct → no change
+    {
+        std::u32string s = U"xoè";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"xoè");
+    }
+
+    // M17.11 uaGlide: 'u'/'ư' glide before 'a'; tone follows selectToneOffset rule
+    // (open → 'u', closed → 'a'). correctToneBearingIndex handles open/closed automatically.
+    // Case 35: "túan" → "tuán" (sắc on 'u', closed with coda 'n', should be on 'a')
+    {
+        std::u32string s = U"túan";  // túan (ú=U+00FA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"tuán");  // tuán (á=U+00E1)
+    }
+    // Case 36: "tuán" already correct → no change
+    {
+        std::u32string s = U"tuán";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"tuán");
+    }
+    // Case 37: "muá" → "múa" (sắc on 'a', open syllable "ua" → tone should be on 'u')
+    {
+        std::u32string s = U"muá";  // muá (á=U+00E1)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"múa");  // múa (ú=U+00FA)
+    }
+    // Case 38: "múa" already correct → no change
+    {
+        std::u32string s = U"múa";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"múa");
+    }
+
+    // M17.9 iMedial/uMedial: tone on semivowel medial → move to nucleus.
+    // Case 25: "gíup" → "giúp" ('i' medial after 'g', nucleus 'u', coda 'p')
+    {
+        std::u32string s = U"gíup";  // gíup (í=U+00ED)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"giúp");  // giúp (ú=U+00FA)
+    }
+    // Case 26: "giúp" already correct → no change
+    {
+        std::u32string s = U"giúp";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"giúp");
+    }
+    // Case 27: "qúa" → "quá" ('u' medial after 'q', nucleus 'a', open syllable)
+    {
+        std::u32string s = U"qúa";  // qúa (ú=U+00FA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"quá");  // quá (á=U+00E1)
+    }
+    // Case 28: "quá" already correct → no change
+    {
+        std::u32string s = U"quá";
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(!normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"quá");
+    }
+    // Case 29: "qùyên" → "quyền" ('u' medial after 'q', nucleus 'yê' + coda 'n')
+    {
+        std::u32string s = U"qùyên";  // qùyên (ù=U+00F9, ê=U+00EA)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"quyền");  // quyền (ề=U+1EC1)
+    }
+    // Case 30: "gíam" → "giám" ('i' medial after 'g', nucleus 'a', coda 'm')
+    {
+        std::u32string s = U"gíam";  // gíam (í=U+00ED)
+        const auto sp = findLastSyllable(s);
+        assert(sp.has_value());
+        assert(normalizeSyllableTonePlacement(s, *sp));
+        assert(s == U"giám");  // giám (á=U+00E1)
     }
 
     return 0;
