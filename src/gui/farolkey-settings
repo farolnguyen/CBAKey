@@ -645,7 +645,7 @@ class SettingsWindow(Gtk.Window):
         self._autocap_switch.set_active(conf.get('AutoCapitalize', 'False').lower() == 'true')
         self._autocap_switch.set_valign(Gtk.Align.CENTER)
         self._autocap_switch.set_hexpand(False)
-        vbox.pack_start(row('Tự động viết hoa đầu câu', self._autocap_switch), False, False, 6)
+        vbox.pack_start(row('Tự động viết hoa đầu câu (Chưa tối ưu)', self._autocap_switch), False, False, 6)
 
         self._rewrite_switch = Gtk.Switch()
         self._rewrite_switch.set_active(conf.get('CommittedRewrite', 'True').lower() == 'true')
