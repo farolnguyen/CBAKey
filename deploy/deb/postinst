@@ -1,17 +1,68 @@
 #!/bin/sh
 set -e
 
-# Reload fcitx5 addon list if fcitx5 is running (best-effort, non-fatal).
-if command -v fcitx5-remote >/dev/null 2>&1; then
-    if fcitx5-remote -e >/dev/null 2>&1; then
-        fcitx5-remote -e 2>/dev/null || true
+REAL_USER="${SUDO_USER:-}"
+
+# Extract session environment from a running process owned by the real user.
+# Used to let fcitx5-remote and GTK daemons connect to the correct D-Bus session.
+_session_env() {
+    _proc="$1"
+    _var="$2"
+    tr '\0' '\n' < /proc/"$_proc"/environ 2>/dev/null \
+        | grep "^${_var}=" | cut -d= -f2- || true
+}
+
+# ── Reload fcitx5 if running ──────────────────────────────────────────────────
+# postinst runs as root; locate the D-Bus address from fcitx5's own /proc environ.
+if [ -n "$REAL_USER" ] && command -v fcitx5-remote >/dev/null 2>&1; then
+    FCITX5_PID=$(pgrep -u "$REAL_USER" -x fcitx5 2>/dev/null | head -1) || true
+    if [ -n "$FCITX5_PID" ]; then
+        DBUS_ADDR=$(_session_env "$FCITX5_PID" DBUS_SESSION_BUS_ADDRESS)
+        if [ -n "$DBUS_ADDR" ]; then
+            su "$REAL_USER" -s /bin/sh \
+                -c "DBUS_SESSION_BUS_ADDRESS='$DBUS_ADDR' fcitx5-remote -r" 2>/dev/null || true
+        fi
     fi
 fi
 
-# Register screenshot hotkey for the installing user (best-effort).
-# postinst runs as root, so we need to run gsettings as the real user.
+# ── Restart clipboard + screenshot daemons ────────────────────────────────────
+# Kill old instances (running old binary) and relaunch with updated binaries.
+# Works for both updates and first installs where session manager hasn't run yet.
+if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
+    # Find a reference process to extract DISPLAY / WAYLAND_DISPLAY / DBUS address.
+    REF_PID=$(pgrep -u "$REAL_USER" -x fcitx5 2>/dev/null | head -1 \
+              || pgrep -u "$REAL_USER" -x Xorg 2>/dev/null | head -1 \
+              || pgrep -u "$REAL_USER" gnome-shell 2>/dev/null | head -1) || true
+
+    if [ -n "$REF_PID" ]; then
+        DBUS_ADDR=$(_session_env "$REF_PID" DBUS_SESSION_BUS_ADDRESS)
+        DISPLAY_VAL=$(_session_env "$REF_PID" DISPLAY)
+        WAYLAND_DISPLAY_VAL=$(_session_env "$REF_PID" WAYLAND_DISPLAY)
+        XDG_RUNTIME_DIR_VAL=$(_session_env "$REF_PID" XDG_RUNTIME_DIR)
+
+        if [ -n "$DBUS_ADDR" ]; then
+            # Kill old daemon instances
+            pkill -u "$REAL_USER" -f farolkey-clipboard 2>/dev/null || true
+            pkill -u "$REAL_USER" -f farolkey-screenshot-daemon 2>/dev/null || true
+            sleep 0.3
+
+            # Relaunch as real user with full session environment
+            su "$REAL_USER" -s /bin/sh -c "
+                export DBUS_SESSION_BUS_ADDRESS='$DBUS_ADDR'
+                export DISPLAY='$DISPLAY_VAL'
+                export WAYLAND_DISPLAY='$WAYLAND_DISPLAY_VAL'
+                export XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR_VAL'
+                command -v farolkey-clipboard >/dev/null 2>&1 \
+                    && nohup farolkey-clipboard >/dev/null 2>&1 &
+                command -v farolkey-screenshot-daemon >/dev/null 2>&1 \
+                    && nohup farolkey-screenshot-daemon >/dev/null 2>&1 &
+            " 2>/dev/null || true
+        fi
+    fi
+fi
+
+# ── Register screenshot hotkey ────────────────────────────────────────────────
 if command -v farolkey-screenshot-daemon >/dev/null 2>&1; then
-    REAL_USER="${SUDO_USER:-${USER:-}}"
     if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
         su - "$REAL_USER" -c "farolkey-screenshot-daemon --setup" 2>/dev/null || true
     fi
@@ -20,6 +71,4 @@ fi
 echo "FarolKey installed. To activate:"
 echo "  1. Open Fcitx5 Configuration"
 echo "  2. Add input method: FarolKey Vietnamese"
-echo "  3. Restart Fcitx5: pkill fcitx5; fcitx5 -d"
-echo ""
-echo "Screenshot shortcut: Super+Shift+S (registered automatically on GNOME)"
+echo "  (If updating: no logout needed — all components restarted automatically)"

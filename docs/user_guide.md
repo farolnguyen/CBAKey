@@ -89,7 +89,11 @@ Nhấn `Ctrl+Alt+Z` lần nữa để về chế độ English.
 ## 4. Tùy chỉnh
 
 File cấu hình: `~/.config/farolkey/farolkey.conf`  
-Được tạo tự động lần đầu khi khởi động. Sau khi sửa, restart Fcitx5 để áp dụng.
+Được tạo tự động lần đầu khi khởi động. Sau khi sửa, reload để áp dụng ngay:
+
+```bash
+farolkey-reload
+```
 
 ```ini
 # Phương thức gõ: telex hoặc vni
@@ -271,7 +275,8 @@ fcitx5_committed_rewrite=true
 
 ```bash
 ls /usr/share/fcitx5/addon/farolkey.conf   # kiểm tra file addon
-pkill fcitx5; sleep 0.5; fcitx5 -d       # restart Fcitx5
+farolkey-reload                            # reload nếu fcitx5 đang chạy
+# hoặc: pkill fcitx5; sleep 0.5; fcitx5 -d
 # Mở fcitx5-configtool → thêm FarolKey vào danh sách
 ```
 

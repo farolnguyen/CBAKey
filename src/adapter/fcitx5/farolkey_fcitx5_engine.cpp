@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <unistd.h>
 
 #include <fcitx/action.h>
@@ -138,6 +139,12 @@ farolkey::config::RuntimeConfig toRuntimeConfig(
                     : farolkey::core::InputMethod::Vni;
     rc.enableUserDictionary   = enableUserDict;
     rc.fcitx5CommittedRewrite = cfg.committedRewrite.value();
+    using farolkey::adapter::fcitx5::FarolKeyPreeditMode;
+    switch (cfg.preeditMode.value()) {
+        case FarolKeyPreeditMode::Auto:   rc.fcitx5PreeditMode = farolkey::config::Fcitx5PreeditMode::Auto;   break;
+        case FarolKeyPreeditMode::Client: rc.fcitx5PreeditMode = farolkey::config::Fcitx5PreeditMode::Client; break;
+        case FarolKeyPreeditMode::Panel:  rc.fcitx5PreeditMode = farolkey::config::Fcitx5PreeditMode::Panel;  break;
+    }
     return rc;
 }
 
@@ -168,6 +175,84 @@ void pushPreedit(fcitx::InputContext* ic,
     ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
 }
 
+// Returns true if the input context belongs to a terminal emulator.
+// Checks CapabilityFlag::Terminal first; falls back to program name because many
+// terminal emulators (GNOME Terminal, Konsole, kitty, etc.) don't set the flag.
+static bool isTerminalContext(fcitx::InputContext* ic) {
+    if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal))
+        return true;
+    const std::string& prog = ic->program();
+    static constexpr std::array kTerminals{
+        std::string_view{"gnome-terminal"}, std::string_view{"konsole"},
+        std::string_view{"xterm"},          std::string_view{"xfce4-terminal"},
+        std::string_view{"tilix"},          std::string_view{"terminator"},
+        std::string_view{"kitty"},          std::string_view{"alacritty"},
+        std::string_view{"wezterm"},        std::string_view{"foot"},
+        std::string_view{"urxvt"},          std::string_view{"rxvt"},
+    };
+    for (auto t : kTerminals)
+        if (prog.find(t) != std::string::npos) return true;
+    return false;
+}
+
+// Evaluate whether to capitalize given a (known-fresh) SurroundingText.
+// Shared by shouldAutoCapitalizeOnActivate and the SurroundingTextUpdated handler.
+static bool capitalizeFromST(const fcitx::SurroundingText& st) {
+    const std::string& full = st.text();
+    const std::size_t cur = static_cast<std::size_t>(std::max<int>(0, st.cursor()));
+    const std::size_t end = std::min(cur, full.size());
+    std::size_t i = end;
+    while (i > 0 && full[i - 1] == ' ') --i;
+    if (i == 0) return true;
+    const char last = full[i - 1];
+    return last == '\n' || last == '.' || last == '?' || last == '!';
+}
+
+// Called from activate(). isReactivation = IC was deactivated (focus left) before this call.
+// SurroundingText may be stale (if reactivation) or absent (async). For the stale/absent
+// cases we return false and let the SurroundingTextUpdated event handler decide later.
+static bool shouldAutoCapitalizeOnActivate(fcitx::InputContext* ic, bool isReactivation) {
+    if (isTerminalContext(ic))
+        return false;
+    if (!ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText))
+        // Electron/Chrome: no surrounding-text support.  If the IC was never deactivated
+        // before (first-ever focus on this IC), assume it's a fresh field → capitalize.
+        // On re-focus we can't tell the cursor position → safe default: no capitalize.
+        return !isReactivation;
+    if (isReactivation)
+        // The IC has a SurroundingText, but it's stale from the previous session.
+        // Defer the decision: the SurroundingTextUpdated event will fire with fresh
+        // data and update capitalizeNext_ at that point.
+        return false;
+    const auto& st = ic->surroundingText();
+    if (!st.isValid())
+        // ST not yet sent for this freshly created IC (async). Same deferred path.
+        return false;
+    return capitalizeFromST(st);
+}
+
+// Returns true if a committed string ends with a sentence-ending character
+// (ignoring trailing spaces/CR), triggering auto-capitalize for the next word.
+static bool commitTriggersCapitalize(const std::string& text) {
+    for (int i = static_cast<int>(text.size()) - 1; i >= 0; --i) {
+        const char c = text[i];
+        if (c != ' ') {
+            return c == '.' || c == '?' || c == '!' || c == '\n' || c == '\r';
+        }
+    }
+    return false;
+}
+
+// Returns true if the commit string is entirely whitespace (spaces, newlines).
+// Whitespace-only commits don't reset the capitalize flag — they're just separators.
+static bool isWhitespaceOnlyCommit(const std::string& text) {
+    if (text.empty()) return true;
+    for (char c : text) {
+        if (c != ' ' && c != '\n' && c != '\t' && c != '\r') return false;
+    }
+    return true;
+}
+
 // ── Engine ────────────────────────────────────────────────────────────────────
 
 class FarolKeyFcitx5Engine final : public fcitx::InputMethodEngineV2 {
@@ -181,6 +266,27 @@ public:
         enIconPath_ = std::move(en);
         loadConfig();
         setupActions();
+        // When an IC is truly destroyed, clean up awaitingFreshST_.
+        icDestroyHandle_ = instance_->watchEvent(
+            fcitx::EventType::InputContextDestroyed,
+            fcitx::EventWatcherPhase::Default,
+            [this](fcitx::Event& e) {
+                awaitingFreshST_.erase(
+                    static_cast<fcitx::InputContextEvent&>(e).inputContext());
+            });
+        // When fresh SurroundingText arrives for a deferred IC, evaluate capitalize.
+        stUpdateHandle_ = instance_->watchEvent(
+            fcitx::EventType::InputContextSurroundingTextUpdated,
+            fcitx::EventWatcherPhase::Default,
+            [this](fcitx::Event& e) {
+                if (!config_.autoCapitalize.value()) return;
+                auto* ic = static_cast<fcitx::InputContextEvent&>(e).inputContext();
+                if (!awaitingFreshST_.count(ic)) return;
+                awaitingFreshST_.erase(ic);
+                const auto& st = ic->surroundingText();
+                if (st.isValid())
+                    capitalizeNext_[ic] = capitalizeFromST(st);
+            });
         farolkey::common::logInfo("engine", "FarolKey IME initialized");
     }
 
@@ -292,6 +398,46 @@ public:
             }
         }
 
+        // Auto-capitalize via internal flag (capitalizeNext_).
+        // Only acts when starting a new word (preedit empty, no modifier keys held).
+        // Uses internal tracking instead of surroundingText to avoid async stale-read bugs:
+        // surroundingText is updated lazily by the app and is unreliable right after a commit.
+
+        // Enter/Return maps to KeyAux::Enter (not ev.key='\n'), so it bypasses the block below.
+        // When preedit is empty, Enter is forwarded to the app as a newline — set flag here.
+        if (config_.autoCapitalize.value() &&
+            ev.aux == farolkey::core::KeyAux::Enter &&
+            br.preedit().empty() && !ev.ctrl && !ev.alt &&
+            !isTerminalContext(ic)) {
+            capitalizeNext_[ic] = true;
+        }
+
+        if (ev.aux == farolkey::core::KeyAux::None && br.preedit().empty() &&
+            !ev.ctrl && !ev.alt) {
+            const bool capFlag = capitalizeNext_.count(ic) && capitalizeNext_.at(ic);
+            if (ev.key >= 'a' && ev.key <= 'z') {
+                if (capFlag && config_.autoCapitalize.value() && !ev.shift) {
+                    const bool isPwd =
+                        ic->capabilityFlags().test(fcitx::CapabilityFlag::Password) ||
+                        ic->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive) ||
+                        isTerminalContext(ic);
+                    if (!isPwd)
+                        ev.key = static_cast<char>(
+                            std::toupper(static_cast<unsigned char>(ev.key)));
+                }
+                capitalizeNext_[ic] = false;  // flag consumed by this word
+            } else if (ev.key == '.' || ev.key == '?' || ev.key == '!' ||
+                       ev.key == '\n' || ev.key == '\r') {
+                // Sentence-ending direct key (including Shift+Enter) — set flag.
+                capitalizeNext_[ic] = true;
+            } else if (ev.key == '-' || ev.key == '+' || ev.key == '*' ||
+                       ev.key == ' ' || ev.key == '\b' || ev.key == '\0') {
+                // Neutral: space, backspace, bullet-list prefix chars — preserve flag.
+            } else {
+                capitalizeNext_[ic] = false;
+            }
+        }
+
         const bool hadPreedit = !br.preedit().empty();
         const auto result = br.handleKey(ev);
 
@@ -322,8 +468,16 @@ public:
                                        result.deleteSurroundingBefore);
         }
 
-        if (!dispatch.commit.empty() && ic)
+        if (!dispatch.commit.empty() && ic) {
             ic->commitString(dispatch.commit);
+            // Track sentence-end for auto-capitalize.
+            if (commitTriggersCapitalize(dispatch.commit)) {
+                capitalizeNext_[ic] = true;
+            } else if (!isWhitespaceOnlyCommit(dispatch.commit)) {
+                capitalizeNext_[ic] = false;  // normal word committed — reset
+            }
+            // Whitespace-only commit: leave flag unchanged (spaces between sentences).
+        }
 
         // Skip pushPreedit when preedit was and remains empty (e.g. every EN-mode
         // character). Calling updatePreedit() with empty→empty generates a spurious
@@ -361,8 +515,13 @@ public:
             }
         }
 
-        if ((result.forwardOriginalKey || dispatch.forward_original_key) && ic)
+        if ((result.forwardOriginalKey || dispatch.forward_original_key) && ic) {
             ic->forwardKey(keyEvent.key(), keyEvent.isRelease(), keyEvent.time());
+            // Enter forwarded after committing a preedit word → app adds newline → capitalize next.
+            // Post-commit logic may have already reset the flag, so override it here.
+            if (config_.autoCapitalize.value() && ev.aux == farolkey::core::KeyAux::Enter)
+                capitalizeNext_[ic] = true;
+        }
         keyEvent.filterAndAccept();
         refreshModeAction(ic);
     }
@@ -383,6 +542,16 @@ public:
             ic->capabilityFlags().test(fcitx::CapabilityFlag::Password) ||
             ic->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive);
         br.setPasswordField(isPwd);
+
+        const bool isReactivation = awaitingFreshST_.count(ic) > 0;
+        capitalizeNext_[ic] = config_.autoCapitalize.value() &&
+                               shouldAutoCapitalizeOnActivate(ic, isReactivation);
+        // For ST-capable apps: if we deferred the decision (stale or absent ST),
+        // leave IC in awaitingFreshST_ so the SurroundingTextUpdated handler can act.
+        // For others (evaluated immediately): clear the pending flag.
+        if (!isReactivation ||
+            !ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText))
+            awaitingFreshST_.erase(ic);
 
         pushPreedit(ic, "", br.config().fcitx5PreeditMode,
                     config_.showPreeditUnderline.value());
@@ -406,6 +575,8 @@ public:
         auto* ic = event.inputContext();
         farolkey::common::logDebug("engine", "context deactivated");
         flushAndCleanup(ic);
+        // Mark IC so that re-activate knows it's a re-focus (not a fresh field).
+        awaitingFreshST_.insert(ic);
         pushPreedit(ic, "", farolkey::config::Fcitx5PreeditMode::Auto,
                     config_.showPreeditUnderline.value());
     }
@@ -576,10 +747,15 @@ private:
         ui.registerAction("farolkey-underline", &underlineAction_);
         // underlineAction_ is registered but NOT added to statusArea (config-only).
 
-        // Version label — shown in systray so users can confirm which build is running.
-        versionAction_.setShortText("v" FAROLKEY_VERSION);
-        versionAction_.setLongText("FarolKey v" FAROLKEY_VERSION);
-        // No Activated handler: clicking the label is a no-op.
+        // Version label — doubles as "Settings" launcher in the systray.
+        versionAction_.setShortText("Settings (v" FAROLKEY_VERSION ")");
+        versionAction_.setLongText("FarolKey Settings (v" FAROLKEY_VERSION ")");
+        versionAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext*) {
+            if (const pid_t pid = fork(); pid == 0) {
+                execlp("farolkey-settings", "farolkey-settings", nullptr);
+                _exit(1);
+            }
+        });
         ui.registerAction("farolkey-version", &versionAction_);
 
     }
@@ -785,6 +961,7 @@ private:
             bridges_.erase(iter);
         }
         composeAnchors_.erase(ic);
+        capitalizeNext_.erase(ic);
         interceptor_->stopIntercepting();
     }
 
@@ -820,6 +997,13 @@ private:
     std::unordered_map<fcitx::InputContext*, farolkey::adapter::fcitx5::Bridge>       bridges_;
     std::unordered_map<fcitx::InputContext*, farolkey::adapter::fcitx5::ComposeAnchorSnapshot>
                                                                                     composeAnchors_;
+    // Per-IC flag: uppercase the next alphabetic key (set at field-start and after sentence-end).
+    std::unordered_map<fcitx::InputContext*, bool>                                   capitalizeNext_;
+    // ICs waiting for a fresh SurroundingText update before deciding capitalize.
+    // Populated by deactivate(); cleared by SurroundingTextUpdated or IC destruction.
+    std::unordered_set<fcitx::InputContext*>                                         awaitingFreshST_;
+    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>                   icDestroyHandle_;
+    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>                   stUpdateHandle_;
     std::unique_ptr<farolkey::adapter::fcitx5::X11ClickInterceptor>                  interceptor_;
 
     // Mode icon paths (SVG files written to ~/.cache/farolkey/ at startup)

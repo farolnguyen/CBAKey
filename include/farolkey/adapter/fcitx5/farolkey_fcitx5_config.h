@@ -12,6 +12,9 @@ namespace farolkey::adapter::fcitx5 {
 // FCITX_CONFIG_ENUM defines the enum class AND auto-generates string names.
 FCITX_CONFIG_ENUM(FarolKeyMethod, Telex, VNI)
 
+// Preedit display mode enum.
+FCITX_CONFIG_ENUM(FarolKeyPreeditMode, Auto, Client, Panel)
+
 // Config class — auto-renders as a settings panel in fcitx5-configtool when
 // the user clicks the ⚙ gear icon next to FarolKey.
 FCITX_CONFIGURATION(
@@ -27,6 +30,16 @@ FCITX_CONFIGURATION(
     fcitx::Option<bool> showPreeditUnderline{
         this, "ShowPreeditUnderline", N_("Show underline while composing"),
         true};
+
+    fcitx::Option<bool> autoCapitalize{
+        this, "AutoCapitalize",
+        N_("Auto-capitalize at sentence start (after '.', '?', '!', newline, or empty field)"),
+        false};
+
+    fcitx::Option<FarolKeyPreeditMode> preeditMode{
+        this, "PreeditMode",
+        N_("Preedit mode (note: Chrome, Edge, Electron always show underline in Auto/Client mode)"),
+        FarolKeyPreeditMode::Auto};
 
     fcitx::Option<bool> committedRewrite{
         this, "CommittedRewrite",

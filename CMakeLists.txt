@@ -242,6 +242,7 @@ if(FAROLKEY_BUILD_FCITX5_PLUGIN)
     # Dictionary Manager GUI (Python + GTK3)
     install(PROGRAMS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/farolkey-dict-gui"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/farolkey-settings"
         DESTINATION "bin"
         COMPONENT runtime
     )
@@ -254,6 +255,13 @@ if(FAROLKEY_BUILD_FCITX5_PLUGIN)
     )
     install(PROGRAMS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/common/farolkey-export-log"
+        DESTINATION "bin"
+        COMPONENT runtime
+    )
+
+    # M19.2: Config live-reload helper
+    install(PROGRAMS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/common/farolkey-reload"
         DESTINATION "bin"
         COMPONENT runtime
     )

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# farolkey-reload — restart fcitx5 to apply updated FarolKey config
+set -euo pipefail
+
+if ! command -v fcitx5-remote >/dev/null 2>&1; then
+    echo "farolkey-reload: fcitx5-remote not found. Install fcitx5 first." >&2
+    exit 1
+fi
+
+if ! pgrep -x fcitx5 >/dev/null 2>&1; then
+    echo "farolkey-reload: fcitx5 is not running. Start it with: fcitx5 -d" >&2
+    exit 1
+fi
+
+fcitx5-remote -r
+echo "FarolKey config reloaded."
