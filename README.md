@@ -45,7 +45,7 @@ sudo apt install fcitx5 fcitx5-config-qt \
 3. Cài package:
 
 ```bash
-sudo apt install ./farolkey_0.1.0_amd64.deb
+sudo apt install ./farolkey_0.1.4_amd64.deb
 ```
 
 ### Sau khi cài
