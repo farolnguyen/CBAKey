@@ -10,7 +10,7 @@ set -euo pipefail
 # ── Configuration ─────────────────────────────────────────────────────────────
 # Update GITHUB_REPO and VERSION when releasing a new version.
 GITHUB_REPO="farolnguyen/FarolKey"           # <--- update with your GitHub repo
-VERSION="0.1.4"
+VERSION="0.1.5"
 DEB_NAME="farolkey_${VERSION}_amd64.deb"
 DEB_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/${DEB_NAME}"
 

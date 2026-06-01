@@ -1,0 +1,379 @@
+# FarolKey UI strings — English (source template)
+# Copyright (C) 2026 FarolKey
+msgid ""
+msgstr ""
+"Project-Id-Version: FarolKey 0.1.5\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en\n"
+
+# ── Window titles ──────────────────────────────────────────────────────────────
+msgid "FarolKey — Dictionary & Smart Templates"
+msgstr ""
+
+# ── Tab labels ─────────────────────────────────────────────────────────────────
+msgid "General"
+msgstr ""
+
+msgid "Dictionary & Templates"
+msgstr ""
+
+msgid "Clipboard History"
+msgstr ""
+
+msgid "Screenshot"
+msgstr ""
+
+msgid "About"
+msgstr ""
+
+msgid "📖 Abbreviations"
+msgstr ""
+
+msgid "⚡ Smart Templates"
+msgstr ""
+
+# ── General tab — sections ─────────────────────────────────────────────────────
+msgid "Interface"
+msgstr ""
+
+msgid "Language"
+msgstr ""
+
+msgid "Restart required after changing language."
+msgstr ""
+
+msgid "Input"
+msgstr ""
+
+msgid "Input method"
+msgstr ""
+
+msgid "EN/VI toggle key"
+msgstr ""
+
+msgid "Enter key name in Fcitx5 format. e.g. Control+Alt+z"
+msgstr ""
+
+msgid "Display"
+msgstr ""
+
+msgid "Preedit mode"
+msgstr ""
+
+msgid "⚠ Chrome, Edge, Electron always show underline in Auto/Client mode. Choose Panel to disable it completely."
+msgstr ""
+
+msgid "Show underline while composing"
+msgstr ""
+
+msgid "Behavior"
+msgstr ""
+
+msgid "Auto-capitalize sentences (not fully optimized)"
+msgstr ""
+
+msgid "Allow editing committed syllable"
+msgstr ""
+
+msgid "Restore defaults"
+msgstr ""
+
+msgid "Save & Apply"
+msgstr ""
+
+msgid "Settings saved and applied."
+msgstr ""
+
+# ── Reset dialog ───────────────────────────────────────────────────────────────
+msgid "The following settings will be reset to their defaults:"
+msgstr ""
+
+msgid "All settings are already at their defaults."
+msgstr ""
+
+msgid "Input method"
+msgstr ""
+
+msgid "EN/VI toggle key"
+msgstr ""
+
+msgid "Preedit mode"
+msgstr ""
+
+msgid "Show underline while composing"
+msgstr ""
+
+msgid "Auto-capitalize sentences"
+msgstr ""
+
+msgid "Allow editing committed syllable"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
+msgid "Off"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Restore"
+msgstr ""
+
+# ── Dictionary & Templates tab ─────────────────────────────────────────────────
+msgid "Enable user dictionary"
+msgstr ""
+
+msgid "Search trigger or expansion…"
+msgstr ""
+
+msgid "Trigger"
+msgstr ""
+
+msgid "Expansion"
+msgstr ""
+
+msgid "Mode"
+msgstr ""
+
+msgid "+ Add"
+msgstr ""
+
+msgid "✏ Edit"
+msgstr ""
+
+msgid "🗑 Delete"
+msgstr ""
+
+msgid "⬆ Import CSV"
+msgstr ""
+
+msgid "⬇ Export CSV"
+msgstr ""
+
+msgid "Add Entry"
+msgstr ""
+
+msgid "Edit Entry"
+msgstr ""
+
+msgid "Trigger:"
+msgstr ""
+
+msgid "Expansion:"
+msgstr ""
+
+msgid "Mode:"
+msgstr ""
+
+msgid "OK"
+msgstr ""
+
+msgid "Trigger and Expansion cannot be empty."
+msgstr ""
+
+msgid "Enable Smart Templates"
+msgstr ""
+
+msgid "Quick test:"
+msgstr ""
+
+msgid "Pattern"
+msgstr ""
+
+msgid "Expansion (Jinja2)"
+msgstr ""
+
+msgid "Search pattern or expansion…"
+msgstr ""
+
+msgid "Add Smart Template"
+msgstr ""
+
+msgid "Edit Smart Template"
+msgstr ""
+
+msgid "Pattern:"
+msgstr ""
+
+msgid "Expansion (Jinja2):"
+msgstr ""
+
+msgid "Test input:"
+msgstr ""
+
+msgid "▶ Preview"
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Pattern and Expansion cannot be empty."
+msgstr ""
+
+msgid "Export Dictionary as CSV"
+msgstr ""
+
+msgid "Import Dictionary from CSV"
+msgstr ""
+
+msgid "Export Smart Templates as CSV"
+msgstr ""
+
+msgid "Import Smart Templates from CSV"
+msgstr ""
+
+msgid "Close"
+msgstr ""
+
+msgid "Select"
+msgstr ""
+
+# ── Clipboard tab ──────────────────────────────────────────────────────────────
+msgid "Popup display"
+msgstr ""
+
+msgid "🖱  Near cursor (default)"
+msgstr ""
+
+msgid "📐  Bottom-right corner of screen"
+msgstr ""
+
+msgid "Close popup on click outside"
+msgstr ""
+
+msgid "System tools"
+msgstr ""
+
+msgid "Clipboard write (Wayland)"
+msgstr ""
+
+msgid "Clipboard write (X11)"
+msgstr ""
+
+msgid "Auto-paste Ctrl+V (X11)"
+msgstr ""
+
+msgid "Auto-paste Ctrl+V (Wayland)"
+msgstr ""
+
+msgid "Clipboard History settings saved.\nChanges will take effect on next popup open."
+msgstr ""
+
+# ── Screenshot tab ─────────────────────────────────────────────────────────────
+msgid "Hotkeys"
+msgstr ""
+
+msgid "Screenshot hotkey"
+msgstr ""
+
+msgid "Use + to combine keys. Valid modifiers: super, ctrl, alt, shift"
+msgstr ""
+
+msgid "💡 super = Windows key (⊞)"
+msgstr ""
+
+msgid "Capture"
+msgstr ""
+
+msgid "All screens (default)"
+msgstr ""
+
+msgid "Screen containing cursor"
+msgstr ""
+
+msgid "All screens: drag to select any region across all monitors"
+msgstr ""
+
+msgid "Capture immediately on mouse release"
+msgstr ""
+
+msgid "If enabled: screenshot taken immediately on mouse release — no preview / region adjustment"
+msgstr ""
+
+msgid "Storage"
+msgstr ""
+
+msgid "Save folder"
+msgstr ""
+
+msgid "Ask before saving"
+msgstr ""
+
+msgid "Auto-save (no prompt)"
+msgstr ""
+
+msgid "Auto-save skips the dialog and saves directly to the folder above"
+msgstr ""
+
+msgid "Capture Wayland"
+msgstr ""
+
+msgid "Region Wayland"
+msgstr ""
+
+msgid "Capture X11"
+msgstr ""
+
+msgid "Clipboard Wayland"
+msgstr ""
+
+msgid "Clipboard X11"
+msgstr ""
+
+msgid "Notification"
+msgstr ""
+
+msgid "Test capture"
+msgstr ""
+
+msgid "Screenshot settings saved."
+msgstr ""
+
+msgid "Select screenshot folder"
+msgstr ""
+
+# ── About tab ──────────────────────────────────────────────────────────────────
+msgid "Vietnamese Input Method for Linux (Fcitx5)"
+msgstr ""
+
+msgid "Version:"
+msgstr ""
+
+msgid "Service status"
+msgstr ""
+
+msgid "fcitx5 daemon"
+msgstr ""
+
+msgid "FarolKey plugin"
+msgstr ""
+
+msgid "Clipboard daemon"
+msgstr ""
+
+msgid "Screenshot daemon"
+msgstr ""
+
+msgid "🔄 Refresh status"
+msgstr ""
+
+msgid "Support"
+msgstr ""
+
+msgid "📦 Export bug report log"
+msgstr ""
+
+msgid "🐛 Open GitHub Issues"
+msgstr ""
+
+msgid "Restart"
+msgstr ""
+
+msgid "● Running"
+msgstr ""
+
+msgid "✕ Not running"
+msgstr ""

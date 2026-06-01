@@ -12,6 +12,13 @@ Tabs:
 import os
 import sys
 
+# ── i18n — must happen before any UI string is used ───────────────────────────
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from farolkey_i18n import setup_i18n, read_ui_language
+_STARTUP_LANGUAGE = read_ui_language()
+_ = setup_i18n(_STARTUP_LANGUAGE)
+
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
@@ -43,10 +50,9 @@ def _acquire_single_instance():
 
 # ── Version ────────────────────────────────────────────────────────────────────
 
-_SCRIPT_VERSION = '0.1.4'  # keep in sync with CMakeLists.txt project(VERSION ...)
+_SCRIPT_VERSION = '0.1.5'  # keep in sync with CMakeLists.txt project(VERSION ...)
 
 def _read_version() -> str:
-    # 1. dpkg — authoritative when installed via .deb
     try:
         result = subprocess.run(
             ['dpkg-query', '-W', '-f=${Version}', 'farolkey'],
@@ -56,7 +62,6 @@ def _read_version() -> str:
             return v
     except Exception:
         pass
-    # 2. Embedded constant — correct for dev / manual installs
     return _SCRIPT_VERSION
 
 FAROLKEY_VERSION = _read_version()
@@ -361,7 +366,7 @@ def load_screenshot_conf() -> dict:
 def save_screenshot_conf(conf: dict):
     SCREENSHOT_CONF.write_text('\n'.join(f'{k}={v}' for k, v in conf.items()) + '\n')
 
-# ── Dialogs (from farolkey-dict-gui) ──────────────────────────────────────────
+# ── Dialogs ────────────────────────────────────────────────────────────────────
 
 class EntryDialog(Gtk.Dialog):
 
@@ -375,21 +380,21 @@ class EntryDialog(Gtk.Dialog):
 
         grid = Gtk.Grid(row_spacing=8, column_spacing=12)
 
-        grid.attach(Gtk.Label(label='Trigger:', xalign=1), 0, 0, 1, 1)
+        grid.attach(Gtk.Label(label=_('Trigger:'), xalign=1), 0, 0, 1, 1)
         self._trigger = Gtk.Entry()
         self._trigger.set_hexpand(True)
         if entry:
             self._trigger.set_text(entry['trigger'])
         grid.attach(self._trigger, 1, 0, 1, 1)
 
-        grid.attach(Gtk.Label(label='Expansion:', xalign=1), 0, 1, 1, 1)
+        grid.attach(Gtk.Label(label=_('Expansion:'), xalign=1), 0, 1, 1, 1)
         self._expansion = Gtk.Entry()
         self._expansion.set_hexpand(True)
         if entry:
             self._expansion.set_text(entry['expansion'])
         grid.attach(self._expansion, 1, 1, 1, 1)
 
-        grid.attach(Gtk.Label(label='Mode:', xalign=1), 0, 2, 1, 1)
+        grid.attach(Gtk.Label(label=_('Mode:'), xalign=1), 0, 2, 1, 1)
         self._mode_combo = Gtk.ComboBoxText()
         for m in ['vi', 'en', 'both']:
             self._mode_combo.append_text(m)
@@ -398,7 +403,7 @@ class EntryDialog(Gtk.Dialog):
         grid.attach(self._mode_combo, 1, 2, 1, 1)
 
         box.add(grid)
-        self.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'OK', Gtk.ResponseType.OK)
+        self.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('OK'), Gtk.ResponseType.OK)
         self.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
         self._trigger.connect('activate', lambda _: self.response(Gtk.ResponseType.OK))
         self._expansion.connect('activate', lambda _: self.response(Gtk.ResponseType.OK))
@@ -424,7 +429,7 @@ class TemplateDialog(Gtk.Dialog):
         box.set_margin_start(16); box.set_margin_end(16)
 
         grid = Gtk.Grid(row_spacing=8, column_spacing=12)
-        grid.attach(Gtk.Label(label='Pattern:', xalign=1), 0, 0, 1, 1)
+        grid.attach(Gtk.Label(label=_('Pattern:'), xalign=1), 0, 0, 1, 1)
         self._pattern = Gtk.Entry()
         self._pattern.set_hexpand(True)
         self._pattern.set_placeholder_text('e.g.  {n}++  or  hello{name}')
@@ -432,7 +437,7 @@ class TemplateDialog(Gtk.Dialog):
             self._pattern.set_text(tmpl['pattern'])
         grid.attach(self._pattern, 1, 0, 1, 1)
 
-        grid.attach(Gtk.Label(label='Mode:', xalign=1), 0, 1, 1, 1)
+        grid.attach(Gtk.Label(label=_('Mode:'), xalign=1), 0, 1, 1, 1)
         self._mode_combo = Gtk.ComboBoxText()
         for m in ['en', 'vi', 'both']:
             self._mode_combo.append_text(m)
@@ -441,7 +446,7 @@ class TemplateDialog(Gtk.Dialog):
         grid.attach(self._mode_combo, 1, 1, 1, 1)
         box.add(grid)
 
-        box.add(Gtk.Label(label='Expansion (Jinja2):', xalign=0))
+        box.add(Gtk.Label(label=_('Expansion (Jinja2):'), xalign=0))
         exp_scroll = Gtk.ScrolledWindow()
         exp_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         exp_scroll.set_size_request(-1, 120)
@@ -453,13 +458,12 @@ class TemplateDialog(Gtk.Dialog):
         exp_scroll.add(self._exp_view)
         box.add(exp_scroll)
 
-        # Inline preview
         prev_row = Gtk.Box(spacing=8)
-        prev_row.add(Gtk.Label(label='Test input:'))
+        prev_row.add(Gtk.Label(label=_('Test input:')))
         self._prev_entry = Gtk.Entry()
         self._prev_entry.set_width_chars(22)
         self._prev_entry.set_placeholder_text('e.g. 5  or  derrick')
-        prev_btn = Gtk.Button(label='▶ Preview')
+        prev_btn = Gtk.Button(label=_('▶ Preview'))
         prev_btn.connect('clicked', self._on_preview)
         self._prev_entry.connect('activate', self._on_preview)
         prev_row.add(self._prev_entry)
@@ -476,7 +480,7 @@ class TemplateDialog(Gtk.Dialog):
         preview_scroll.add(self._preview_view)
         box.add(preview_scroll)
 
-        self.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
+        self.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Save'), Gtk.ResponseType.OK)
         self.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
         self.show_all()
 
@@ -561,11 +565,11 @@ class SettingsWindow(Gtk.Window):
         nb.set_tab_pos(Gtk.PositionType.TOP)
         self.add(nb)
 
-        nb.append_page(self._build_general_tab(),    Gtk.Label(label='General'))
-        nb.append_page(self._build_dict_tab(),       Gtk.Label(label='Dictionary & Templates'))
-        nb.append_page(self._build_clipboard_tab(),  Gtk.Label(label='Clipboard History'))
-        nb.append_page(self._build_screenshot_tab(), Gtk.Label(label='Screenshot'))
-        nb.append_page(self._build_about_tab(),      Gtk.Label(label='About'))
+        nb.append_page(self._build_general_tab(),    Gtk.Label(label=_('General')))
+        nb.append_page(self._build_dict_tab(),       Gtk.Label(label=_('Dictionary & Templates')))
+        nb.append_page(self._build_clipboard_tab(),  Gtk.Label(label=_('Clipboard History')))
+        nb.append_page(self._build_screenshot_tab(), Gtk.Label(label=_('Screenshot')))
+        nb.append_page(self._build_about_tab(),      Gtk.Label(label=_('About')))
 
         self._refresh_table()
         self._refresh_template_table()
@@ -602,25 +606,37 @@ class SettingsWindow(Gtk.Window):
             box.pack_start(widget, expand, expand, 0)
             return box
 
+        # ── Interface (Language) ───────────────────────────────────────────────
+        vbox.pack_start(section(_('Interface')), False, False, 0)
+
+        self._lang_combo = Gtk.ComboBoxText()
+        self._lang_combo.append('en', 'English')
+        self._lang_combo.append('vi', 'Tiếng Việt')
+        self._lang_combo.set_active_id(_STARTUP_LANGUAGE)
+        self._lang_combo.set_hexpand(False)
+        vbox.pack_start(row(_('Language'), self._lang_combo), False, False, 4)
+        vbox.pack_start(hint(_('Restart required after changing language.')), False, False, 0)
+
         # ── Input ──────────────────────────────────────────────────────────────
-        vbox.pack_start(section('Nhập liệu'), False, False, 0)
+        vbox.pack_start(Gtk.Separator(), False, False, 8)
+        vbox.pack_start(section(_('Input')), False, False, 0)
 
         self._method_combo = Gtk.ComboBoxText()
         for m in ['Telex', 'VNI']:
             self._method_combo.append_text(m)
         self._method_combo.set_active(0 if conf.get('Method', 'Telex') == 'Telex' else 1)
         self._method_combo.set_hexpand(False)
-        vbox.pack_start(row('Phương thức gõ', self._method_combo), False, False, 4)
+        vbox.pack_start(row(_('Input method'), self._method_combo), False, False, 4)
 
         self._toggle_entry = Gtk.Entry()
         self._toggle_entry.set_text(conf.get('ToggleKey', 'Control+Alt+z'))
-        self._toggle_entry.set_placeholder_text('Ví dụ: Control+Alt+z')
-        vbox.pack_start(row('Phím chuyển EN/VI', self._toggle_entry, expand=True), False, False, 4)
-        vbox.pack_start(hint('Gõ tên phím theo định dạng Fcitx5. Ví dụ: Control+Alt+z'), False, False, 0)
+        self._toggle_entry.set_placeholder_text('e.g. Control+Alt+z')
+        vbox.pack_start(row(_('EN/VI toggle key'), self._toggle_entry, expand=True), False, False, 4)
+        vbox.pack_start(hint(_('Enter key name in Fcitx5 format. e.g. Control+Alt+z')), False, False, 0)
 
         # ── Display ────────────────────────────────────────────────────────────
         vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section('Hiển thị'), False, False, 0)
+        vbox.pack_start(section(_('Display')), False, False, 0)
 
         self._preedit_combo = Gtk.ComboBoxText()
         for m in ['Auto', 'Client', 'Panel']:
@@ -628,41 +644,41 @@ class SettingsWindow(Gtk.Window):
         pm = conf.get('PreeditMode', 'Auto')
         self._preedit_combo.set_active(['Auto', 'Client', 'Panel'].index(pm) if pm in ['Auto', 'Client', 'Panel'] else 0)
         self._preedit_combo.set_hexpand(False)
-        vbox.pack_start(row('Chế độ preedit', self._preedit_combo), False, False, 4)
-        vbox.pack_start(hint('⚠ Chrome, Edge, Electron luôn hiện gạch chân ở Auto/Client. Chọn Panel để tắt hoàn toàn.'), False, False, 0)
+        vbox.pack_start(row(_('Preedit mode'), self._preedit_combo), False, False, 4)
+        vbox.pack_start(hint(_('⚠ Chrome, Edge, Electron always show underline in Auto/Client mode. Choose Panel to disable it completely.')), False, False, 0)
 
         self._underline_switch = Gtk.Switch()
         self._underline_switch.set_active(conf.get('ShowPreeditUnderline', 'True').lower() == 'true')
         self._underline_switch.set_valign(Gtk.Align.CENTER)
         self._underline_switch.set_hexpand(False)
-        vbox.pack_start(row('Hiển thị gạch chân khi đang gõ', self._underline_switch), False, False, 6)
+        vbox.pack_start(row(_('Show underline while composing'), self._underline_switch), False, False, 6)
 
         # ── Behaviour ──────────────────────────────────────────────────────────
         vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section('Hành vi'), False, False, 0)
+        vbox.pack_start(section(_('Behavior')), False, False, 0)
 
         self._autocap_switch = Gtk.Switch()
         self._autocap_switch.set_active(conf.get('AutoCapitalize', 'False').lower() == 'true')
         self._autocap_switch.set_valign(Gtk.Align.CENTER)
         self._autocap_switch.set_hexpand(False)
-        vbox.pack_start(row('Tự động viết hoa đầu câu (Chưa tối ưu)', self._autocap_switch), False, False, 6)
+        vbox.pack_start(row(_('Auto-capitalize sentences (not fully optimized)'), self._autocap_switch), False, False, 6)
 
         self._rewrite_switch = Gtk.Switch()
         self._rewrite_switch.set_active(conf.get('CommittedRewrite', 'True').lower() == 'true')
         self._rewrite_switch.set_valign(Gtk.Align.CENTER)
         self._rewrite_switch.set_hexpand(False)
-        vbox.pack_start(row('Cho phép sửa từ đã commit.', self._rewrite_switch), False, False, 6)
+        vbox.pack_start(row(_('Allow editing committed syllable'), self._rewrite_switch), False, False, 6)
 
         # ── Buttons ────────────────────────────────────────────────────────────
         vbox.pack_start(Gtk.Separator(), False, False, 16)
         btn_row = Gtk.Box(spacing=8)
         btn_row.set_halign(Gtk.Align.END)
 
-        reset_btn = Gtk.Button(label='Khôi phục mặc định')
+        reset_btn = Gtk.Button(label=_('Restore defaults'))
         reset_btn.connect('clicked', self._on_general_reset)
         btn_row.pack_start(reset_btn, False, False, 0)
 
-        save_btn = Gtk.Button(label='Lưu & Áp dụng')
+        save_btn = Gtk.Button(label=_('Save & Apply'))
         save_btn.get_style_context().add_class('suggested-action')
         save_btn.connect('clicked', self._on_general_save)
         btn_row.pack_start(save_btn, False, False, 0)
@@ -673,6 +689,7 @@ class SettingsWindow(Gtk.Window):
     def _on_general_save(self, _btn):
         methods = ['Telex', 'VNI']
         pmodes  = ['Auto', 'Client', 'Panel']
+        new_lang = self._lang_combo.get_active_id() or 'en'
         updates = {
             'Method':               methods[self._method_combo.get_active()],
             'ToggleKey':            self._toggle_entry.get_text().strip(),
@@ -680,14 +697,17 @@ class SettingsWindow(Gtk.Window):
             'ShowPreeditUnderline': 'True' if self._underline_switch.get_active() else 'False',
             'AutoCapitalize':       'True' if self._autocap_switch.get_active() else 'False',
             'CommittedRewrite':     'True' if self._rewrite_switch.get_active() else 'False',
+            'language':             new_lang,
         }
         save_general_conf(updates)
-        # Apply via farolkey-reload
         try:
             subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
         except Exception:
             pass
-        self._show_info('Đã lưu và áp dụng cài đặt.')
+        msg = _('Settings saved and applied.')
+        if new_lang != _STARTUP_LANGUAGE:
+            msg += '\n\n' + _('Restart required after changing language.')
+        self._show_info(msg)
 
     def _on_general_reset(self, _btn):
         methods = ['Telex', 'VNI']
@@ -707,27 +727,27 @@ class SettingsWindow(Gtk.Window):
         if not changes:
             dlg = Gtk.MessageDialog(transient_for=self, modal=True,
                 message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
-                text='Cài đặt đang ở mặc định rồi, không có gì thay đổi.')
+                text=_('All settings are already at their defaults.'))
             dlg.run()
             dlg.destroy()
             return
 
         _setting_labels = {
-            'Method':               'Phương thức gõ',
-            'ToggleKey':            'Phím chuyển EN/VI',
-            'PreeditMode':          'Chế độ preedit',
-            'ShowPreeditUnderline': 'Hiển thị gạch chân khi đang gõ',
-            'AutoCapitalize':       'Tự động viết hoa đầu câu',
-            'CommittedRewrite':     'Cho phép sửa từ đã commit',
+            'Method':               _('Input method'),
+            'ToggleKey':            _('EN/VI toggle key'),
+            'PreeditMode':          _('Preedit mode'),
+            'ShowPreeditUnderline': _('Show underline while composing'),
+            'AutoCapitalize':       _('Auto-capitalize sentences'),
+            'CommittedRewrite':     _('Allow editing committed syllable'),
         }
-        _bool_display = {'True': 'Bật', 'False': 'Tắt'}
+        _bool_display = {'True': _('On'), 'False': _('Off')}
 
         def _fmt(v):
             return _bool_display.get(v, v)
 
-        dlg = Gtk.Dialog(title='Khôi phục mặc định', transient_for=self, modal=True)
-        dlg.add_buttons('Hủy', Gtk.ResponseType.CANCEL,
-                        'Khôi phục', Gtk.ResponseType.OK)
+        dlg = Gtk.Dialog(title=_('Restore defaults'), transient_for=self, modal=True)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL,
+                        _('Restore'), Gtk.ResponseType.OK)
         dlg.get_widget_for_response(Gtk.ResponseType.OK) \
            .get_style_context().add_class('destructive-action')
 
@@ -739,7 +759,7 @@ class SettingsWindow(Gtk.Window):
         area.set_margin_bottom(8)
 
         area.add(Gtk.Label(
-            label='Các cài đặt sau sẽ được đặt lại về mặc định:',
+            label=_('The following settings will be reset to their defaults:'),
             xalign=0))
 
         grid = Gtk.Grid(row_spacing=6, column_spacing=20)
@@ -790,8 +810,8 @@ class SettingsWindow(Gtk.Window):
     def _build_dict_tab(self):
         notebook = Gtk.Notebook()
         notebook.set_tab_pos(Gtk.PositionType.TOP)
-        notebook.append_page(self._build_abbreviations_page(), Gtk.Label(label='📖 Abbreviations'))
-        notebook.append_page(self._build_templates_page(),     Gtk.Label(label='⚡ Smart Templates'))
+        notebook.append_page(self._build_abbreviations_page(), Gtk.Label(label=_('📖 Abbreviations')))
+        notebook.append_page(self._build_templates_page(),     Gtk.Label(label=_('⚡ Smart Templates')))
         return notebook
 
     def _build_abbreviations_page(self):
@@ -805,7 +825,7 @@ class SettingsWindow(Gtk.Window):
         self.enable_switch.set_valign(Gtk.Align.CENTER)
         self.enable_switch.set_active(read_enable_setting(self.conf_path))
         self.enable_switch.connect('notify::active', self._on_enable_toggled)
-        top_bar.pack_start(Gtk.Label(label='Enable user dictionary'), False, False, 0)
+        top_bar.pack_start(Gtk.Label(label=_('Enable user dictionary')), False, False, 0)
         top_bar.pack_start(self.enable_switch, False, False, 0)
 
         self.count_label = Gtk.Label()
@@ -818,7 +838,7 @@ class SettingsWindow(Gtk.Window):
         search_bar.set_margin_top(6); search_bar.set_margin_bottom(2)
         search_bar.set_margin_start(12); search_bar.set_margin_end(12)
         self.search_entry = Gtk.SearchEntry()
-        self.search_entry.set_placeholder_text('Search trigger or expansion…')
+        self.search_entry.set_placeholder_text(_('Search trigger or expansion…'))
         self.search_entry.set_hexpand(True)
         self.search_entry.connect('search-changed', self._on_search_changed)
         search_bar.pack_start(self.search_entry, True, True, 0)
@@ -834,7 +854,7 @@ class SettingsWindow(Gtk.Window):
         self.tree.set_headers_visible(True)
         self.tree.set_grid_lines(Gtk.TreeViewGridLines.HORIZONTAL)
         self.tree.connect('row-activated', self._on_row_activated)
-        for i, (title, expand) in enumerate([('Trigger', False), ('Expansion', True), ('Mode', False)]):
+        for i, (title, expand) in enumerate([(_('Trigger'), False), (_('Expansion'), True), (_('Mode'), False)]):
             renderer = Gtk.CellRendererText()
             renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
             col = Gtk.TreeViewColumn(title, renderer, text=i)
@@ -849,11 +869,11 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(Gtk.Separator(), False, False, 8)
         btn_bar = Gtk.Box(spacing=8)
         btn_bar.set_margin_bottom(12); btn_bar.set_margin_start(12); btn_bar.set_margin_end(12)
-        self.btn_add    = Gtk.Button(label='+ Add')
-        self.btn_edit   = Gtk.Button(label='✏ Edit')
-        self.btn_delete = Gtk.Button(label='🗑 Delete')
-        btn_import      = Gtk.Button(label='⬆ Import CSV')
-        btn_export      = Gtk.Button(label='⬇ Export CSV')
+        self.btn_add    = Gtk.Button(label=_('+ Add'))
+        self.btn_edit   = Gtk.Button(label=_('✏ Edit'))
+        self.btn_delete = Gtk.Button(label=_('🗑 Delete'))
+        btn_import      = Gtk.Button(label=_('⬆ Import CSV'))
+        btn_export      = Gtk.Button(label=_('⬇ Export CSV'))
         self.btn_edit.set_sensitive(False)
         self.btn_delete.set_sensitive(False)
         self.btn_add.connect('clicked',    self._on_add)
@@ -876,7 +896,7 @@ class SettingsWindow(Gtk.Window):
         self.tmpl_enable_switch.set_valign(Gtk.Align.CENTER)
         self.tmpl_enable_switch.set_active(read_smart_templates_setting(self.conf_path))
         self.tmpl_enable_switch.connect('notify::active', self._on_tmpl_enable_toggled)
-        top_bar.pack_start(Gtk.Label(label='Enable Smart Templates'), False, False, 0)
+        top_bar.pack_start(Gtk.Label(label=_('Enable Smart Templates')), False, False, 0)
         top_bar.pack_start(self.tmpl_enable_switch, False, False, 0)
         top_bar.pack_start(Gtk.Label(
             label=' — Type <tt>[trigger]</tt> + Space to activate', use_markup=True, xalign=0),
@@ -893,7 +913,7 @@ class SettingsWindow(Gtk.Window):
         tsearch_bar.set_margin_top(6); tsearch_bar.set_margin_bottom(2)
         tsearch_bar.set_margin_start(12); tsearch_bar.set_margin_end(12)
         self.tmpl_search = Gtk.SearchEntry()
-        self.tmpl_search.set_placeholder_text('Search pattern or expansion…')
+        self.tmpl_search.set_placeholder_text(_('Search pattern or expansion…'))
         self.tmpl_search.set_hexpand(True)
         self.tmpl_search.connect('search-changed', self._on_tmpl_search_changed)
         tsearch_bar.pack_start(self.tmpl_search, True, True, 0)
@@ -910,7 +930,7 @@ class SettingsWindow(Gtk.Window):
         self.tmpl_tree.set_grid_lines(Gtk.TreeViewGridLines.HORIZONTAL)
         self.tmpl_tree.connect('row-activated', self._on_tmpl_row_activated)
         for i, (title, expand, min_w) in enumerate([
-            ('Pattern', False, 160), ('Expansion (Jinja2)', True, 0), ('Mode', False, 60)
+            (_('Pattern'), False, 160), (_('Expansion (Jinja2)'), True, 0), (_('Mode'), False, 60)
         ]):
             renderer = Gtk.CellRendererText()
             renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
@@ -927,21 +947,21 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(Gtk.Separator(), False, False, 8)
         btn_bar = Gtk.Box(spacing=8)
         btn_bar.set_margin_bottom(12); btn_bar.set_margin_start(12); btn_bar.set_margin_end(12)
-        self.tmpl_btn_add    = Gtk.Button(label='+ Add')
-        self.tmpl_btn_edit   = Gtk.Button(label='✏ Edit')
-        self.tmpl_btn_delete = Gtk.Button(label='🗑 Delete')
+        self.tmpl_btn_add    = Gtk.Button(label=_('+ Add'))
+        self.tmpl_btn_edit   = Gtk.Button(label=_('✏ Edit'))
+        self.tmpl_btn_delete = Gtk.Button(label=_('🗑 Delete'))
         self.tmpl_btn_edit.set_sensitive(False)
         self.tmpl_btn_delete.set_sensitive(False)
         self.tmpl_btn_add.connect('clicked',    self._on_tmpl_add)
         self.tmpl_btn_edit.connect('clicked',   self._on_tmpl_edit)
         self.tmpl_btn_delete.connect('clicked', self._on_tmpl_delete)
-        tmpl_btn_import = Gtk.Button(label='⬆ Import CSV')
-        tmpl_btn_export = Gtk.Button(label='⬇ Export CSV')
+        tmpl_btn_import = Gtk.Button(label=_('⬆ Import CSV'))
+        tmpl_btn_export = Gtk.Button(label=_('⬇ Export CSV'))
         tmpl_btn_import.connect('clicked', self._on_tmpl_import)
         tmpl_btn_export.connect('clicked', self._on_tmpl_export)
         for b in [self.tmpl_btn_add, self.tmpl_btn_edit, self.tmpl_btn_delete, tmpl_btn_import, tmpl_btn_export]:
             btn_bar.pack_start(b, False, False, 0)
-        test_lbl = Gtk.Label(label='Quick test:')
+        test_lbl = Gtk.Label(label=_('Quick test:'))
         self.tmpl_quick_entry = Gtk.Entry()
         self.tmpl_quick_entry.set_width_chars(18)
         self.tmpl_quick_entry.set_placeholder_text('e.g. [5++] or [date]')
@@ -977,11 +997,10 @@ class SettingsWindow(Gtk.Window):
             lbl.set_margin_start(4)
             return lbl
 
-        # Popup position
-        vbox.pack_start(section('Hiển thị popup'), False, False, 0)
-        self._cb_radio_mouse  = Gtk.RadioButton.new_with_label(None, '🖱  Gần con trỏ chuột (mặc định)')
+        vbox.pack_start(section(_('Popup display')), False, False, 0)
+        self._cb_radio_mouse  = Gtk.RadioButton.new_with_label(None, _('🖱  Near cursor (default)'))
         self._cb_radio_corner = Gtk.RadioButton.new_with_label_from_widget(
-            self._cb_radio_mouse, '📐  Góc dưới bên phải màn hình')
+            self._cb_radio_mouse, _('📐  Bottom-right corner of screen'))
         if conf.get('popup_position', 'mouse') == 'corner':
             self._cb_radio_corner.set_active(True)
         else:
@@ -991,7 +1010,7 @@ class SettingsWindow(Gtk.Window):
 
         vbox.pack_start(Gtk.Separator(), False, False, 8)
         close_row = Gtk.Box(spacing=12)
-        close_lbl = Gtk.Label(label='Đóng popup khi click ra ngoài', xalign=0)
+        close_lbl = Gtk.Label(label=_('Close popup on click outside'), xalign=0)
         self._cb_close_switch = Gtk.Switch()
         self._cb_close_switch.set_active(conf.get('close_on_click_outside', 'true') == 'true')
         self._cb_close_switch.set_valign(Gtk.Align.CENTER)
@@ -999,14 +1018,13 @@ class SettingsWindow(Gtk.Window):
         close_row.pack_start(self._cb_close_switch, False, False, 0)
         vbox.pack_start(close_row, False, False, 6)
 
-        # System tools
         vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section('Công cụ hệ thống'), False, False, 0)
+        vbox.pack_start(section(_('System tools')), False, False, 0)
         tools = [
-            (shutil.which('wl-copy'),  'wl-copy',  'Clipboard write (Wayland)'),
-            (shutil.which('xclip'),    'xclip',    'Clipboard write (X11)'),
-            (shutil.which('xdotool'),  'xdotool',  'Auto-paste Ctrl+V (X11)'),
-            (shutil.which('wtype'),    'wtype',    'Auto-paste Ctrl+V (Wayland)'),
+            (shutil.which('wl-copy'),  'wl-copy',  _('Clipboard write (Wayland)')),
+            (shutil.which('xclip'),    'xclip',    _('Clipboard write (X11)')),
+            (shutil.which('xdotool'),  'xdotool',  _('Auto-paste Ctrl+V (X11)')),
+            (shutil.which('wtype'),    'wtype',    _('Auto-paste Ctrl+V (Wayland)')),
         ]
         tools_box = Gtk.Box(spacing=20)
         tools_box.set_margin_top(6)
@@ -1023,13 +1041,12 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(tools_box, False, False, 0)
         missing = [n for f, n, _ in tools if not f]
         if missing:
-            vbox.pack_start(hint(f'Missing: {", ".join(missing)} — chạy: sudo apt install {" ".join(missing)}'), False, False, 4)
+            vbox.pack_start(hint(f'Missing: {", ".join(missing)} — run: sudo apt install {" ".join(missing)}'), False, False, 4)
 
-        # Save button
         vbox.pack_start(Gtk.Separator(), False, False, 16)
         btn_row = Gtk.Box(spacing=8)
         btn_row.set_halign(Gtk.Align.END)
-        save_btn = Gtk.Button(label='Lưu & Áp dụng')
+        save_btn = Gtk.Button(label=_('Save & Apply'))
         save_btn.get_style_context().add_class('suggested-action')
         save_btn.connect('clicked', self._on_clipboard_save)
         btn_row.pack_start(save_btn, False, False, 0)
@@ -1041,7 +1058,7 @@ class SettingsWindow(Gtk.Window):
         conf['popup_position']         = 'corner' if self._cb_radio_corner.get_active() else 'mouse'
         conf['close_on_click_outside'] = 'true' if self._cb_close_switch.get_active() else 'false'
         save_clipboard_conf(conf)
-        self._show_info('Đã lưu cài đặt Clipboard History.\nSẽ áp dụng lần mở popup kế tiếp.')
+        self._show_info(_('Clipboard History settings saved.\nChanges will take effect on next popup open.'))
 
     # ── Tab 4: Screenshot ──────────────────────────────────────────────────────
 
@@ -1074,45 +1091,42 @@ class SettingsWindow(Gtk.Window):
             box.pack_start(widget, True, True, 0)
             return box
 
-        # Hotkey
-        vbox.pack_start(section('Phím tắt'), False, False, 0)
+        vbox.pack_start(section(_('Hotkeys')), False, False, 0)
         self._ss_hotkey_entry = Gtk.Entry()
         self._ss_hotkey_entry.set_text(conf.get('hotkey', 'super+shift+s'))
-        self._ss_hotkey_entry.set_tooltip_text('Ví dụ: super+shift+s, ctrl+shift+p')
-        vbox.pack_start(row('Screenshot hotkey', self._ss_hotkey_entry), False, False, 6)
-        vbox.pack_start(hint('Dùng + để kết hợp phím. Modifier hợp lệ: super, ctrl, alt, shift'), False, False, 0)
-        vbox.pack_start(hint('💡 super = phím Windows (⊞)'), False, False, 0)
+        self._ss_hotkey_entry.set_tooltip_text('e.g. super+shift+s, ctrl+shift+p')
+        vbox.pack_start(row(_('Screenshot hotkey'), self._ss_hotkey_entry), False, False, 6)
+        vbox.pack_start(hint(_('Use + to combine keys. Valid modifiers: super, ctrl, alt, shift')), False, False, 0)
+        vbox.pack_start(hint(_('💡 super = Windows key (⊞)')), False, False, 0)
 
-        # Capture mode
         vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section('Chụp màn hình'), False, False, 0)
-        self._ss_cap_all_radio    = Gtk.RadioButton.new_with_label(None, 'Tất cả màn hình (mặc định)')
+        vbox.pack_start(section(_('Capture')), False, False, 0)
+        self._ss_cap_all_radio    = Gtk.RadioButton.new_with_label(None, _('All screens (default)'))
         self._ss_cap_cursor_radio = Gtk.RadioButton.new_with_label_from_widget(
-            self._ss_cap_all_radio, 'Màn hình chứa con trỏ chuột')
+            self._ss_cap_all_radio, _('Screen containing cursor'))
         if conf.get('capture_mode', 'all') == 'cursor':
             self._ss_cap_cursor_radio.set_active(True)
         else:
             self._ss_cap_all_radio.set_active(True)
         vbox.pack_start(self._ss_cap_all_radio,    False, False, 4)
         vbox.pack_start(self._ss_cap_cursor_radio, False, False, 4)
-        vbox.pack_start(hint('Tất cả màn hình: kéo chọn vùng bất kỳ trên tất cả màn hình'), False, False, 0)
+        vbox.pack_start(hint(_('All screens: drag to select any region across all monitors')), False, False, 0)
 
         vbox.pack_start(Gtk.Separator(), False, False, 6)
         instant_row = Gtk.Box(spacing=12)
-        instant_lbl = Gtk.Label(label='Chụp ngay khi thả chuột', xalign=0)
+        instant_lbl = Gtk.Label(label=_('Capture immediately on mouse release'), xalign=0)
         self._ss_instant_switch = Gtk.Switch()
         self._ss_instant_switch.set_active(conf.get('instant_capture', 'false').lower() == 'true')
         self._ss_instant_switch.set_valign(Gtk.Align.CENTER)
         instant_row.pack_start(instant_lbl, True, True, 0)
         instant_row.pack_start(self._ss_instant_switch, False, False, 0)
         vbox.pack_start(instant_row, False, False, 6)
-        vbox.pack_start(hint('Nếu bật: ảnh chụp ngay sau khi thả chuột — không có xem trước / chỉnh vùng'), False, False, 0)
+        vbox.pack_start(hint(_('If enabled: screenshot taken immediately on mouse release — no preview / region adjustment')), False, False, 0)
 
-        # Save
         vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section('Lưu trữ'), False, False, 0)
+        vbox.pack_start(section(_('Storage')), False, False, 0)
         path_row = Gtk.Box(spacing=8)
-        path_lbl = Gtk.Label(label='Thư mục lưu', xalign=0)
+        path_lbl = Gtk.Label(label=_('Save folder'), xalign=0)
         path_lbl.set_size_request(220, -1)
         self._ss_path_entry = Gtk.Entry()
         self._ss_path_entry.set_text(conf.get('save_path', str(Path.home() / 'Pictures' / 'Screenshots')))
@@ -1128,7 +1142,7 @@ class SettingsWindow(Gtk.Window):
         self._ss_ask_switch = Gtk.Switch()
         self._ss_ask_switch.set_active(conf.get('ask_before_save', 'true').lower() == 'true')
         self._ss_ask_switch.set_valign(Gtk.Align.CENTER)
-        ask_row.pack_start(Gtk.Label(label='Hỏi trước khi lưu', xalign=0), True, True, 0)
+        ask_row.pack_start(Gtk.Label(label=_('Ask before saving'), xalign=0), True, True, 0)
         ask_row.pack_start(self._ss_ask_switch, False, False, 0)
         vbox.pack_start(ask_row, False, False, 6)
 
@@ -1136,17 +1150,16 @@ class SettingsWindow(Gtk.Window):
         self._ss_auto_switch = Gtk.Switch()
         self._ss_auto_switch.set_active(conf.get('auto_save', 'false').lower() == 'true')
         self._ss_auto_switch.set_valign(Gtk.Align.CENTER)
-        auto_row.pack_start(Gtk.Label(label='Tự động lưu (không hỏi)', xalign=0), True, True, 0)
+        auto_row.pack_start(Gtk.Label(label=_('Auto-save (no prompt)'), xalign=0), True, True, 0)
         auto_row.pack_start(self._ss_auto_switch, False, False, 0)
         vbox.pack_start(auto_row, False, False, 6)
-        vbox.pack_start(hint('Tự động lưu sẽ bỏ qua hộp thoại và lưu thẳng vào thư mục trên'), False, False, 0)
+        vbox.pack_start(hint(_('Auto-save skips the dialog and saves directly to the folder above')), False, False, 0)
 
-        # System tools
         vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section('Công cụ hệ thống'), False, False, 0)
-        ss_tools = [('grim','Capture Wayland'),('slurp','Region Wayland'),
-                    ('maim','Capture X11'),('wl-copy','Clipboard Wayland'),
-                    ('xclip','Clipboard X11'),('notify-send','Notification')]
+        vbox.pack_start(section(_('System tools')), False, False, 0)
+        ss_tools = [('grim', _('Capture Wayland')), ('slurp', _('Region Wayland')),
+                    ('maim', _('Capture X11')), ('wl-copy', _('Clipboard Wayland')),
+                    ('xclip', _('Clipboard X11')), ('notify-send', _('Notification'))]
         tools_box = Gtk.Box(spacing=16); tools_box.set_margin_top(6)
         for tool, desc in ss_tools:
             found = bool(shutil.which(tool))
@@ -1161,14 +1174,13 @@ class SettingsWindow(Gtk.Window):
             tools_box.pack_start(col, False, False, 0)
         vbox.pack_start(tools_box, False, False, 0)
 
-        # Buttons
         vbox.pack_start(Gtk.Separator(), False, False, 16)
         btn_row = Gtk.Box(spacing=8)
         btn_row.set_halign(Gtk.Align.END)
-        test_btn = Gtk.Button(label='Test chụp thử')
+        test_btn = Gtk.Button(label=_('Test capture'))
         test_btn.connect('clicked', self._on_ss_test)
         btn_row.pack_start(test_btn, False, False, 0)
-        save_btn = Gtk.Button(label='Lưu & Áp dụng')
+        save_btn = Gtk.Button(label=_('Save & Apply'))
         save_btn.get_style_context().add_class('suggested-action')
         save_btn.connect('clicked', self._on_screenshot_save)
         btn_row.pack_start(save_btn, False, False, 0)
@@ -1176,16 +1188,16 @@ class SettingsWindow(Gtk.Window):
         return scroll
 
     def _on_ss_browse(self, _btn):
-        dlg = Gtk.FileChooserDialog(title='Chọn thư mục lưu ảnh', transient_for=self,
+        dlg = Gtk.FileChooserDialog(title=_('Select screenshot folder'), transient_for=self,
                                     action=Gtk.FileChooserAction.SELECT_FOLDER)
-        dlg.add_buttons('Huỷ', Gtk.ResponseType.CANCEL, 'Chọn', Gtk.ResponseType.OK)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Select'), Gtk.ResponseType.OK)
         dlg.set_filename(self._ss_path_entry.get_text())
         if dlg.run() == Gtk.ResponseType.OK:
             self._ss_path_entry.set_text(dlg.get_filename())
         dlg.destroy()
 
     def _on_screenshot_save(self, _btn):
-        old_conf  = load_screenshot_conf()
+        old_conf   = load_screenshot_conf()
         old_hotkey = old_conf.get('hotkey', '')
         conf = {
             'hotkey':          self._ss_hotkey_entry.get_text().strip(),
@@ -1196,7 +1208,6 @@ class SettingsWindow(Gtk.Window):
             'auto_save':       'true' if self._ss_auto_switch.get_active() else 'false',
         }
         save_screenshot_conf(conf)
-        # Re-apply hotkey if changed
         if conf['hotkey'] != old_hotkey:
             daemon = shutil.which('farolkey-screenshot-daemon')
             if daemon:
@@ -1204,14 +1215,14 @@ class SettingsWindow(Gtk.Window):
                     subprocess.run([daemon, '--setup'], capture_output=True, timeout=5)
                 except Exception:
                     pass
-        self._show_info('Đã lưu cài đặt Screenshot.')
+        self._show_info(_('Screenshot settings saved.'))
 
     def _on_ss_test(self, _btn):
         tool = shutil.which('farolkey-screenshot')
         if tool:
             subprocess.Popen([tool], start_new_session=True)
         else:
-            self._show_error('farolkey-screenshot không tìm thấy trong PATH.')
+            self._show_error('farolkey-screenshot not found in PATH.')
 
     # ── Tab 5: About & Diagnostics ─────────────────────────────────────────────
 
@@ -1223,7 +1234,6 @@ class SettingsWindow(Gtk.Window):
         vbox.set_margin_start(32); vbox.set_margin_end(32)
         scroll.add(vbox)
 
-        # App info
         title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         icon_img = Gtk.Image.new_from_icon_name('input-keyboard', Gtk.IconSize.DIALOG)
         title_box.pack_start(icon_img, False, False, 0)
@@ -1231,21 +1241,20 @@ class SettingsWindow(Gtk.Window):
         title_lbl.set_markup('<span font="16" weight="bold">FarolKey</span>')
         title_box.pack_start(title_lbl, False, False, 0)
         vbox.pack_start(title_box, False, False, 0)
-        vbox.pack_start(Gtk.Label(label='Bộ gõ tiếng Việt cho Linux (Fcitx5)', xalign=0), False, False, 4)
-        vbox.pack_start(Gtk.Label(label=f'Phiên bản: {FAROLKEY_VERSION}', xalign=0), False, False, 2)
+        vbox.pack_start(Gtk.Label(label=_('Vietnamese Input Method for Linux (Fcitx5)'), xalign=0), False, False, 4)
+        vbox.pack_start(Gtk.Label(label=f'{_("Version:")} {FAROLKEY_VERSION}', xalign=0), False, False, 2)
 
-        # Service status
         vbox.pack_start(Gtk.Separator(), False, False, 16)
-        hdr = Gtk.Label(label='Trạng thái dịch vụ', xalign=0)
+        hdr = Gtk.Label(label=_('Service status'), xalign=0)
         hdr.get_style_context().add_class('section-hdr')
         vbox.pack_start(hdr, False, False, 0)
 
         self._status_labels = {}
         services = [
-            ('fcitx5',               'fcitx5 daemon',        'pgrep -x fcitx5'),
-            ('farolkey_plugin',      'FarolKey plugin',      'pgrep -f libfarolkey'),
-            ('clipboard_daemon',     'Clipboard daemon',     'pgrep -f farolkey-clipboard'),
-            ('screenshot_daemon',    'Screenshot daemon',    'pgrep -f farolkey-screenshot-daemon'),
+            ('fcitx5',            _('fcitx5 daemon'),        'pgrep -x fcitx5'),
+            ('farolkey_plugin',   _('FarolKey plugin'),      'pgrep -x fcitx5'),
+            ('clipboard_daemon',  _('Clipboard daemon'),     'pgrep -f farolkey-clipboard'),
+            ('screenshot_daemon', _('Screenshot daemon'),    'pgrep -f farolkey-screenshot-daemon'),
         ]
         for key, name, check_cmd in services:
             srow = Gtk.Box(spacing=12)
@@ -1256,32 +1265,28 @@ class SettingsWindow(Gtk.Window):
             self._status_labels[key] = status_lbl
             srow.pack_start(name_lbl, False, False, 0)
             srow.pack_start(status_lbl, True, True, 0)
-            if key == 'screenshot_daemon':
-                restart_btn = Gtk.Button(label='Khởi động lại')
-                restart_btn.connect('clicked', lambda _: self._restart_daemon('farolkey-screenshot-daemon'))
-                srow.pack_end(restart_btn, False, False, 0)
-            elif key == 'clipboard_daemon':
-                restart_btn = Gtk.Button(label='Khởi động lại')
-                restart_btn.connect('clicked', lambda _: self._restart_daemon('farolkey-clipboard'))
+            if key in ('screenshot_daemon', 'clipboard_daemon'):
+                daemon_name = 'farolkey-screenshot-daemon' if key == 'screenshot_daemon' else 'farolkey-clipboard'
+                restart_btn = Gtk.Button(label=_('Restart'))
+                restart_btn.connect('clicked', lambda _, d=daemon_name: self._restart_daemon(d))
                 srow.pack_end(restart_btn, False, False, 0)
             vbox.pack_start(srow, False, False, 0)
 
-        refresh_btn = Gtk.Button(label='🔄 Làm mới trạng thái')
+        refresh_btn = Gtk.Button(label=_('🔄 Refresh status'))
         refresh_btn.set_margin_top(8)
         refresh_btn.connect('clicked', lambda _: self._refresh_status())
         vbox.pack_start(refresh_btn, False, False, 0)
 
-        # Support
         vbox.pack_start(Gtk.Separator(), False, False, 16)
-        hdr2 = Gtk.Label(label='Hỗ trợ', xalign=0)
+        hdr2 = Gtk.Label(label=_('Support'), xalign=0)
         hdr2.get_style_context().add_class('section-hdr')
         vbox.pack_start(hdr2, False, False, 0)
 
         btn_row = Gtk.Box(spacing=12)
         btn_row.set_margin_top(8)
-        log_btn = Gtk.Button(label='📦 Xuất log báo lỗi')
+        log_btn = Gtk.Button(label=_('📦 Export bug report log'))
         log_btn.connect('clicked', self._on_export_log)
-        gh_btn = Gtk.Button(label='🐛 Mở trang Issues (GitHub)')
+        gh_btn = Gtk.Button(label=_('🐛 Open GitHub Issues'))
         gh_btn.connect('clicked', lambda _: subprocess.Popen(
             ['xdg-open', 'https://github.com/FarolNguyen/FarolKey/issues']))
         btn_row.pack_start(log_btn, False, False, 0)
@@ -1300,12 +1305,11 @@ class SettingsWindow(Gtk.Window):
         }
         for key, cmd in checks.items():
             running = subprocess.run(cmd.split(), capture_output=True).returncode == 0
-            # farolkey_plugin: check if the SO is loaded (heuristic: fcitx5 running)
             lbl = self._status_labels[key]
             if running:
-                lbl.set_markup('<span foreground="#4caf50">● Đang chạy</span>')
+                lbl.set_markup(f'<span foreground="#4caf50">{_("● Running")}</span>')
             else:
-                lbl.set_markup('<span foreground="#f44336">✕ Không chạy</span>')
+                lbl.set_markup(f'<span foreground="#f44336">{_("✕ Not running")}</span>')
 
     def _restart_daemon(self, daemon_name: str):
         subprocess.run(['pkill', '-f', daemon_name], capture_output=True)
@@ -1316,25 +1320,25 @@ class SettingsWindow(Gtk.Window):
             time.sleep(0.6)
             self._refresh_status()
         else:
-            self._show_error(f'{daemon_name} không tìm thấy trong PATH.')
+            self._show_error(f'{daemon_name} not found in PATH.')
 
     def _on_export_log(self, _btn):
         sys.path.insert(0, str(Path(shutil.which('farolkey-export-log') or '').parent))
         try:
             from farolkey_log import export_log_bundle
             default_name = f'farolkey_log_{time.strftime("%Y%m%d_%H%M%S")}.zip'
-            dlg = Gtk.FileChooserDialog(title='Lưu log bundle', transient_for=self,
+            dlg = Gtk.FileChooserDialog(title='Save log bundle', transient_for=self,
                                         action=Gtk.FileChooserAction.SAVE)
-            dlg.add_buttons('Huỷ', Gtk.ResponseType.CANCEL, 'Lưu', Gtk.ResponseType.OK)
+            dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Save'), Gtk.ResponseType.OK)
             dlg.set_current_name(default_name)
             dlg.set_do_overwrite_confirmation(True)
             if dlg.run() == Gtk.ResponseType.OK:
                 out = dlg.get_filename()
                 export_log_bundle(out)
-                self._show_info(f'Đã xuất log:\n{out}')
+                self._show_info(f'Log exported to:\n{out}')
             dlg.destroy()
         except Exception as e:
-            self._show_error(f'Không thể xuất log: {e}')
+            self._show_error(f'Failed to export log: {e}')
 
     # ── Dict-GUI helpers (abbrev) ──────────────────────────────────────────────
 
@@ -1381,11 +1385,11 @@ class SettingsWindow(Gtk.Window):
         write_enable_setting(self.conf_path, switch.get_active())
 
     def _on_add(self, _btn):
-        dlg = EntryDialog(self, 'Add Entry')
+        dlg = EntryDialog(self, _('Add Entry'))
         if dlg.run() == Gtk.ResponseType.OK:
             e = dlg.get_entry()
             if not e['trigger'] or not e['expansion']:
-                self._show_error('Trigger and Expansion cannot be empty.')
+                self._show_error(_('Trigger and Expansion cannot be empty.'))
             elif any(x['trigger'] == e['trigger'] for x in self.entries):
                 self._show_error(f'Trigger "{e["trigger"]}" already exists.')
             else:
@@ -1397,11 +1401,11 @@ class SettingsWindow(Gtk.Window):
     def _on_edit(self, _btn):
         idx = self._selected_index()
         if idx < 0: return
-        dlg = EntryDialog(self, 'Edit Entry', self.entries[idx])
+        dlg = EntryDialog(self, _('Edit Entry'), self.entries[idx])
         if dlg.run() == Gtk.ResponseType.OK:
             e = dlg.get_entry()
             if not e['trigger'] or not e['expansion']:
-                self._show_error('Trigger and Expansion cannot be empty.')
+                self._show_error(_('Trigger and Expansion cannot be empty.'))
             else:
                 self.entries[idx] = e
                 save_entries(self.dict_path, self.entries)
@@ -1425,9 +1429,9 @@ class SettingsWindow(Gtk.Window):
         dlg.destroy()
 
     def _on_export(self, _btn):
-        dlg = Gtk.FileChooserDialog(title='Export Dictionary as CSV', transient_for=self,
+        dlg = Gtk.FileChooserDialog(title=_('Export Dictionary as CSV'), transient_for=self,
                                     action=Gtk.FileChooserAction.SAVE)
-        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Save'), Gtk.ResponseType.OK)
         dlg.set_current_name('farolkey_dict.csv')
         dlg.set_do_overwrite_confirmation(True)
         ff = Gtk.FileFilter(); ff.set_name('CSV files (*.csv)')
@@ -1444,9 +1448,9 @@ class SettingsWindow(Gtk.Window):
         dlg.destroy()
 
     def _on_import(self, _btn):
-        dlg = Gtk.FileChooserDialog(title='Import Dictionary from CSV', transient_for=self,
+        dlg = Gtk.FileChooserDialog(title=_('Import Dictionary from CSV'), transient_for=self,
                                     action=Gtk.FileChooserAction.OPEN)
-        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Import', Gtk.ResponseType.OK)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Select'), Gtk.ResponseType.OK)
         ff = Gtk.FileFilter(); ff.set_name('CSV files (*.csv)')
         ff.add_mime_type('text/csv'); ff.add_pattern('*.csv'); dlg.add_filter(ff)
         if dlg.run() == Gtk.ResponseType.OK:
@@ -1516,11 +1520,11 @@ class SettingsWindow(Gtk.Window):
     def _on_tmpl_row_activated(self, *_): self._on_tmpl_edit(None)
 
     def _on_tmpl_add(self, _btn):
-        dlg = TemplateDialog(self, 'Add Smart Template')
+        dlg = TemplateDialog(self, _('Add Smart Template'))
         if dlg.run() == Gtk.ResponseType.OK:
             t = dlg.get_template()
             if not t['pattern'] or not t['expansion']:
-                self._show_error('Pattern and Expansion cannot be empty.')
+                self._show_error(_('Pattern and Expansion cannot be empty.'))
             elif any(x['pattern'] == t['pattern'] for x in self.templates):
                 self._show_error(f'Pattern "{t["pattern"]}" already exists.')
             else:
@@ -1532,11 +1536,11 @@ class SettingsWindow(Gtk.Window):
     def _on_tmpl_edit(self, _btn):
         idx = self._tmpl_selected_index()
         if idx < 0: return
-        dlg = TemplateDialog(self, 'Edit Smart Template', self.templates[idx])
+        dlg = TemplateDialog(self, _('Edit Smart Template'), self.templates[idx])
         if dlg.run() == Gtk.ResponseType.OK:
             t = dlg.get_template()
             if not t['pattern'] or not t['expansion']:
-                self._show_error('Pattern and Expansion cannot be empty.')
+                self._show_error(_('Pattern and Expansion cannot be empty.'))
             else:
                 self.templates[idx] = t
                 save_templates(self.tmpl_path, self.templates)
@@ -1567,9 +1571,9 @@ class SettingsWindow(Gtk.Window):
         else:  self._show_error(output)
 
     def _on_tmpl_export(self, _btn):
-        dlg = Gtk.FileChooserDialog(title='Export Smart Templates as CSV', transient_for=self,
+        dlg = Gtk.FileChooserDialog(title=_('Export Smart Templates as CSV'), transient_for=self,
                                     action=Gtk.FileChooserAction.SAVE)
-        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Save'), Gtk.ResponseType.OK)
         dlg.set_current_name('farolkey_templates.csv')
         dlg.set_do_overwrite_confirmation(True)
         ff = Gtk.FileFilter(); ff.set_name('CSV files (*.csv)')
@@ -1589,9 +1593,9 @@ class SettingsWindow(Gtk.Window):
         dlg.destroy()
 
     def _on_tmpl_import(self, _btn):
-        dlg = Gtk.FileChooserDialog(title='Import Smart Templates from CSV', transient_for=self,
+        dlg = Gtk.FileChooserDialog(title=_('Import Smart Templates from CSV'), transient_for=self,
                                     action=Gtk.FileChooserAction.OPEN)
-        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Import', Gtk.ResponseType.OK)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Select'), Gtk.ResponseType.OK)
         ff = Gtk.FileFilter(); ff.set_name('CSV files (*.csv)')
         ff.add_mime_type('text/csv'); ff.add_pattern('*.csv'); dlg.add_filter(ff)
         if dlg.run() == Gtk.ResponseType.OK:
@@ -1643,7 +1647,6 @@ class SettingsWindow(Gtk.Window):
 
 def main():
     if not _acquire_single_instance():
-        # Already running — try to bring to front via wmctrl, then exit.
         subprocess.run(['wmctrl', '-a', 'FarolKey Settings'], capture_output=True)
         sys.exit(0)
 

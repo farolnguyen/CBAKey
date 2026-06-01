@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(FarolKey VERSION 0.1.4 LANGUAGES CXX)
+project(FarolKey VERSION 0.1.5 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -246,6 +246,37 @@ if(FAROLKEY_BUILD_FCITX5_PLUGIN)
         DESTINATION "bin"
         COMPONENT runtime
     )
+    # i18n shared helper (must be in the same dir as the GUI scripts)
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/farolkey_i18n.py"
+        DESTINATION "bin"
+        COMPONENT runtime
+    )
+
+    # M21: compile .po -> .mo and install locale catalogs
+    find_program(PYTHON3_EXECUTABLE python3)
+    if(PYTHON3_EXECUTABLE)
+        set(_COMPILE_PO "${CMAKE_CURRENT_SOURCE_DIR}/tools/compile_po.py")
+        foreach(LANG en vi)
+            set(_PO  "${CMAKE_CURRENT_SOURCE_DIR}/locales/${LANG}/LC_MESSAGES/farolkey.po")
+            set(_MO  "${CMAKE_CURRENT_BINARY_DIR}/locales/${LANG}/LC_MESSAGES/farolkey.mo")
+            file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/locales/${LANG}/LC_MESSAGES")
+            add_custom_command(
+                OUTPUT  "${_MO}"
+                COMMAND "${PYTHON3_EXECUTABLE}" "${_COMPILE_PO}" "${_PO}" "${_MO}"
+                DEPENDS "${_PO}" "${_COMPILE_PO}"
+                COMMENT "Compiling locale: ${LANG}"
+            )
+            list(APPEND _MO_FILES "${_MO}")
+            install(FILES "${_MO}"
+                DESTINATION "share/farolkey/locales/${LANG}/LC_MESSAGES"
+                COMPONENT runtime
+            )
+        endforeach()
+        add_custom_target(farolkey_locales ALL DEPENDS ${_MO_FILES})
+    else()
+        message(WARNING "python3 not found — skipping .mo compilation.")
+    endif()
 
     # Shared Python logging module + export-log tool
     install(FILES

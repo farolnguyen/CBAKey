@@ -1,3 +1,4 @@
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -36,6 +37,64 @@
 #include "farolkey/core/types.h"
 
 namespace {
+
+// ── UI language strings (M21.5) ───────────────────────────────────────────────
+
+struct UIStrings {
+    const char* modeVi;           // "VI" short
+    const char* modeEn;           // "EN" short
+    const char* modeViLong;       // long text for VI mode
+    const char* modeEnLong;       // long text for EN mode
+    const char* dictShort;
+    const char* dictLong;
+    const char* clipboardShort;
+    const char* clipboardLong;
+    const char* underlineShort;
+    const char* settingsShort;
+    const char* settingsLong;
+    const char* methodTelex;      // "Input Method: Telex"
+    const char* methodVni;        // "Input Method: VNI"
+    const char* screenshotLong;
+};
+
+static constexpr UIStrings kStringsEn {
+    "VI", "EN",
+    "Vietnamese (FarolKey)", "English (FarolKey)",
+    "Dictionary Manager", "Open Dictionary / Abbreviation Manager",
+    "Clipboard History (Ctrl + Win + V)", "Show Clipboard History (farolkey-clipboard)",
+    "Underline while composing",
+    "Settings (v" FAROLKEY_VERSION ")", "FarolKey Settings (v" FAROLKEY_VERSION ")",
+    "Input Method: Telex", "Input Method: VNI",
+    "Take a screenshot with FarolKey",
+};
+
+static constexpr UIStrings kStringsVi {
+    "VI", "EN",
+    "Tiếng Việt (FarolKey)", "Tiếng Anh (FarolKey)",
+    "Quản lý từ điển", "Mở quản lý từ điển / từ viết tắt",
+    "Lịch sử Clipboard (Ctrl + Win + V)", "Hiển thị lịch sử clipboard",
+    "Gạch chân khi gõ",
+    "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
+    "Phương thức: Telex", "Phương thức: VNI",
+    "Chụp màn hình với FarolKey",
+};
+
+// Read language= from farolkey.conf. Returns "en" as fallback.
+static std::string readUiLanguage() {
+    const char* xdgCfg = getenv("XDG_CONFIG_HOME");
+    std::string cfgPath = xdgCfg
+        ? (std::string(xdgCfg) + "/farolkey/farolkey.conf")
+        : (std::string(getenv("HOME")) + "/.config/farolkey/farolkey.conf");
+    std::ifstream f(cfgPath);
+    for (std::string line; std::getline(f, line); ) {
+        if (line.rfind("language=", 0) == 0) {
+            std::string lang = line.substr(9);
+            if (!lang.empty() && lang.back() == '\r') lang.pop_back();
+            return lang;
+        }
+    }
+    return "en";
+}
 
 // ── Dynamic SVG mode icons ────────────────────────────────────────────────────
 //
@@ -177,21 +236,67 @@ void pushPreedit(fcitx::InputContext* ic,
 // Returns true if the input context belongs to a terminal emulator.
 // Checks CapabilityFlag::Terminal first; falls back to program name because many
 // terminal emulators (GNOME Terminal, Konsole, kitty, etc.) don't set the flag.
+// Program name matching is case-insensitive to handle Wayland app-IDs (e.g.
+// "org.gnome.Terminal") which use different capitalisation from X11 WM_CLASS names.
 static bool isTerminalContext(fcitx::InputContext* ic) {
     if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal))
         return true;
     const std::string& prog = ic->program();
+    if (prog.empty()) return false;
+
+    // Lowercase copy so matching works for both X11 ("gnome-terminal-server") and
+    // Wayland app-IDs ("org.gnome.Terminal", "org.kde.Konsole", …).
+    std::string lower(prog.size(), '\0');
+    for (std::size_t i = 0; i < prog.size(); ++i)
+        lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(prog[i])));
+
     static constexpr std::array kTerminals{
-        std::string_view{"gnome-terminal"}, std::string_view{"konsole"},
-        std::string_view{"xterm"},          std::string_view{"xfce4-terminal"},
-        std::string_view{"tilix"},          std::string_view{"terminator"},
-        std::string_view{"kitty"},          std::string_view{"alacritty"},
-        std::string_view{"wezterm"},        std::string_view{"foot"},
-        std::string_view{"urxvt"},          std::string_view{"rxvt"},
+        // X11 WM_CLASS / process names
+        std::string_view{"gnome-terminal"},   // gnome-terminal, gnome-terminal-server
+        std::string_view{"konsole"},
+        std::string_view{"xterm"},
+        std::string_view{"xfce4-terminal"},
+        std::string_view{"tilix"},
+        std::string_view{"terminator"},
+        std::string_view{"kitty"},
+        std::string_view{"alacritty"},
+        std::string_view{"wezterm"},
+        std::string_view{"foot"},
+        std::string_view{"urxvt"},
+        std::string_view{"rxvt"},
+        std::string_view{"ghostty"},
+        std::string_view{"lxterminal"},
+        std::string_view{"mate-terminal"},
+        std::string_view{"qterminal"},
+        // Wayland app-ID fragments (dots, lowercase after tolower())
+        std::string_view{"gnome.terminal"},      // org.gnome.Terminal
+        std::string_view{"kde.konsole"},         // org.kde.konsole
+        std::string_view{"elementary.terminal"}, // io.elementary.Terminal
+        std::string_view{"mitchellh.ghostty"},   // com.mitchellh.ghostty
     };
     for (auto t : kTerminals)
-        if (prog.find(t) != std::string::npos) return true;
+        if (lower.find(t) != std::string::npos) return true;
+
     return false;
+}
+
+// Returns true if the IC belongs to a known Electron-based code editor (VSCode, etc.).
+// The editor and its embedded terminal (xterm.js) share the same process name.
+// Use this together with ic->surroundingText().isValid() at keyEvent time:
+//   editor IC  → Monaco sends surroundingText updates → isValid() becomes true
+//   terminal IC → xterm.js never sends surroundingText  → isValid() stays false
+static bool isElectronEditorApp(fcitx::InputContext* ic) {
+    const std::string& prog = ic->program();
+    if (prog.empty()) return false;
+    std::string lower(prog.size(), '\0');
+    for (std::size_t i = 0; i < prog.size(); ++i)
+        lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(prog[i])));
+    static constexpr std::array kEditorSubstr{
+        std::string_view{"vscode"}, std::string_view{"code-oss"}, std::string_view{"codium"},
+    };
+    for (auto t : kEditorSubstr)
+        if (lower.find(t) != std::string::npos) return true;
+    return lower == "code" || lower == "code-insiders";
 }
 
 // Used only in activate() where surroundingText is fresh (app just sent it on focus-in).
@@ -199,6 +304,12 @@ static bool isTerminalContext(fcitx::InputContext* ic) {
 static bool shouldAutoCapitalizeOnActivate(fcitx::InputContext* ic) {
     if (isTerminalContext(ic))
         return false;  // never auto-capitalize in terminals
+    // Electron editors (VSCode, etc.): editor and terminal ICs are indistinguishable —
+    // both report identical capability flags (preedit=1, surround=0, terminal=0).
+    // Suppress auto-capitalize for the entire app to avoid false capitalizations in
+    // the embedded terminal. Known limitation: editor also loses auto-capitalize.
+    if (isElectronEditorApp(ic))
+        return false;
     const auto& st = ic->surroundingText();
     if (!st.isValid()) return true;  // empty/new field → capitalize
 
@@ -244,7 +355,8 @@ public:
     explicit FarolKeyFcitx5Engine(fcitx::Instance* instance)
         : instance_(instance)
         , interceptor_(
-              std::make_unique<farolkey::adapter::fcitx5::X11ClickInterceptor>(instance)) {
+              std::make_unique<farolkey::adapter::fcitx5::X11ClickInterceptor>(instance))
+        , uiStrings_(readUiLanguage() == "vi" ? kStringsVi : kStringsEn) {
         auto [vi, en] = initModeIcons();
         viIconPath_ = std::move(vi);
         enIconPath_ = std::move(en);
@@ -368,10 +480,13 @@ public:
 
         // Enter/Return maps to KeyAux::Enter (not ev.key='\n'), so it bypasses the block below.
         // When preedit is empty, Enter is forwarded to the app as a newline — set flag here.
+        // Electron editors are excluded: editor/terminal ICs are indistinguishable,
+        // so auto-capitalize is suppressed for the whole app.
         if (config_.autoCapitalize.value() &&
             ev.aux == farolkey::core::KeyAux::Enter &&
             br.preedit().empty() && !ev.ctrl && !ev.alt &&
-            !isTerminalContext(ic)) {
+            !isTerminalContext(ic) &&
+            !isElectronEditorApp(ic)) {
             capitalizeNext_[ic] = true;
         }
 
@@ -383,7 +498,8 @@ public:
                     const bool isPwd =
                         ic->capabilityFlags().test(fcitx::CapabilityFlag::Password) ||
                         ic->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive) ||
-                        isTerminalContext(ic);
+                        isTerminalContext(ic) ||
+                        isElectronEditorApp(ic);  // editor/terminal indistinguishable → suppress all
                     if (!isPwd)
                         ev.key = static_cast<char>(
                             std::toupper(static_cast<unsigned char>(ev.key)));
@@ -608,8 +724,8 @@ private:
         auto& ui = instance_->userInterfaceManager();
 
         // VI / EN mode toggle shown in systray status bar.
-        modeAction_.setShortText("VI");
-        modeAction_.setLongText("Vietnamese (FarolKey)");
+        modeAction_.setShortText(uiStrings_.modeVi);
+        modeAction_.setLongText(uiStrings_.modeViLong);
         modeAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
             globalMode_ = (globalMode_ == farolkey::core::InputMode::Vietnamese)
                               ? farolkey::core::InputMode::English
@@ -648,8 +764,8 @@ private:
         ui.registerAction("farolkey-method-menu", &methodMenuAction_);
 
         // Dictionary Manager — launches farolkey-dict-gui as a detached process.
-        dictAction_.setShortText("Dictionary Manager");
-        dictAction_.setLongText("Open Dictionary / Abbreviation Manager");
+        dictAction_.setShortText(uiStrings_.dictShort);
+        dictAction_.setLongText(uiStrings_.dictLong);
         dictAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
             if (const pid_t pid = fork(); pid == 0) {
@@ -660,8 +776,8 @@ private:
         ui.registerAction("farolkey-dict", &dictAction_);
 
         // Clipboard History — launches farolkey-clipboard --show as a detached process.
-        clipboardAction_.setShortText("Clipboard History (Ctrl + Win + V)");
-        clipboardAction_.setLongText("Show Clipboard History (farolkey-clipboard)");
+        clipboardAction_.setShortText(uiStrings_.clipboardShort);
+        clipboardAction_.setLongText(uiStrings_.clipboardLong);
         clipboardAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
             if (const pid_t pid = fork(); pid == 0) {
@@ -689,7 +805,7 @@ private:
         ui.registerAction("farolkey-screenshot", &screenshotAction_);
 
         // Preedit underline — config only, NOT shown in systray menu.
-        underlineAction_.setShortText("Underline while composing");
+        underlineAction_.setShortText(uiStrings_.underlineShort);
         underlineAction_.setChecked(config_.showPreeditUnderline.value());
         underlineAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
@@ -702,8 +818,8 @@ private:
         // underlineAction_ is registered but NOT added to statusArea (config-only).
 
         // Version label — doubles as "Settings" launcher in the systray.
-        versionAction_.setShortText("Settings (v" FAROLKEY_VERSION ")");
-        versionAction_.setLongText("FarolKey Settings (v" FAROLKEY_VERSION ")");
+        versionAction_.setShortText(uiStrings_.settingsShort);
+        versionAction_.setLongText(uiStrings_.settingsLong);
         versionAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext*) {
             if (const pid_t pid = fork(); pid == 0) {
                 execlp("farolkey-settings", "farolkey-settings", nullptr);
@@ -773,7 +889,7 @@ private:
     void refreshMethodMenuLabel() {
         const bool isTelex =
             config_.method.value() == farolkey::adapter::fcitx5::FarolKeyMethod::Telex;
-        methodMenuAction_.setShortText(isTelex ? "Input Method: Telex" : "Input Method: VNI");
+        methodMenuAction_.setShortText(isTelex ? uiStrings_.methodTelex : uiStrings_.methodVni);
     }
 
     // Read hotkey from ~/.config/farolkey/screenshot.conf and update action label.
@@ -802,7 +918,7 @@ private:
             }
         }
         screenshotAction_.setShortText("Screenshot (" + hotkey + ")");
-        screenshotAction_.setLongText("Take a screenshot with FarolKey");
+        screenshotAction_.setLongText(uiStrings_.screenshotLong);
     }
 
     void refreshActionStates() {
@@ -831,8 +947,8 @@ private:
 
     void refreshModeAction(fcitx::InputContext* ic) {
         const bool vi = (globalMode_ == farolkey::core::InputMode::Vietnamese);
-        modeAction_.setShortText(vi ? "VI" : "EN");
-        modeAction_.setLongText(vi ? "Vietnamese (FarolKey)" : "English (FarolKey)");
+        modeAction_.setShortText(vi ? uiStrings_.modeVi  : uiStrings_.modeEn);
+        modeAction_.setLongText(vi  ? uiStrings_.modeViLong : uiStrings_.modeEnLong);
         ic->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);
     }
 
@@ -958,6 +1074,9 @@ private:
     // Mode icon paths (SVG files written to ~/.cache/farolkey/ at startup)
     std::string viIconPath_;
     std::string enIconPath_;
+
+    // UI language strings — selected once at startup from farolkey.conf language=
+    const UIStrings& uiStrings_;
 
     // Actions
     fcitx::SimpleAction modeAction_;

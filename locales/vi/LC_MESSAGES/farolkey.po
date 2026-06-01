@@ -1,0 +1,379 @@
+# FarolKey UI strings — Tiếng Việt
+# Copyright (C) 2026 FarolKey
+msgid ""
+msgstr ""
+"Project-Id-Version: FarolKey 0.1.5\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: vi\n"
+
+# ── Window titles ──────────────────────────────────────────────────────────────
+msgid "FarolKey — Dictionary & Smart Templates"
+msgstr "FarolKey — Từ điển & Mẫu thông minh"
+
+# ── Tab labels ─────────────────────────────────────────────────────────────────
+msgid "General"
+msgstr "Cài đặt chung"
+
+msgid "Dictionary & Templates"
+msgstr "Từ điển & Mẫu"
+
+msgid "Clipboard History"
+msgstr "Lịch sử Clipboard"
+
+msgid "Screenshot"
+msgstr "Chụp màn hình"
+
+msgid "About"
+msgstr "Giới thiệu"
+
+msgid "📖 Abbreviations"
+msgstr "📖 Từ viết tắt"
+
+msgid "⚡ Smart Templates"
+msgstr "⚡ Mẫu thông minh"
+
+# ── General tab — sections ─────────────────────────────────────────────────────
+msgid "Interface"
+msgstr "Giao diện"
+
+msgid "Language"
+msgstr "Ngôn ngữ"
+
+msgid "Restart required after changing language."
+msgstr "Cần khởi động lại FarolKey Settings để áp dụng ngôn ngữ mới."
+
+msgid "Input"
+msgstr "Nhập liệu"
+
+msgid "Input method"
+msgstr "Phương thức gõ"
+
+msgid "EN/VI toggle key"
+msgstr "Phím chuyển EN/VI"
+
+msgid "Enter key name in Fcitx5 format. e.g. Control+Alt+z"
+msgstr "Nhập tên phím theo định dạng Fcitx5. VD: Control+Alt+z"
+
+msgid "Display"
+msgstr "Hiển thị"
+
+msgid "Preedit mode"
+msgstr "Chế độ preedit"
+
+msgid "⚠ Chrome, Edge, Electron always show underline in Auto/Client mode. Choose Panel to disable it completely."
+msgstr "⚠ Chrome, Edge, Electron luôn hiển thị gạch chân ở chế độ Auto/Client. Chọn Panel để tắt hoàn toàn."
+
+msgid "Show underline while composing"
+msgstr "Hiển thị gạch chân khi gõ"
+
+msgid "Behavior"
+msgstr "Hành vi"
+
+msgid "Auto-capitalize sentences (not fully optimized)"
+msgstr "Tự động viết hoa đầu câu (chưa tối ưu)"
+
+msgid "Allow editing committed syllable"
+msgstr "Cho phép sửa âm tiết đã gõ xong"
+
+msgid "Restore defaults"
+msgstr "Khôi phục mặc định"
+
+msgid "Save & Apply"
+msgstr "Lưu & Áp dụng"
+
+msgid "Settings saved and applied."
+msgstr "Đã lưu và áp dụng cài đặt."
+
+# ── Reset dialog ───────────────────────────────────────────────────────────────
+msgid "The following settings will be reset to their defaults:"
+msgstr "Các cài đặt sau sẽ được đặt lại về mặc định:"
+
+msgid "All settings are already at their defaults."
+msgstr "Tất cả cài đặt đã ở giá trị mặc định."
+
+msgid "Input method"
+msgstr "Phương thức gõ"
+
+msgid "EN/VI toggle key"
+msgstr "Phím chuyển EN/VI"
+
+msgid "Preedit mode"
+msgstr "Chế độ preedit"
+
+msgid "Show underline while composing"
+msgstr "Hiển thị gạch chân khi gõ"
+
+msgid "Auto-capitalize sentences"
+msgstr "Tự động viết hoa đầu câu"
+
+msgid "Allow editing committed syllable"
+msgstr "Cho phép sửa âm tiết đã gõ xong"
+
+msgid "On"
+msgstr "Bật"
+
+msgid "Off"
+msgstr "Tắt"
+
+msgid "Cancel"
+msgstr "Huỷ"
+
+msgid "Restore"
+msgstr "Khôi phục"
+
+# ── Dictionary & Templates tab ─────────────────────────────────────────────────
+msgid "Enable user dictionary"
+msgstr "Bật từ điển người dùng"
+
+msgid "Search trigger or expansion…"
+msgstr "Tìm kiếm trigger hoặc expansion…"
+
+msgid "Trigger"
+msgstr "Trigger"
+
+msgid "Expansion"
+msgstr "Nội dung thay thế"
+
+msgid "Mode"
+msgstr "Chế độ"
+
+msgid "+ Add"
+msgstr "+ Thêm"
+
+msgid "✏ Edit"
+msgstr "✏ Sửa"
+
+msgid "🗑 Delete"
+msgstr "🗑 Xoá"
+
+msgid "⬆ Import CSV"
+msgstr "⬆ Nhập CSV"
+
+msgid "⬇ Export CSV"
+msgstr "⬇ Xuất CSV"
+
+msgid "Add Entry"
+msgstr "Thêm mục"
+
+msgid "Edit Entry"
+msgstr "Sửa mục"
+
+msgid "Trigger:"
+msgstr "Trigger:"
+
+msgid "Expansion:"
+msgstr "Nội dung thay thế:"
+
+msgid "Mode:"
+msgstr "Chế độ:"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Trigger and Expansion cannot be empty."
+msgstr "Trigger và Nội dung không được để trống."
+
+msgid "Enable Smart Templates"
+msgstr "Bật Mẫu thông minh"
+
+msgid "Quick test:"
+msgstr "Thử nhanh:"
+
+msgid "Pattern"
+msgstr "Pattern"
+
+msgid "Expansion (Jinja2)"
+msgstr "Nội dung (Jinja2)"
+
+msgid "Search pattern or expansion…"
+msgstr "Tìm kiếm pattern hoặc expansion…"
+
+msgid "Add Smart Template"
+msgstr "Thêm Mẫu thông minh"
+
+msgid "Edit Smart Template"
+msgstr "Sửa Mẫu thông minh"
+
+msgid "Pattern:"
+msgstr "Pattern:"
+
+msgid "Expansion (Jinja2):"
+msgstr "Nội dung (Jinja2):"
+
+msgid "Test input:"
+msgstr "Thử nhập:"
+
+msgid "▶ Preview"
+msgstr "▶ Xem trước"
+
+msgid "Save"
+msgstr "Lưu"
+
+msgid "Pattern and Expansion cannot be empty."
+msgstr "Pattern và Nội dung không được để trống."
+
+msgid "Export Dictionary as CSV"
+msgstr "Xuất từ điển dạng CSV"
+
+msgid "Import Dictionary from CSV"
+msgstr "Nhập từ điển từ CSV"
+
+msgid "Export Smart Templates as CSV"
+msgstr "Xuất Mẫu thông minh dạng CSV"
+
+msgid "Import Smart Templates from CSV"
+msgstr "Nhập Mẫu thông minh từ CSV"
+
+msgid "Close"
+msgstr "Đóng"
+
+msgid "Select"
+msgstr "Chọn"
+
+# ── Clipboard tab ──────────────────────────────────────────────────────────────
+msgid "Popup display"
+msgstr "Hiển thị popup"
+
+msgid "🖱  Near cursor (default)"
+msgstr "🖱  Gần con trỏ (mặc định)"
+
+msgid "📐  Bottom-right corner of screen"
+msgstr "📐  Góc phải dưới màn hình"
+
+msgid "Close popup on click outside"
+msgstr "Đóng popup khi click ra ngoài"
+
+msgid "System tools"
+msgstr "Công cụ hệ thống"
+
+msgid "Clipboard write (Wayland)"
+msgstr "Ghi clipboard (Wayland)"
+
+msgid "Clipboard write (X11)"
+msgstr "Ghi clipboard (X11)"
+
+msgid "Auto-paste Ctrl+V (X11)"
+msgstr "Tự động dán Ctrl+V (X11)"
+
+msgid "Auto-paste Ctrl+V (Wayland)"
+msgstr "Tự động dán Ctrl+V (Wayland)"
+
+msgid "Clipboard History settings saved.\nChanges will take effect on next popup open."
+msgstr "Đã lưu cài đặt Lịch sử Clipboard.\nThay đổi sẽ có hiệu lực khi mở popup tiếp theo."
+
+# ── Screenshot tab ─────────────────────────────────────────────────────────────
+msgid "Hotkeys"
+msgstr "Phím tắt"
+
+msgid "Screenshot hotkey"
+msgstr "Phím tắt chụp màn hình"
+
+msgid "Use + to combine keys. Valid modifiers: super, ctrl, alt, shift"
+msgstr "Dùng + để kết hợp phím. Modifier hợp lệ: super, ctrl, alt, shift"
+
+msgid "💡 super = Windows key (⊞)"
+msgstr "💡 super = phím Windows (⊞)"
+
+msgid "Capture"
+msgstr "Chụp ảnh"
+
+msgid "All screens (default)"
+msgstr "Tất cả màn hình (mặc định)"
+
+msgid "Screen containing cursor"
+msgstr "Màn hình chứa con trỏ"
+
+msgid "All screens: drag to select any region across all monitors"
+msgstr "Tất cả màn hình: kéo để chọn vùng bất kỳ trên tất cả màn hình"
+
+msgid "Capture immediately on mouse release"
+msgstr "Chụp ngay khi thả chuột"
+
+msgid "If enabled: screenshot taken immediately on mouse release — no preview / region adjustment"
+msgstr "Nếu bật: chụp ảnh ngay khi thả chuột — không hiện preview / điều chỉnh vùng"
+
+msgid "Storage"
+msgstr "Lưu trữ"
+
+msgid "Save folder"
+msgstr "Thư mục lưu"
+
+msgid "Ask before saving"
+msgstr "Hỏi trước khi lưu"
+
+msgid "Auto-save (no prompt)"
+msgstr "Tự động lưu (không hỏi)"
+
+msgid "Auto-save skips the dialog and saves directly to the folder above"
+msgstr "Tự động lưu bỏ qua hộp thoại và lưu trực tiếp vào thư mục trên"
+
+msgid "Capture Wayland"
+msgstr "Chụp Wayland"
+
+msgid "Region Wayland"
+msgstr "Vùng Wayland"
+
+msgid "Capture X11"
+msgstr "Chụp X11"
+
+msgid "Clipboard Wayland"
+msgstr "Clipboard Wayland"
+
+msgid "Clipboard X11"
+msgstr "Clipboard X11"
+
+msgid "Notification"
+msgstr "Thông báo"
+
+msgid "Test capture"
+msgstr "Chụp thử"
+
+msgid "Screenshot settings saved."
+msgstr "Đã lưu cài đặt chụp màn hình."
+
+msgid "Select screenshot folder"
+msgstr "Chọn thư mục lưu ảnh"
+
+# ── About tab ──────────────────────────────────────────────────────────────────
+msgid "Vietnamese Input Method for Linux (Fcitx5)"
+msgstr "Bộ gõ tiếng Việt cho Linux (Fcitx5)"
+
+msgid "Version:"
+msgstr "Phiên bản:"
+
+msgid "Service status"
+msgstr "Trạng thái dịch vụ"
+
+msgid "fcitx5 daemon"
+msgstr "fcitx5 daemon"
+
+msgid "FarolKey plugin"
+msgstr "Plugin FarolKey"
+
+msgid "Clipboard daemon"
+msgstr "Daemon Clipboard"
+
+msgid "Screenshot daemon"
+msgstr "Daemon Chụp màn hình"
+
+msgid "🔄 Refresh status"
+msgstr "🔄 Làm mới trạng thái"
+
+msgid "Support"
+msgstr "Hỗ trợ"
+
+msgid "📦 Export bug report log"
+msgstr "📦 Xuất log báo lỗi"
+
+msgid "🐛 Open GitHub Issues"
+msgstr "🐛 Mở GitHub Issues"
+
+msgid "Restart"
+msgstr "Khởi động lại"
+
+msgid "● Running"
+msgstr "● Đang chạy"
+
+msgid "✕ Not running"
+msgstr "✕ Không chạy"
