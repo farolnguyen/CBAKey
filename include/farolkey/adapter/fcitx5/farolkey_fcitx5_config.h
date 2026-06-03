@@ -10,7 +10,7 @@ namespace farolkey::adapter::fcitx5 {
 
 // Input method enum — visible in fcitx5-configtool as a dropdown.
 // FCITX_CONFIG_ENUM defines the enum class AND auto-generates string names.
-FCITX_CONFIG_ENUM(FarolKeyMethod, Telex, VNI, VIQR, ViqrStar, SimpleTelex)
+FCITX_CONFIG_ENUM(FarolKeyMethod, Telex, VNI, VIQR, ViqrStar, SimpleTelex, SimpleTelex2)
 
 // Preedit display mode enum.
 FCITX_CONFIG_ENUM(FarolKeyPreeditMode, Auto, Client, Panel)

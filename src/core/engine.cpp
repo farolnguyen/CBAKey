@@ -792,10 +792,11 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     const std::string bufferBefore = preeditBuffer_;
 
     std::u32string decoded = decodeUtf8Normalized(preeditBuffer_);
-    if ((config_.method == farolkey::core::InputMethod::Telex    && key == 'z')  ||
-        (config_.method == farolkey::core::InputMethod::Vni     && key == '0')  ||
-        (config_.method == farolkey::core::InputMethod::Viqr    && key == '\\') ||
-        (config_.method == farolkey::core::InputMethod::ViqrStar && key == '\\')) {
+    if ((config_.method == farolkey::core::InputMethod::Telex       && key == 'z')  ||
+        (config_.method == farolkey::core::InputMethod::SimpleTelex2 && key == 'z')  ||
+        (config_.method == farolkey::core::InputMethod::Vni          && key == '0')  ||
+        (config_.method == farolkey::core::InputMethod::Viqr         && key == '\\') ||
+        (config_.method == farolkey::core::InputMethod::ViqrStar     && key == '\\')) {
         clearRepeatTransformState();
         const bool removed =
             (config_.method == farolkey::core::InputMethod::Vni)
@@ -813,11 +814,12 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     }
 
     if (repeatTransformState_.active && repeatTransformState_.key == key &&
-        ((config_.method == farolkey::core::InputMethod::Telex      && isTelexRepeatableKey(key))      ||
-         (config_.method == farolkey::core::InputMethod::Vni        && isVniRepeatableKey(key))        ||
-         (config_.method == farolkey::core::InputMethod::Viqr       && isViqrRepeatableKey(key))       ||
-         (config_.method == farolkey::core::InputMethod::ViqrStar   && isViqrStarRepeatableKey(key))   ||
-         (config_.method == farolkey::core::InputMethod::SimpleTelex && isSimpleTelexRepeatableKey(key)))) {
+        ((config_.method == farolkey::core::InputMethod::Telex       && isTelexRepeatableKey(key))       ||
+         (config_.method == farolkey::core::InputMethod::Vni         && isVniRepeatableKey(key))         ||
+         (config_.method == farolkey::core::InputMethod::Viqr        && isViqrRepeatableKey(key))        ||
+         (config_.method == farolkey::core::InputMethod::ViqrStar    && isViqrStarRepeatableKey(key))    ||
+         (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key)) ||
+         (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key)))) {
         std::u32string reverted = decodeUtf8Normalized(repeatTransformState_.buffer_before);
         reverted.push_back(static_cast<unsigned char>(raw));
         if (config_.method == farolkey::core::InputMethod::Telex) {
@@ -861,23 +863,37 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         if (key == 's' || key == 'f' || key == 'r' || key == 'x' || key == 'j') {
             transformed = applyTone(decoded, key);
         }
+    } else if (config_.method == farolkey::core::InputMethod::SimpleTelex2) {
+        if (key == 's' || key == 'f' || key == 'r' || key == 'x' || key == 'j') {
+            transformed = applyTone(decoded, key);
+        } else {
+            transformed = vi_syllable::applyTelexTransform(decoded, key);
+            // vne_telex_w fallback: 'w' with no hookable vowel → standalone ư.
+            // This is the sole difference from regular Telex.
+            if (!transformed && key == 'w') {
+                decoded.push_back(U'ư');
+                transformed = true;
+            }
+        }
     }
 
     if (transformed) {
         // After any transform, normalize so the preedit reflects the final shape.
         // Telex: converts intermediate "đuợ" → "đượ" (u→ư when nucleus starts with uơ).
         // VNI:   converts 'uo'→'uơ' after '7' transform (only when coda is present).
-        if (config_.method == farolkey::core::InputMethod::Telex) {
+        if (config_.method == farolkey::core::InputMethod::Telex ||
+            config_.method == farolkey::core::InputMethod::SimpleTelex2) {
             vi_syllable::normalizeTelexBuffer(decoded);
         } else if (config_.method == farolkey::core::InputMethod::Vni) {
             vi_syllable::normalizeVniUoTransform(decoded);
         }
         preeditBuffer_ = encodeUtf8(decoded);
-        if ((config_.method == farolkey::core::InputMethod::Telex       && isTelexRepeatableKey(key))       ||
-            (config_.method == farolkey::core::InputMethod::Vni         && isVniRepeatableKey(key))         ||
-            (config_.method == farolkey::core::InputMethod::Viqr        && isViqrRepeatableKey(key))        ||
-            (config_.method == farolkey::core::InputMethod::ViqrStar    && isViqrStarRepeatableKey(key))    ||
-            (config_.method == farolkey::core::InputMethod::SimpleTelex && isSimpleTelexRepeatableKey(key))) {
+        if ((config_.method == farolkey::core::InputMethod::Telex        && isTelexRepeatableKey(key))        ||
+            (config_.method == farolkey::core::InputMethod::Vni          && isVniRepeatableKey(key))          ||
+            (config_.method == farolkey::core::InputMethod::Viqr         && isViqrRepeatableKey(key))         ||
+            (config_.method == farolkey::core::InputMethod::ViqrStar     && isViqrStarRepeatableKey(key))     ||
+            (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key))  ||
+            (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))) {
             repeatTransformState_.active = true;
             repeatTransformState_.key = key;
             repeatTransformState_.buffer_before = bufferBefore;
@@ -894,13 +910,13 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     clearRepeatTransformState();
     clearPendingLiteralEscape();
     decoded.push_back(static_cast<unsigned char>(raw));
-    if (config_.method == farolkey::core::InputMethod::Telex) {
+    if (config_.method == farolkey::core::InputMethod::Telex ||
+        config_.method == farolkey::core::InputMethod::SimpleTelex2) {
         vi_syllable::normalizeTelexBuffer(decoded);
     } else if (config_.method == farolkey::core::InputMethod::Vni) {
         // fromPushPath=true: also normalizes "uơi"→"ươi" (e.g. "người" from "nguo7i").
         vi_syllable::normalizeVniUoTransform(decoded, /*fromPushPath=*/true);
     }
-    // Viqr: no method-specific push normalization yet (M14.3).
     preeditBuffer_ = encodeUtf8(decoded);
     applyPreeditNormalize(decoded);
     if (const auto split = maybeAutoCommitStablePrefix(decoded)) {
