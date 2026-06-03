@@ -73,6 +73,7 @@ bool applyVniTransform(std::u32string& buffer, char key);
 // Tone keys (' ` ? ~ .) are handled separately in engine.cpp (applyToneViqr).
 // Returns false if no transform applied.
 bool applyViqrTransform(std::u32string& buffer, char key);
+bool applyViqrStarTransform(std::u32string& buffer, char key);
 
 // M17.2: Fixes tone placement and diacritics in the oaGlide nucleus pattern ("oa*").
 // The 'o' in "oa*" is always a labial semivowel — tone is moved to the 'a'/'ă' side,
