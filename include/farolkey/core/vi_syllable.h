@@ -69,6 +69,11 @@ bool removeVniDiacritics(std::u32string& buffer);
 // Returns false so callers can fall back to legacy heuristics.
 bool applyVniTransform(std::u32string& buffer, char key);
 
+// Applies VIQR diacritic transform: ^ ( + → â/ê/ô / ă / ơ/ư, and dd → đ.
+// Tone keys (' ` ? ~ .) are handled separately in engine.cpp (applyToneViqr).
+// Returns false if no transform applied.
+bool applyViqrTransform(std::u32string& buffer, char key);
+
 // M17.2: Fixes tone placement and diacritics in the oaGlide nucleus pattern ("oa*").
 // The 'o' in "oa*" is always a labial semivowel — tone is moved to the 'a'/'ă' side,
 // and any horn/circumflex diacritic on the glide 'o' is stripped. Conservative: only

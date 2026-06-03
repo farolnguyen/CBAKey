@@ -180,6 +180,8 @@ CorpusOutcome runCorpusCase(const nlohmann::json& c, CorpusRunStats* stats) {
     const std::string cfgName = c.value("config", "default");
     if (cfgName == "vni") {
         cfg.method = InputMethod::Vni;
+    } else if (cfgName == "viqr") {
+        cfg.method = InputMethod::Viqr;
     } else if (cfgName == "default" || cfgName == "telex") {
         // default Telex
     } else {

@@ -54,6 +54,7 @@ struct UIStrings {
     const char* settingsLong;
     const char* methodTelex;      // "Input Method: Telex"
     const char* methodVni;        // "Input Method: VNI"
+    const char* methodViqr;       // "Input Method: VIQR"
     const char* screenshotLong;
 };
 
@@ -64,7 +65,7 @@ static constexpr UIStrings kStringsEn {
     "Clipboard History (Ctrl + Win + V)", "Show Clipboard History (farolkey-clipboard)",
     "Underline while composing",
     "Settings (v" FAROLKEY_VERSION ")", "FarolKey Settings (v" FAROLKEY_VERSION ")",
-    "Input Method: Telex", "Input Method: VNI",
+    "Input Method: Telex", "Input Method: VNI", "Input Method: VIQR",
     "Take a screenshot with FarolKey",
 };
 
@@ -75,7 +76,7 @@ static constexpr UIStrings kStringsVi {
     "Lịch sử Clipboard (Ctrl + Win + V)", "Hiển thị lịch sử clipboard",
     "Gạch chân khi gõ",
     "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
-    "Phương thức: Telex", "Phương thức: VNI",
+    "Phương thức: Telex", "Phương thức: VNI", "Phương thức: VIQR",
     "Chụp màn hình với FarolKey",
 };
 
@@ -192,9 +193,11 @@ std::string defaultDictPath() {
 farolkey::config::RuntimeConfig toRuntimeConfig(
     const farolkey::adapter::fcitx5::FarolKeyConfig& cfg, bool enableUserDict) {
     farolkey::config::RuntimeConfig rc = farolkey::config::defaultConfig();
-    rc.method = (cfg.method.value() == farolkey::adapter::fcitx5::FarolKeyMethod::Telex)
-                    ? farolkey::core::InputMethod::Telex
-                    : farolkey::core::InputMethod::Vni;
+    switch (cfg.method.value()) {
+        case farolkey::adapter::fcitx5::FarolKeyMethod::Telex: rc.method = farolkey::core::InputMethod::Telex; break;
+        case farolkey::adapter::fcitx5::FarolKeyMethod::VNI:   rc.method = farolkey::core::InputMethod::Vni;   break;
+        case farolkey::adapter::fcitx5::FarolKeyMethod::VIQR:  rc.method = farolkey::core::InputMethod::Viqr;  break;
+    }
     rc.enableUserDictionary   = enableUserDict;
     rc.fcitx5CommittedRewrite = cfg.committedRewrite.value();
     using farolkey::adapter::fcitx5::FarolKeyPreeditMode;
@@ -371,6 +374,7 @@ public:
         ui.unregisterAction(&methodMenuAction_);
         ui.unregisterAction(&telexAction_);
         ui.unregisterAction(&vniAction_);
+        ui.unregisterAction(&viqrAction_);
         ui.unregisterAction(&dictAction_);
         ui.unregisterAction(&clipboardAction_);
         ui.unregisterAction(&underlineAction_);
@@ -756,8 +760,18 @@ private:
         });
         ui.registerAction("farolkey-vni", &vniAction_);
 
+        viqrAction_.setShortText("VIQR");
+        viqrAction_.setChecked(config_.method.value() ==
+                               farolkey::adapter::fcitx5::FarolKeyMethod::VIQR);
+        viqrAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
+            FCITX_UNUSED(ic);
+            switchMethod(farolkey::adapter::fcitx5::FarolKeyMethod::VIQR);
+        });
+        ui.registerAction("farolkey-viqr", &viqrAction_);
+
         methodMenu_.addAction(&telexAction_);
         methodMenu_.addAction(&vniAction_);
+        methodMenu_.addAction(&viqrAction_);
         // Show active method in the parent action text so it's visible without opening menu.
         refreshMethodMenuLabel();
         methodMenuAction_.setMenu(&methodMenu_);
@@ -839,10 +853,12 @@ private:
             config_.load(raw);
         } else {
             const auto legacy = farolkey::config::loadConfigFile(defaultConfigPath());
-            *config_.method.mutableValue() =
-                (legacy.method == farolkey::core::InputMethod::Telex)
-                    ? farolkey::adapter::fcitx5::FarolKeyMethod::Telex
-                    : farolkey::adapter::fcitx5::FarolKeyMethod::VNI;
+            using M = farolkey::adapter::fcitx5::FarolKeyMethod;
+            switch (legacy.method) {
+                case farolkey::core::InputMethod::Telex: *config_.method.mutableValue() = M::Telex; break;
+                case farolkey::core::InputMethod::Vni:   *config_.method.mutableValue() = M::VNI;   break;
+                case farolkey::core::InputMethod::Viqr:  *config_.method.mutableValue() = M::VIQR;  break;
+            }
             *config_.committedRewrite.mutableValue() = legacy.fcitx5CommittedRewrite;
         }
         // enableUserDictionary is managed exclusively by Dictionary Manager, not
@@ -887,9 +903,12 @@ private:
 
     // Show active method in the parent menu label: "Input Method: Telex" or "Input Method: VNI".
     void refreshMethodMenuLabel() {
-        const bool isTelex =
-            config_.method.value() == farolkey::adapter::fcitx5::FarolKeyMethod::Telex;
-        methodMenuAction_.setShortText(isTelex ? uiStrings_.methodTelex : uiStrings_.methodVni);
+        using M = farolkey::adapter::fcitx5::FarolKeyMethod;
+        switch (config_.method.value()) {
+            case M::Telex: methodMenuAction_.setShortText(uiStrings_.methodTelex); break;
+            case M::VNI:   methodMenuAction_.setShortText(uiStrings_.methodVni);   break;
+            case M::VIQR:  methodMenuAction_.setShortText(uiStrings_.methodViqr);  break;
+        }
     }
 
     // Read hotkey from ~/.config/farolkey/screenshot.conf and update action label.
@@ -922,10 +941,11 @@ private:
     }
 
     void refreshActionStates() {
-        const bool isTelex =
-            config_.method.value() == farolkey::adapter::fcitx5::FarolKeyMethod::Telex;
-        telexAction_.setChecked(isTelex);
-        vniAction_.setChecked(!isTelex);
+        using M = farolkey::adapter::fcitx5::FarolKeyMethod;
+        const auto m = config_.method.value();
+        telexAction_.setChecked(m == M::Telex);
+        vniAction_.setChecked(m == M::VNI);
+        viqrAction_.setChecked(m == M::VIQR);
         underlineAction_.setChecked(config_.showPreeditUnderline.value());
         refreshMethodMenuLabel();
         refreshScreenshotLabel();   // pick up hotkey changes from screenshot.conf
@@ -1084,6 +1104,7 @@ private:
     fcitx::Menu         methodMenu_;
     fcitx::SimpleAction telexAction_;
     fcitx::SimpleAction vniAction_;
+    fcitx::SimpleAction viqrAction_;
     fcitx::SimpleAction dictAction_;
     fcitx::SimpleAction clipboardAction_;
     fcitx::SimpleAction screenshotAction_;

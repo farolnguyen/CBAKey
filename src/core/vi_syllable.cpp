@@ -1080,4 +1080,55 @@ bool normalizeSyllableTonePlacement(std::u32string& buffer, const SyllableSpan& 
     return changed;
 }
 
+// ── VIQR transform ───────────────────────────────────────────────────────────
+// Handles diacritic keys (^ ( +) and dd→đ.
+// Tone keys (' ` ? ~ .) are dispatched separately in engine.cpp (applyToneViqr).
+
+bool applyViqrTransform(std::u32string& buffer, char key) {
+    if (buffer.empty()) return false;
+    normalizeVietnameseNfc(buffer);
+
+    // dd → đ  (identical rule to Telex)
+    if (key == 'd') {
+        const char32_t back = buffer.back();
+        if (back == U'd' || back == U'D') {
+            buffer.back() = (back == U'D') ? U'Đ' : U'đ';
+            return true;
+        }
+        return false;
+    }
+
+    const auto span = findLastSyllable(buffer);
+    if (!span) return false;
+
+    // ^ → circumflex: a→â (set 2), e→ê (set 4), o→ô (set 7)
+    if (key == '^') {
+        if (const auto pos = rightmostNucleusCharWithBase(buffer, *span, U"a"))
+            return replaceWithSetPreserveTone(buffer, *pos, 2);
+        if (const auto pos = rightmostNucleusCharWithBase(buffer, *span, U"e"))
+            return replaceWithSetPreserveTone(buffer, *pos, 4);
+        if (const auto pos = rightmostNucleusCharWithBase(buffer, *span, U"o"))
+            return replaceWithSetPreserveTone(buffer, *pos, 7);
+        return false;
+    }
+
+    // ( → breve: a→ă (set 1)
+    if (key == '(') {
+        if (const auto pos = rightmostNucleusCharWithBase(buffer, *span, U"a"))
+            return replaceWithSetPreserveTone(buffer, *pos, 1);
+        return false;
+    }
+
+    // + → horn: o→ơ (set 8), u→ư (set 10)
+    if (key == '+') {
+        if (const auto pos = rightmostNucleusCharWithBase(buffer, *span, U"o"))
+            return replaceWithSetPreserveTone(buffer, *pos, 8);
+        if (const auto pos = rightmostNucleusCharWithBase(buffer, *span, U"u"))
+            return replaceWithSetPreserveTone(buffer, *pos, 10);
+        return false;
+    }
+
+    return false;
+}
+
 }  // namespace farolkey::core::vi_syllable

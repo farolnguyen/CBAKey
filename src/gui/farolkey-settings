@@ -622,9 +622,11 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(section(_('Input')), False, False, 0)
 
         self._method_combo = Gtk.ComboBoxText()
-        for m in ['Telex', 'VNI']:
+        _methods = ['Telex', 'VNI', 'VIQR']
+        for m in _methods:
             self._method_combo.append_text(m)
-        self._method_combo.set_active(0 if conf.get('Method', 'Telex') == 'Telex' else 1)
+        _cur_method = conf.get('Method', 'Telex')
+        self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
         vbox.pack_start(row(_('Input method'), self._method_combo), False, False, 4)
 
@@ -687,7 +689,7 @@ class SettingsWindow(Gtk.Window):
         return scroll
 
     def _on_general_save(self, _btn):
-        methods = ['Telex', 'VNI']
+        methods = ['Telex', 'VNI', 'VIQR']
         pmodes  = ['Auto', 'Client', 'Panel']
         new_lang = self._lang_combo.get_active_id() or 'en'
         updates = {
@@ -710,7 +712,7 @@ class SettingsWindow(Gtk.Window):
         self._show_info(msg)
 
     def _on_general_reset(self, _btn):
-        methods = ['Telex', 'VNI']
+        methods = ['Telex', 'VNI', 'VIQR']
         pmodes  = ['Auto', 'Client', 'Panel']
         current = {
             'Method':               methods[self._method_combo.get_active()],
@@ -790,7 +792,9 @@ class SettingsWindow(Gtk.Window):
             dlg.destroy()
             save_general_conf(_GENERAL_DEFAULTS)
             conf = load_general_conf()
-            self._method_combo.set_active(0 if conf['Method'] == 'Telex' else 1)
+            _m = conf.get('Method', 'Telex')
+            _ml = ['Telex', 'VNI', 'VIQR']
+            self._method_combo.set_active(_ml.index(_m) if _m in _ml else 0)
             self._toggle_entry.set_text(conf['ToggleKey'])
             pm = conf['PreeditMode']
             self._preedit_combo.set_active(
