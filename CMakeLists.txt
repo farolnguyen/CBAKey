@@ -144,6 +144,10 @@ if(FAROLKEY_BUILD_TESTS)
     target_link_libraries(farolkey_viqr_star_smoke_test PRIVATE farolkey_core)
     add_test(NAME farolkey_viqr_star_smoke_test COMMAND farolkey_viqr_star_smoke_test)
 
+    add_executable(farolkey_simple_telex_smoke_test tests/simple_telex_smoke_test.cpp)
+    target_link_libraries(farolkey_simple_telex_smoke_test PRIVATE farolkey_core)
+    add_test(NAME farolkey_simple_telex_smoke_test COMMAND farolkey_simple_telex_smoke_test)
+
     add_executable(farolkey_config_smoke_test tests/config_smoke_test.cpp)
     target_link_libraries(farolkey_config_smoke_test PRIVATE farolkey_core)
     add_test(NAME farolkey_config_smoke_test COMMAND farolkey_config_smoke_test)

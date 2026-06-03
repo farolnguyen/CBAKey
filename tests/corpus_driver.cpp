@@ -184,6 +184,8 @@ CorpusOutcome runCorpusCase(const nlohmann::json& c, CorpusRunStats* stats) {
         cfg.method = InputMethod::Viqr;
     } else if (cfgName == "viqr_star") {
         cfg.method = InputMethod::ViqrStar;
+    } else if (cfgName == "simple_telex") {
+        cfg.method = InputMethod::SimpleTelex;
     } else if (cfgName == "default" || cfgName == "telex") {
         // default Telex
     } else {

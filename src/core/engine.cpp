@@ -378,6 +378,16 @@ bool isViqrStarRepeatableKey(char key) {
     }
 }
 
+bool isSimpleTelexRepeatableKey(char key) {
+    // Only tone keys are special in Simple Telex.
+    switch (key) {
+        case 's': case 'f': case 'r': case 'x': case 'j':
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 namespace {
@@ -803,10 +813,11 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     }
 
     if (repeatTransformState_.active && repeatTransformState_.key == key &&
-        ((config_.method == farolkey::core::InputMethod::Telex    && isTelexRepeatableKey(key))    ||
-         (config_.method == farolkey::core::InputMethod::Vni      && isVniRepeatableKey(key))      ||
-         (config_.method == farolkey::core::InputMethod::Viqr     && isViqrRepeatableKey(key))     ||
-         (config_.method == farolkey::core::InputMethod::ViqrStar && isViqrStarRepeatableKey(key)))) {
+        ((config_.method == farolkey::core::InputMethod::Telex      && isTelexRepeatableKey(key))      ||
+         (config_.method == farolkey::core::InputMethod::Vni        && isVniRepeatableKey(key))        ||
+         (config_.method == farolkey::core::InputMethod::Viqr       && isViqrRepeatableKey(key))       ||
+         (config_.method == farolkey::core::InputMethod::ViqrStar   && isViqrStarRepeatableKey(key))   ||
+         (config_.method == farolkey::core::InputMethod::SimpleTelex && isSimpleTelexRepeatableKey(key)))) {
         std::u32string reverted = decodeUtf8Normalized(repeatTransformState_.buffer_before);
         reverted.push_back(static_cast<unsigned char>(raw));
         if (config_.method == farolkey::core::InputMethod::Telex) {
@@ -845,6 +856,11 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         } else {
             transformed = vi_syllable::applyViqrStarTransform(decoded, key);
         }
+    } else if (config_.method == farolkey::core::InputMethod::SimpleTelex) {
+        // Only the 5 tone keys are active; all other keys are literal.
+        if (key == 's' || key == 'f' || key == 'r' || key == 'x' || key == 'j') {
+            transformed = applyTone(decoded, key);
+        }
     }
 
     if (transformed) {
@@ -857,10 +873,11 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             vi_syllable::normalizeVniUoTransform(decoded);
         }
         preeditBuffer_ = encodeUtf8(decoded);
-        if ((config_.method == farolkey::core::InputMethod::Telex    && isTelexRepeatableKey(key))    ||
-            (config_.method == farolkey::core::InputMethod::Vni      && isVniRepeatableKey(key))      ||
-            (config_.method == farolkey::core::InputMethod::Viqr     && isViqrRepeatableKey(key))     ||
-            (config_.method == farolkey::core::InputMethod::ViqrStar && isViqrStarRepeatableKey(key))) {
+        if ((config_.method == farolkey::core::InputMethod::Telex       && isTelexRepeatableKey(key))       ||
+            (config_.method == farolkey::core::InputMethod::Vni         && isVniRepeatableKey(key))         ||
+            (config_.method == farolkey::core::InputMethod::Viqr        && isViqrRepeatableKey(key))        ||
+            (config_.method == farolkey::core::InputMethod::ViqrStar    && isViqrStarRepeatableKey(key))    ||
+            (config_.method == farolkey::core::InputMethod::SimpleTelex && isSimpleTelexRepeatableKey(key))) {
             repeatTransformState_.active = true;
             repeatTransformState_.key = key;
             repeatTransformState_.buffer_before = bufferBefore;
