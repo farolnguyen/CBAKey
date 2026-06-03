@@ -622,10 +622,13 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(section(_('Input')), False, False, 0)
 
         self._method_combo = Gtk.ComboBoxText()
-        _methods = ['Telex', 'VNI', 'VIQR']
+        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*']
         for m in _methods:
             self._method_combo.append_text(m)
         _cur_method = conf.get('Method', 'Telex')
+        # 'ViqrStar' in config file maps to 'VIQR*' in UI
+        if _cur_method == 'ViqrStar':
+            _cur_method = 'VIQR*'
         self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
         vbox.pack_start(row(_('Input method'), self._method_combo), False, False, 4)
@@ -689,7 +692,7 @@ class SettingsWindow(Gtk.Window):
         return scroll
 
     def _on_general_save(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar']
         pmodes  = ['Auto', 'Client', 'Panel']
         new_lang = self._lang_combo.get_active_id() or 'en'
         updates = {
@@ -712,7 +715,7 @@ class SettingsWindow(Gtk.Window):
         self._show_info(msg)
 
     def _on_general_reset(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar']
         pmodes  = ['Auto', 'Client', 'Panel']
         current = {
             'Method':               methods[self._method_combo.get_active()],
@@ -793,7 +796,9 @@ class SettingsWindow(Gtk.Window):
             save_general_conf(_GENERAL_DEFAULTS)
             conf = load_general_conf()
             _m = conf.get('Method', 'Telex')
-            _ml = ['Telex', 'VNI', 'VIQR']
+            if _m == 'ViqrStar':
+                _m = 'VIQR*'
+            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*']
             self._method_combo.set_active(_ml.index(_m) if _m in _ml else 0)
             self._toggle_entry.set_text(conf['ToggleKey'])
             pm = conf['PreeditMode']
