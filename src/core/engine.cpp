@@ -399,6 +399,24 @@ bool isMicrosoftRepeatableKey(char key) {
     }
 }
 
+bool isTocKyRepeatableKey(char key) {
+    return key >= '1' && key <= '5';  // same as VNI tone keys
+}
+
+// Returns true if the decoded buffer contains at least one Vietnamese vowel.
+// Used by Tốc ký to distinguish initial (onset) vs final (coda) shortcut context.
+bool hasVietnameseVowel(const std::u32string& buf) {
+    for (char32_t c : buf) {
+        if (c == U'a' || c == U'e' || c == U'i' || c == U'o' || c == U'u' || c == U'y')
+            return true;
+        // All precomposed Vietnamese vowels are in U+00C0..U+1EFF.
+        // Exclude Đ (U+0110) and đ (U+0111), the only Vietnamese precomposed consonants.
+        if (c >= U'À' && c != U'Đ' && c != U'đ')
+            return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 namespace {
@@ -668,7 +686,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     // tone/diacritic modifiers — they must always produce the literal digit.
     // Commit any pending preedit first, then forward the key to the app.
     if ((config_.method == farolkey::core::InputMethod::Vni ||
-         config_.method == farolkey::core::InputMethod::Microsoft) &&
+         config_.method == farolkey::core::InputMethod::Microsoft ||
+         config_.method == farolkey::core::InputMethod::TocKy) &&
         event.key_from_keypad && event.aux == KeyAux::None && event.key != '\0' &&
         std::isdigit(static_cast<unsigned char>(event.key)) != 0) {
         ProcessResult r;
@@ -807,11 +826,13 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     if ((config_.method == farolkey::core::InputMethod::Telex       && key == 'z')  ||
         (config_.method == farolkey::core::InputMethod::SimpleTelex2 && key == 'z')  ||
         (config_.method == farolkey::core::InputMethod::Vni          && key == '0')  ||
+        (config_.method == farolkey::core::InputMethod::TocKy        && key == '0')  ||
         (config_.method == farolkey::core::InputMethod::Viqr         && key == '\\') ||
         (config_.method == farolkey::core::InputMethod::ViqrStar     && key == '\\')) {
         clearRepeatTransformState();
         const bool removed =
-            (config_.method == farolkey::core::InputMethod::Vni)
+            (config_.method == farolkey::core::InputMethod::Vni ||
+             config_.method == farolkey::core::InputMethod::TocKy)
                 ? vi_syllable::removeVniDiacritics(decoded)
                 : vi_syllable::removeTelexDiacritics(decoded);
         if (removed) {
@@ -832,7 +853,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
          (config_.method == farolkey::core::InputMethod::ViqrStar    && isViqrStarRepeatableKey(key))    ||
          (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key)) ||
          (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))        ||
-         (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key)))) {
+         (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key))    ||
+         (config_.method == farolkey::core::InputMethod::TocKy        && isTocKyRepeatableKey(key)))) {
         std::u32string reverted = decodeUtf8Normalized(repeatTransformState_.buffer_before);
         reverted.push_back(static_cast<unsigned char>(raw));
         if (config_.method == farolkey::core::InputMethod::Telex) {
@@ -914,6 +936,39 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             else if (key == '9') toneKey = 'x';  // ngã
             if (toneKey) transformed = applyTone(decoded, toneKey);
         }
+    } else if (config_.method == farolkey::core::InputMethod::TocKy) {
+        // Base: VNI tones (1-5) and diacritic transforms (0, 6-9).
+        if (key >= '1' && key <= '5') {
+            transformed = applyToneVni(decoded, key);
+        } else if (key == '0' || (key >= '6' && key <= '9')) {
+            transformed = vi_syllable::applyVniTransform(decoded, key);
+        }
+        // Consonant shortcuts (only when VNI base did not handle the key).
+        if (!transformed) {
+            const bool hasVowel = hasVietnameseVowel(decoded);
+            if (!hasVowel) {
+                // Initial shortcuts: active when no vowel in buffer yet.
+                switch (key) {
+                    case 'f': decoded.push_back(U'p'); decoded.push_back(U'h'); transformed = true; break;
+                    case 'j': decoded.push_back(U'g'); decoded.push_back(U'i'); transformed = true; break;
+                    case 'k': decoded.push_back(U'k'); decoded.push_back(U'h'); transformed = true; break;
+                    case 'c': decoded.push_back(U'k');                          transformed = true; break;
+                    case 'z': decoded.push_back(U'd');                          transformed = true; break;
+                    case 'd': decoded.push_back(U'đ');                     transformed = true; break;  // đ
+                    case 'w': decoded.push_back(U'n'); decoded.push_back(U'g'); transformed = true; break;
+                    case 'q': decoded.push_back(U'q'); decoded.push_back(U'u'); transformed = true; break;
+                    default:  break;
+                }
+            } else {
+                // Final shortcuts: active after a vowel is present.
+                switch (key) {
+                    case 'g': decoded.push_back(U'n'); decoded.push_back(U'g'); transformed = true; break;
+                    case 'h': decoded.push_back(U'n'); decoded.push_back(U'h'); transformed = true; break;
+                    case 'k': decoded.push_back(U'c'); decoded.push_back(U'h'); transformed = true; break;
+                    default:  break;
+                }
+            }
+        }
     }
 
     if (transformed) {
@@ -923,7 +978,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         if (config_.method == farolkey::core::InputMethod::Telex ||
             config_.method == farolkey::core::InputMethod::SimpleTelex2) {
             vi_syllable::normalizeTelexBuffer(decoded);
-        } else if (config_.method == farolkey::core::InputMethod::Vni) {
+        } else if (config_.method == farolkey::core::InputMethod::Vni ||
+                   config_.method == farolkey::core::InputMethod::TocKy) {
             vi_syllable::normalizeVniUoTransform(decoded);
         }
         preeditBuffer_ = encodeUtf8(decoded);
@@ -933,7 +989,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             (config_.method == farolkey::core::InputMethod::ViqrStar     && isViqrStarRepeatableKey(key))     ||
             (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key))  ||
             (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))        ||
-            (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key))) {
+            (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key))    ||
+            (config_.method == farolkey::core::InputMethod::TocKy        && isTocKyRepeatableKey(key))) {
             repeatTransformState_.active = true;
             repeatTransformState_.key = key;
             repeatTransformState_.buffer_before = bufferBefore;
@@ -953,7 +1010,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     if (config_.method == farolkey::core::InputMethod::Telex ||
         config_.method == farolkey::core::InputMethod::SimpleTelex2) {
         vi_syllable::normalizeTelexBuffer(decoded);
-    } else if (config_.method == farolkey::core::InputMethod::Vni) {
+    } else if (config_.method == farolkey::core::InputMethod::Vni ||
+               config_.method == farolkey::core::InputMethod::TocKy) {
         // fromPushPath=true: also normalizes "uơi"→"ươi" (e.g. "người" from "nguo7i").
         vi_syllable::normalizeVniUoTransform(decoded, /*fromPushPath=*/true);
     }

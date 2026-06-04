@@ -663,6 +663,42 @@ _METHOD_REFS = {
             ]),
         ],
     },
+    'Tốc ký': {
+        'desc': 'Kiểu gõ nhanh dựa trên VNI + phụ âm rút gọn. Nguồn ý tưởng: Chữ Việt Nhanh — tác giả Trần Tư Bình & Kiều Trường Lâm (1850/2020/QTG). FarolKey implement độc lập, base VNI.',
+        'sections': [
+            ('Phụ âm đầu từ (chưa có nguyên âm)', 'table', [
+                ('f',  'ph  →  phở, phút, phim'),
+                ('j',  'gi  →  già, giờ, giúp'),
+                ('k',  'kh  →  khi, khó, khuôn'),
+                ('c',  'k   →  kế, kéo, kỳ'),
+                ('z',  'd   →  da, do, dừng'),
+                ('d',  'đ   →  đi, đến, được'),
+                ('w',  'ng  →  nga, ngỡ, ngày'),
+                ('q',  'qu  →  qua, quê, quốc'),
+            ]),
+            ('Phụ âm cuối từ (sau nguyên âm)', 'table', [
+                ('g',  'ng  →  ang, ong, ung'),
+                ('h',  'nh  →  anh, inh, ính'),
+                ('k',  'ch  →  ach, ich, ích'),
+            ]),
+            ('Thanh điệu & dấu (base VNI)', 'table', [
+                ('1', 'Sắc  →  á'), ('2', 'Huyền  →  à'), ('3', 'Hỏi  →  ả'),
+                ('4', 'Ngã  →  ã'), ('5', 'Nặng  →  ạ'), ('0', 'Xóa dấu'),
+                ('a6', 'â'),  ('a8', 'ă'),  ('o7', 'ơ'),
+                ('u7', 'ư'),  ('e6', 'ê'),  ('o6', 'ô'),
+            ]),
+            ('Ví dụ', 'notes', [
+                'phở: f + o + w + 3 → phở',
+                'giờ: j + o + w + 2 → giờ',
+                'khi: k + i → khi',
+                'được: d + u7 + 5 + c → được',
+                'ngang: w + a + g → ngang',
+                'cạnh: c + a + k + 5 → cạnh (c→k, k→ch)',
+                'anh: a + h → anh',
+                'k disambiguation: đầu từ → kh, sau nguyên âm → ch',
+            ]),
+        ],
+    },
     'Microsoft Vietnamese': {
         'desc': 'Kiểu gõ của Microsoft, tích hợp sẵn trong Windows 10+. Phím số trực tiếp cho ra ký tự đặc biệt — không cần gõ chữ cái nền trước.',
         'sections': [
@@ -691,7 +727,7 @@ _METHOD_REFS = {
 
 
 class MethodReferenceDialog(Gtk.Dialog):
-    _METHODS = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese']
+    _METHODS = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký']
 
     def __init__(self, parent, initial_method='Telex'):
         super().__init__(
@@ -897,13 +933,14 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(section(_('Input')), False, False, 0)
 
         self._method_combo = Gtk.ComboBoxText()
-        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese']
+        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký']
         for m in _methods:
             self._method_combo.append_text(m)
         _cur_method = conf.get('Method', 'Telex')
         # map config file enum names to UI display names
         _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
-                       'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese'}
+                       'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese',
+                       'TocKy': 'Tốc ký'}
         _cur_method = _method_map.get(_cur_method, _cur_method)
         self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
@@ -982,7 +1019,7 @@ class SettingsWindow(Gtk.Window):
         return scroll
 
     def _on_general_save(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy']
         pmodes  = ['Auto', 'Client', 'Panel']
         new_lang = self._lang_combo.get_active_id() or 'en'
         updates = {
@@ -1005,7 +1042,7 @@ class SettingsWindow(Gtk.Window):
         self._show_info(msg)
 
     def _on_general_reset(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy']
         pmodes  = ['Auto', 'Client', 'Panel']
         current = {
             'Method':               methods[self._method_combo.get_active()],
@@ -1087,9 +1124,10 @@ class SettingsWindow(Gtk.Window):
             conf = load_general_conf()
             _m = conf.get('Method', 'Telex')
             _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
-                           'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese'}
+                           'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese',
+                           'TocKy': 'Tốc ký'}
             _m = _method_map.get(_m, _m)
-            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese']
+            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký']
             self._method_combo.set_active(_ml.index(_m) if _m in _ml else 0)
             self._toggle_entry.set_text(conf['ToggleKey'])
             pm = conf['PreeditMode']
