@@ -73,7 +73,7 @@ static constexpr UIStrings kStringsEn {
     "Settings (v" FAROLKEY_VERSION ")", "FarolKey Settings (v" FAROLKEY_VERSION ")",
     "Input Method: Telex", "Input Method: VNI", "Input Method: VIQR", "Input Method: VIQR*",
     "Input Method: Simple Telex", "Input Method: Simple Telex 2", "Input Method: Microsoft Vietnamese",
-    "Input Method: Tốc ký",
+    "Input Method: Tốc ký (VNI)",
     "Screenshot", "Take a screenshot with FarolKey",
 };
 
@@ -86,7 +86,7 @@ static constexpr UIStrings kStringsVi {
     "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
     "Phương thức: Telex", "Phương thức: VNI", "Phương thức: VIQR", "Phương thức: VIQR*",
     "Phương thức: Simple Telex", "Phương thức: Simple Telex 2", "Phương thức: Microsoft Vietnamese",
-    "Phương thức: Tốc ký",
+    "Phương thức: Tốc ký (VNI)",
     "Chụp màn hình", "Chụp màn hình với FarolKey",
 };
 
@@ -825,7 +825,7 @@ private:
         });
         ui.registerAction("farolkey-microsoft", &microsoftAction_);
 
-        tockyAction_.setShortText("Tốc ký");
+        tockyAction_.setShortText("Tốc ký (VNI)");
         tockyAction_.setChecked(config_.method.value() ==
                                 farolkey::adapter::fcitx5::FarolKeyMethod::TocKy);
         tockyAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
