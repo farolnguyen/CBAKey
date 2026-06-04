@@ -695,13 +695,13 @@ class MethodReferenceDialog(Gtk.Dialog):
 
     def __init__(self, parent, initial_method='Telex'):
         super().__init__(
-            title=_('Hướng dẫn kiểu gõ'),
+            title=_('Input method guide'),
             transient_for=parent,
             modal=True,
             destroy_with_parent=True,
         )
         self.set_default_size(760, 540)
-        self.add_button(_('Đóng'), Gtk.ResponseType.CLOSE)
+        self.add_button(_('Close'), Gtk.ResponseType.CLOSE)
         self.connect('response', lambda d, _r: d.destroy())
 
         content = self.get_content_area()
@@ -908,8 +908,8 @@ class SettingsWindow(Gtk.Window):
         self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
 
-        _ref_btn = Gtk.Button(label=_('? Hướng dẫn'))
-        _ref_btn.set_tooltip_text(_('Xem bảng phím tắt và luật gõ của từng kiểu'))
+        _ref_btn = Gtk.Button(label=_('? Guide'))
+        _ref_btn.set_tooltip_text(_('View key reference and rules for each input method'))
         _ref_btn.connect('clicked', lambda _: MethodReferenceDialog(
             self.get_toplevel(),
             self._method_combo.get_active_text() or 'Telex',

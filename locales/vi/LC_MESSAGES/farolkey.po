@@ -49,6 +49,15 @@ msgstr "Nhập liệu"
 msgid "Input method"
 msgstr "Phương thức gõ"
 
+msgid "? Guide"
+msgstr "? Hướng dẫn"
+
+msgid "Input method guide"
+msgstr "Hướng dẫn kiểu gõ"
+
+msgid "View key reference and rules for each input method"
+msgstr "Xem bảng phím tắt và luật gõ của từng kiểu"
+
 msgid "EN/VI toggle key"
 msgstr "Phím chuyển EN/VI"
 

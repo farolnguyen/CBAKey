@@ -59,6 +59,7 @@ struct UIStrings {
     const char* methodSimpleTelex;    // "Input Method: Simple Telex"
     const char* methodSimpleTelex2;   // "Input Method: Simple Telex 2"
     const char* methodMicrosoft;      // "Input Method: Microsoft Vietnamese"
+    const char* screenshotPrefix;   // "Screenshot" / "Chụp màn hình"
     const char* screenshotLong;
 };
 
@@ -71,7 +72,7 @@ static constexpr UIStrings kStringsEn {
     "Settings (v" FAROLKEY_VERSION ")", "FarolKey Settings (v" FAROLKEY_VERSION ")",
     "Input Method: Telex", "Input Method: VNI", "Input Method: VIQR", "Input Method: VIQR*",
     "Input Method: Simple Telex", "Input Method: Simple Telex 2", "Input Method: Microsoft Vietnamese",
-    "Take a screenshot with FarolKey",
+    "Screenshot", "Take a screenshot with FarolKey",
 };
 
 static constexpr UIStrings kStringsVi {
@@ -83,7 +84,7 @@ static constexpr UIStrings kStringsVi {
     "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
     "Phương thức: Telex", "Phương thức: VNI", "Phương thức: VIQR", "Phương thức: VIQR*",
     "Phương thức: Simple Telex", "Phương thức: Simple Telex 2", "Phương thức: Microsoft Vietnamese",
-    "Chụp màn hình với FarolKey",
+    "Chụp màn hình", "Chụp màn hình với FarolKey",
 };
 
 // Read language= from farolkey.conf. Returns "en" as fallback.
@@ -998,7 +999,7 @@ private:
                 break;
             }
         }
-        screenshotAction_.setShortText("Screenshot (" + hotkey + ")");
+        screenshotAction_.setShortText(std::string(uiStrings_.screenshotPrefix) + " (" + hotkey + ")");
         screenshotAction_.setLongText(uiStrings_.screenshotLong);
     }
 
