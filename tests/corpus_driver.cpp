@@ -188,6 +188,8 @@ CorpusOutcome runCorpusCase(const nlohmann::json& c, CorpusRunStats* stats) {
         cfg.method = InputMethod::SimpleTelex;
     } else if (cfgName == "simple_telex2") {
         cfg.method = InputMethod::SimpleTelex2;
+    } else if (cfgName == "microsoft") {
+        cfg.method = InputMethod::Microsoft;
     } else if (cfgName == "default" || cfgName == "telex") {
         // default Telex
     } else {

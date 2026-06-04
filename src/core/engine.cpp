@@ -388,6 +388,17 @@ bool isSimpleTelexRepeatableKey(char key) {
     }
 }
 
+bool isMicrosoftRepeatableKey(char key) {
+    switch (key) {
+        case '0': case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8': case '9':
+        case 's': case 'j':
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 namespace {
@@ -656,8 +667,9 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     // VNI + numpad digit: digits on the numpad should never be treated as VNI
     // tone/diacritic modifiers — they must always produce the literal digit.
     // Commit any pending preedit first, then forward the key to the app.
-    if (config_.method == farolkey::core::InputMethod::Vni && event.key_from_keypad &&
-        event.aux == KeyAux::None && event.key != '\0' &&
+    if ((config_.method == farolkey::core::InputMethod::Vni ||
+         config_.method == farolkey::core::InputMethod::Microsoft) &&
+        event.key_from_keypad && event.aux == KeyAux::None && event.key != '\0' &&
         std::isdigit(static_cast<unsigned char>(event.key)) != 0) {
         ProcessResult r;
         if (!preeditBuffer_.empty()) {
@@ -819,7 +831,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
          (config_.method == farolkey::core::InputMethod::Viqr        && isViqrRepeatableKey(key))        ||
          (config_.method == farolkey::core::InputMethod::ViqrStar    && isViqrStarRepeatableKey(key))    ||
          (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key)) ||
-         (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key)))) {
+         (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))        ||
+         (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key)))) {
         std::u32string reverted = decodeUtf8Normalized(repeatTransformState_.buffer_before);
         reverted.push_back(static_cast<unsigned char>(raw));
         if (config_.method == farolkey::core::InputMethod::Telex) {
@@ -875,6 +888,32 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
                 transformed = true;
             }
         }
+    } else if (config_.method == farolkey::core::InputMethod::Microsoft) {
+        // Number keys directly insert Vietnamese characters; no base letter needed.
+        // Tone keys 5/6/9 map to Telex equivalents f/r/x; s and j keep their Telex role.
+        char32_t directChar = 0;
+        switch (key) {
+            case '1': directChar = U'ă'; break;
+            case '2': directChar = U'â'; break;
+            case '3': directChar = U'ê'; break;
+            case '4': directChar = U'ô'; break;
+            case '7': directChar = U'ư'; break;
+            case '8': directChar = U'ơ'; break;
+            case '0': directChar = U'đ'; break;
+            default:  break;
+        }
+        if (directChar) {
+            decoded.push_back(directChar);
+            transformed = true;
+        } else {
+            char toneKey = 0;
+            if      (key == 's') toneKey = 's';
+            else if (key == 'j') toneKey = 'j';
+            else if (key == '5') toneKey = 'f';  // huyền
+            else if (key == '6') toneKey = 'r';  // hỏi
+            else if (key == '9') toneKey = 'x';  // ngã
+            if (toneKey) transformed = applyTone(decoded, toneKey);
+        }
     }
 
     if (transformed) {
@@ -893,7 +932,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             (config_.method == farolkey::core::InputMethod::Viqr         && isViqrRepeatableKey(key))         ||
             (config_.method == farolkey::core::InputMethod::ViqrStar     && isViqrStarRepeatableKey(key))     ||
             (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key))  ||
-            (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))) {
+            (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))        ||
+            (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key))) {
             repeatTransformState_.active = true;
             repeatTransformState_.key = key;
             repeatTransformState_.buffer_before = bufferBefore;

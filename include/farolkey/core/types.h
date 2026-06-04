@@ -16,7 +16,8 @@ enum class InputMethod {
     Viqr,
     ViqrStar,
     SimpleTelex,
-    SimpleTelex2
+    SimpleTelex2,
+    Microsoft
 };
 
 /// Non-character keys from the frontend (Fcitx5). Named KeyAux to avoid system macro clashes.
