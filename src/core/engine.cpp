@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "farolkey/core/free_layout_config.h"
 #include "farolkey/core/user_dict.h"
 #include "farolkey/core/vi_syllable.h"
 
@@ -827,12 +828,16 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         (config_.method == farolkey::core::InputMethod::SimpleTelex2 && key == 'z')  ||
         (config_.method == farolkey::core::InputMethod::Vni          && key == '0')  ||
         (config_.method == farolkey::core::InputMethod::TocKy        && key == '0')  ||
+        (config_.method == farolkey::core::InputMethod::FreeLayout   &&
+             config_.freeLayout.tones.remove != '\0' &&
+             key == config_.freeLayout.tones.remove)  ||
         (config_.method == farolkey::core::InputMethod::Viqr         && key == '\\') ||
         (config_.method == farolkey::core::InputMethod::ViqrStar     && key == '\\')) {
         clearRepeatTransformState();
         const bool removed =
             (config_.method == farolkey::core::InputMethod::Vni ||
-             config_.method == farolkey::core::InputMethod::TocKy)
+             config_.method == farolkey::core::InputMethod::TocKy ||
+             config_.method == farolkey::core::InputMethod::FreeLayout)
                 ? vi_syllable::removeVniDiacritics(decoded)
                 : vi_syllable::removeTelexDiacritics(decoded);
         if (removed) {
@@ -970,6 +975,37 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
                 }
             }
         }
+    } else if (config_.method == farolkey::core::InputMethod::FreeLayout) {
+        const auto& fl = config_.freeLayout;
+        const bool hasVowel = hasVietnameseVowel(decoded);
+
+        // 1. Tone/diacritic actions (only when buffer has vowel, or d-stroke anywhere).
+        if (!transformed && fl.tones.diacritic_d != '\0' && key == fl.tones.diacritic_d) {
+            transformed = vi_syllable::applyVniTransform(decoded, '9');
+        }
+        if (!transformed && hasVowel) {
+            const auto& t = fl.tones;
+            if      (t.tone_sac      != '\0' && key == t.tone_sac)      { transformed = applyTone(decoded, 's'); }
+            else if (t.tone_huyen    != '\0' && key == t.tone_huyen)    { transformed = applyTone(decoded, 'f'); }
+            else if (t.tone_hoi      != '\0' && key == t.tone_hoi)      { transformed = applyTone(decoded, 'r'); }
+            else if (t.tone_nga      != '\0' && key == t.tone_nga)      { transformed = applyTone(decoded, 'x'); }
+            else if (t.tone_nang     != '\0' && key == t.tone_nang)     { transformed = applyTone(decoded, 'j'); }
+            else if (t.diacritic_mui   != '\0' && key == t.diacritic_mui)   { transformed = vi_syllable::applyVniTransform(decoded, '6'); }
+            else if (t.diacritic_breve != '\0' && key == t.diacritic_breve) { transformed = vi_syllable::applyVniTransform(decoded, '8'); }
+            else if (t.diacritic_moc   != '\0' && key == t.diacritic_moc)   { transformed = vi_syllable::applyVniTransform(decoded, '7'); }
+        }
+
+        // 2. Shortcut table (fires when tone/diacritic didn't consume the key).
+        if (!transformed) {
+            for (const auto& rule : fl.shortcuts) {
+                if (rule.key == key) {
+                    const std::u32string out = decodeUtf8Normalized(rule.output);
+                    for (char32_t ch : out) decoded.push_back(ch);
+                    transformed = true;
+                    break;
+                }
+            }
+        }
     }
 
     if (transformed) {
@@ -980,7 +1016,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             config_.method == farolkey::core::InputMethod::SimpleTelex2) {
             vi_syllable::normalizeTelexBuffer(decoded);
         } else if (config_.method == farolkey::core::InputMethod::Vni ||
-                   config_.method == farolkey::core::InputMethod::TocKy) {
+                   config_.method == farolkey::core::InputMethod::TocKy ||
+                   config_.method == farolkey::core::InputMethod::FreeLayout) {
             vi_syllable::normalizeVniUoTransform(decoded);
         }
         preeditBuffer_ = encodeUtf8(decoded);
@@ -1012,8 +1049,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
         config_.method == farolkey::core::InputMethod::SimpleTelex2) {
         vi_syllable::normalizeTelexBuffer(decoded);
     } else if (config_.method == farolkey::core::InputMethod::Vni ||
-               config_.method == farolkey::core::InputMethod::TocKy) {
-        // fromPushPath=true: also normalizes "uơi"→"ươi" (e.g. "người" from "nguo7i").
+               config_.method == farolkey::core::InputMethod::TocKy ||
+               config_.method == farolkey::core::InputMethod::FreeLayout) {
         vi_syllable::normalizeVniUoTransform(decoded, /*fromPushPath=*/true);
     }
     preeditBuffer_ = encodeUtf8(decoded);

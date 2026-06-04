@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "farolkey/core/free_layout_config.h"
 #include "farolkey/core/types.h"
 
 namespace farolkey::config {
@@ -32,6 +33,8 @@ struct RuntimeConfig {
     bool fcitx5ClickAwayDropOnFail = false;
     /// M15: enable Smart Templates (parametric macro) via farolkey-template subprocess.
     bool enableSmartTemplates = true;
+    /// M14.12: Free Layout user-defined shortcut + tone config.
+    farolkey::core::FreeLayoutConfig freeLayout;
 };
 
 RuntimeConfig defaultConfig();

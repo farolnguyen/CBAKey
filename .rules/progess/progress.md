@@ -553,9 +553,9 @@ Thêm test cho các pattern ít gặp: `quyền`, `ngoài`, `toán`, `thuở`, `
 
 ---
 
-### Milestone M14 — Input Method mở rộng ✅ M14.1–M14.5 DONE | M14.6–M14.8 PLANNED
+### Milestone M14 — Input Method mở rộng ✅ M14.1–M14.7, M14.9, M14.10, M14.11 DONE | M14.8, M14.12 PLANNED
 
-**Bối cảnh:** FarolKey hiện hỗ trợ Telex + VNI + VIQR. M14 tiếp tục mở rộng thêm các input method còn lại: VIQR* (biến thể VIQR), Simple Telex (Telex đơn giản chỉ tone), và Tự nhiên (Natural — gõ không dấu, tra từ điển).
+**Bối cảnh:** FarolKey hiện hỗ trợ Telex + VNI + VIQR + VIQR* + Simple Telex + Simple Telex 2 + Microsoft Vietnamese + Tốc ký. Còn M14.8 (Tự nhiên — complex) và M14.12 (Free Layout — planned).
 
 **Quyết định thiết kế (chốt 2026-06-01):**
 
@@ -581,10 +581,10 @@ Escape:     ''→'  ``→`  ??→?  ~~→~  ..→.  ^^→^  ((→(  ++→+  ddd�
 ```
 Settings General tab:
   [Input method  ▼ Telex  ]
-   Telex / VNI / VIQR / VIQR* / Simple Telex / Tự nhiên
+   Telex / VNI / VIQR / VIQR* / Simple Telex / Simple Telex 2 / Tự nhiên
 
 Core (input): InputMethod enum → dispatch to transform function
-Config:       inputMethod=telex|vni|viqr|viqr_star|simple_telex|natural
+Config:       inputMethod=telex|vni|viqr|viqr_star|simple_telex|simple_telex2|natural
 ```
 
 ---
@@ -593,9 +593,13 @@ Config:       inputMethod=telex|vni|viqr|viqr_star|simple_telex|natural
 
 ```
 M14.1 → M14.2 → M14.3 → M14.4 → M14.5  ──── DONE ────
-M14.3 → M14.6 (VIQR* — mở rộng từ VIQR core)
-M14.5 → M14.7 (Simple Telex — mở rộng từ Telex core)
-M14.5 → M14.8 (Tự nhiên — cần dictionary + disambiguation)
+M14.3 → M14.6 (VIQR*)               ✅ DONE
+M14.5 → M14.7 (Simple Telex)        ✅ DONE
+M14.5 → M14.9 (Simple Telex 2)      ✅ DONE
+M14.5 → M14.8 (Tự nhiên — PLANNED)
+M14.5 → M14.10 (Microsoft Vietnamese)   ✅ DONE
+M14.5 → M14.11 (Tốc ký)                 ✅ DONE
+M14.5 → M14.12 (Free Layout)            📋 PLANNED
 ```
 
 ---
@@ -608,8 +612,12 @@ M14.5 → M14.8 (Tự nhiên — cần dictionary + disambiguation)
 | M14.4 | Corpus VIQR + wire corpus driver | `corpus/final/viqr.jsonl` 102 cases; `corpus_driver.cpp` thêm "viqr" config | M14.3 | ✅ 102/102 corpus pass; full suite 11/12 |
 | M14.5 | Settings UI — VIQR | `farolkey-settings`: dropdown Input method thêm VIQR (3 options); `set_active` dùng `.index()` thay hardcode | M14.4 | ✅ Syntax OK; dropdown hiển thị Telex/VNI/VIQR |
 | M14.6 | VIQR* (VIQR Star) | Biến thể VIQR: dùng `*` thay `+` cho horn (ơ, ư); `+` là literal; `**`→`*` escape; enum `ViqrStar`; systray + Settings dropdown; `corpus/final/viqr_star.jsonl` 35 cases | M14.3 | ✅ 35/35 corpus pass; 9 smoke tests pass; 0 Telex/VNI/VIQR regression |
-| M14.7 | Simple Telex | Telex chỉ xử lý tone (`s/f/r/x/j`), không transform (`w/a/e/o/d` → literal); enum `SimpleTelex`; target: user mới chưa quen transform key | M14.5 | Corpus ≥30 cases; tone đúng; transform key không kích hoạt |
+| M14.7 | Simple Telex | Telex chỉ xử lý tone (`s/f/r/x/j`), không transform (`w/a/e/o/d/z` → literal); enum `SimpleTelex`; systray + Settings dropdown; `corpus/final/simple_telex.jsonl` 33 cases | M14.5 | ✅ 33/33 corpus pass; 5 smoke tests pass; 0 regression |
 | M14.8 | Tự nhiên (Natural input) | Gõ không dấu/tone, engine tra từ điển chọn từ phù hợp nhất qua word-level disambiguation; `NaturalDispatch` + lookup; fallback commit-as-typed khi không tìm được | M14.5, M8 (dict) | ≥70% top-1 accuracy trên 100 common words; không crash khi dict thiếu |
+| M14.9 | Simple Telex 2 (stelex2) | Full Telex + `w` standalone → ư khi không có vowel trong buffer (vne_telex_w fallback từ ibus-unikey); enum `SimpleTelex2`; systray + Settings dropdown; `corpus/final/simple_telex2.jsonl` 32 cases | M14.5 | ✅ 32/32 corpus pass; 5 smoke tests pass; 0 regression |
+| M14.10 | Microsoft Vietnamese | Số trực tiếp: `1`→ă `2`→â `3`→ê `4`→ô `7`→ư `8`→ơ `0`→đ; tone: `s`→sắc `j`→nặng `5`→huyền `6`→hỏi `9`→ngã; `s` disambiguation (consonant vs tone theo context); enum `Microsoft`; systray + Settings dropdown; `corpus/final/microsoft.jsonl` 37 cases | M14.5 | ✅ 37/37 corpus pass; 6 smoke tests pass; 0 regression |
+| M14.11 | Tốc ký (VNI) | Base VNI + phụ âm rút gọn. Đầu từ: f→ph, j→gi, z→d, d→đ, w→ng, q→qu; k/c literal. Cuối từ: g→ng, h→nh, k→ch. Enum `TocKy`; display "Tốc ký (VNI)". `corpus/final/toc_ky.jsonl` 37 cases | M14.5 | ✅ 37/37 corpus; 7 smoke tests; 0 regression |
+| M14.12 | Free Layout | Input method 100% do user tự định nghĩa. **2 lớp cấu hình:** (1) Shortcut table: key→chuỗi Unicode bất kỳ; (2) Tone/Diacritic map: 10 actions cố định (sắc/huyền/hỏi/ngã/nặng/mũ/breve/móc/d-gạch/xóa-dấu), mỗi action user gán 1 phím tùy ý. Context-based: có nguyên âm→áp tone/diacritic; không có→shortcut. Config: `~/.config/farolkey/free_layout.json`. UI: Tab "Free Layout" trong Settings + dialog "Custom Tone Keys". Enum `FreeLayout`; display "Free Layout". `corpus/final/free_layout.jsonl` | M14.5 | ≥20 corpus pass; smoke tests pass; UI Add/Edit/Delete/Save; tone dialog gán key; hot-reload; 0 regression |
 
 ---
 

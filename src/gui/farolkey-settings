@@ -663,6 +663,27 @@ _METHOD_REFS = {
             ]),
         ],
     },
+    'Free Layout': {
+        'desc': 'Kiểu gõ hoàn toàn tự định nghĩa. Người dùng tự gán phím tắt phụ âm và phím tone/dấu theo ý muốn. Cấu hình lưu trong ~/.config/farolkey/free_layout.json.',
+        'sections': [
+            ('Shortcut phụ âm', 'notes', [
+                'Mỗi phím có thể được map tới chuỗi ký tự bất kỳ (VD: f→ph, j→gi)',
+                'Phím không được map → giữ nguyên literal',
+                'Cấu hình trong tab "Free Layout" của Settings',
+            ]),
+            ('Tone & dấu (Custom Tone Keys)', 'notes', [
+                'Gán phím cho: Sắc, Huyền, Hỏi, Ngã, Nặng',
+                'Gán phím cho: Mũ (â ê ô), Breve (ă), Móc (ơ ư), D-gạch (d→đ)',
+                'Gán phím Xóa dấu',
+                'Bấm nút "🎹 Custom Tone Keys" trong tab Free Layout để cấu hình',
+            ]),
+            ('Logic ưu tiên khi nhấn phím', 'notes', [
+                'Buffer có nguyên âm + phím là tone/dấu → áp dụng tone/dấu',
+                'Phím là shortcut → push chuỗi output',
+                'Mặc định → literal',
+            ]),
+        ],
+    },
     'Tốc ký (VNI)': {
         'desc': 'Kiểu gõ nhanh dựa trên VNI + phụ âm rút gọn. Nguồn ý tưởng: Chữ Việt Nhanh — tác giả Trần Tư Bình & Kiều Trường Lâm (1850/2020/QTG). FarolKey implement độc lập, base VNI.',
         'sections': [
@@ -725,7 +746,7 @@ _METHOD_REFS = {
 
 
 class MethodReferenceDialog(Gtk.Dialog):
-    _METHODS = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)']
+    _METHODS = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', 'Free Layout']
 
     def __init__(self, parent, initial_method='Telex'):
         super().__init__(
@@ -850,6 +871,133 @@ class MethodReferenceDialog(Gtk.Dialog):
         self._content_box.show_all()
 
 
+class _FreeLayoutRuleDialog(Gtk.Dialog):
+    """Add/Edit a single Free Layout shortcut rule (key → output)."""
+
+    def __init__(self, parent, key='', output=''):
+        super().__init__(title=_('Edit Shortcut Rule'), transient_for=parent, modal=True)
+        self.set_default_size(360, 160)
+        box = self.get_content_area()
+        box.set_spacing(8); box.set_margin_top(16); box.set_margin_bottom(8)
+        box.set_margin_start(16); box.set_margin_end(16)
+
+        grid = Gtk.Grid(row_spacing=8, column_spacing=12)
+
+        grid.attach(Gtk.Label(label=_('Key (1 char):'), xalign=1), 0, 0, 1, 1)
+        self._key_entry = Gtk.Entry()
+        self._key_entry.set_max_length(1)
+        self._key_entry.set_width_chars(5)
+        self._key_entry.set_text(key)
+        grid.attach(self._key_entry, 1, 0, 1, 1)
+
+        grid.attach(Gtk.Label(label=_('Output string:'), xalign=1), 0, 1, 1, 1)
+        self._out_entry = Gtk.Entry()
+        self._out_entry.set_hexpand(True)
+        self._out_entry.set_text(output)
+        self._out_entry.set_placeholder_text('e.g.  ph  or  gi  or  đ')
+        grid.attach(self._out_entry, 1, 1, 1, 1)
+
+        box.add(grid)
+        self.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('OK'), Gtk.ResponseType.OK)
+        self.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
+        self._out_entry.connect('activate', lambda _: self.response(Gtk.ResponseType.OK))
+        self.show_all()
+
+    def get_rule(self):
+        return self._key_entry.get_text().strip(), self._out_entry.get_text()
+
+
+class _ToneKeyDialog(Gtk.Dialog):
+    """Dialog for assigning keys to tone/diacritic actions."""
+
+    _FIELDS = [
+        ('tone_sac',        'Sắc',         'á'),
+        ('tone_huyen',      'Huyền',       'à'),
+        ('tone_hoi',        'Hỏi',         'ả'),
+        ('tone_nga',        'Ngã',         'ã'),
+        ('tone_nang',       'Nặng',        'ạ'),
+        ('diacritic_mui',   'Mũ',          'â ê ô'),
+        ('diacritic_breve', 'Breve',       'ă'),
+        ('diacritic_moc',   'Móc',         'ơ ư'),
+        ('diacritic_d',     'D gạch',      'd→đ'),
+        ('remove',          'Xóa dấu',     '—'),
+    ]
+
+    def __init__(self, parent, tones: dict):
+        super().__init__(title=_('Custom Tone Keys'), transient_for=parent, modal=True)
+        self.set_default_size(420, 380)
+        self._tones = dict(tones)
+
+        box = self.get_content_area()
+        box.set_spacing(0); box.set_margin_top(12); box.set_margin_bottom(8)
+        box.set_margin_start(16); box.set_margin_end(16)
+
+        box.add(Gtk.Label(
+            label=_('Click a key cell then press a key to assign it. Leave empty to disable.'),
+            xalign=0, wrap=True))
+        box.add(Gtk.Separator())
+
+        grid = Gtk.Grid(row_spacing=0, column_spacing=0)
+        grid.set_margin_top(8)
+
+        # Header
+        for col, text in enumerate([_('Action'), _('Example'), _('Key')]):
+            lbl = Gtk.Label(label=f'<b>{text}</b>', use_markup=True, xalign=0)
+            lbl.set_margin_start(8); lbl.set_margin_end(8); lbl.set_margin_top(4); lbl.set_margin_bottom(4)
+            grid.attach(lbl, col, 0, 1, 1)
+        grid.attach(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), 0, 1, 3, 1)
+
+        self._key_entries = {}
+        for row_i, (field, label, example) in enumerate(self._FIELDS):
+            r = row_i + 2
+            lbl_action  = Gtk.Label(label=label,   xalign=0); lbl_action.set_margin_start(8); lbl_action.set_margin_end(8)
+            lbl_example = Gtk.Label(label=example, xalign=0); lbl_example.set_margin_end(16)
+            lbl_action.set_margin_top(6); lbl_action.set_margin_bottom(6)
+
+            entry = Gtk.Entry()
+            entry.set_max_length(1)
+            entry.set_width_chars(4)
+            entry.set_margin_end(8)
+            cur = self._tones.get(field, '')
+            entry.set_text(cur if cur else '')
+            entry.connect('key-press-event', self._on_key_press, field)
+            self._key_entries[field] = entry
+
+            grid.attach(lbl_action,  0, r, 1, 1)
+            grid.attach(lbl_example, 1, r, 1, 1)
+            grid.attach(entry,       2, r, 1, 1)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.add(grid)
+        box.pack_start(scroll, True, True, 0)
+
+        self.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('OK'), Gtk.ResponseType.OK)
+        self.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
+        self.show_all()
+
+    def _on_key_press(self, entry, event, field):
+        # Capture printable ASCII key and fill entry
+        keyval = event.keyval
+        if keyval == Gdk.KEY_BackSpace or keyval == Gdk.KEY_Delete:
+            entry.set_text('')
+            return True
+        if keyval == Gdk.KEY_Escape:
+            return False
+        ch = chr(keyval) if 32 <= keyval <= 126 else None
+        if ch:
+            entry.set_text(ch)
+            return True
+        return False
+
+    def get_tones(self) -> dict:
+        result = {}
+        for field, _, _ in self._FIELDS:
+            val = self._key_entries[field].get_text().strip()
+            result[field] = val if len(val) == 1 else ''
+        return result
+
+
 class SettingsWindow(Gtk.Window):
 
     def __init__(self):
@@ -874,11 +1022,12 @@ class SettingsWindow(Gtk.Window):
         nb.set_tab_pos(Gtk.PositionType.TOP)
         self.add(nb)
 
-        nb.append_page(self._build_general_tab(),    Gtk.Label(label=_('General')))
-        nb.append_page(self._build_dict_tab(),       Gtk.Label(label=_('Dictionary & Templates')))
-        nb.append_page(self._build_clipboard_tab(),  Gtk.Label(label=_('Clipboard History')))
-        nb.append_page(self._build_screenshot_tab(), Gtk.Label(label=_('Screenshot')))
-        nb.append_page(self._build_about_tab(),      Gtk.Label(label=_('About')))
+        nb.append_page(self._build_general_tab(),      Gtk.Label(label=_('General')))
+        nb.append_page(self._build_dict_tab(),         Gtk.Label(label=_('Dictionary & Templates')))
+        nb.append_page(self._build_clipboard_tab(),    Gtk.Label(label=_('Clipboard History')))
+        nb.append_page(self._build_screenshot_tab(),   Gtk.Label(label=_('Screenshot')))
+        nb.append_page(self._build_free_layout_tab(),  Gtk.Label(label=_('Free Layout')))
+        nb.append_page(self._build_about_tab(),        Gtk.Label(label=_('About')))
 
         self._refresh_table()
         self._refresh_template_table()
@@ -931,14 +1080,14 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(section(_('Input')), False, False, 0)
 
         self._method_combo = Gtk.ComboBoxText()
-        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)']
+        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', 'Free Layout']
         for m in _methods:
             self._method_combo.append_text(m)
         _cur_method = conf.get('Method', 'Telex')
         # map config file enum names to UI display names
         _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
                        'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese',
-                       'TocKy': 'Tốc ký (VNI)'}
+                       'TocKy': 'Tốc ký (VNI)', 'FreeLayout': 'Free Layout'}
         _cur_method = _method_map.get(_cur_method, _cur_method)
         self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
@@ -1017,7 +1166,7 @@ class SettingsWindow(Gtk.Window):
         return scroll
 
     def _on_general_save(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy', 'FreeLayout']
         pmodes  = ['Auto', 'Client', 'Panel']
         new_lang = self._lang_combo.get_active_id() or 'en'
         updates = {
@@ -1040,7 +1189,7 @@ class SettingsWindow(Gtk.Window):
         self._show_info(msg)
 
     def _on_general_reset(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy', 'FreeLayout']
         pmodes  = ['Auto', 'Client', 'Panel']
         current = {
             'Method':               methods[self._method_combo.get_active()],
@@ -1123,9 +1272,9 @@ class SettingsWindow(Gtk.Window):
             _m = conf.get('Method', 'Telex')
             _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
                            'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese',
-                           'TocKy': 'Tốc ký (VNI)'}
+                           'TocKy': 'Tốc ký (VNI)', 'FreeLayout': 'Free Layout'}
             _m = _method_map.get(_m, _m)
-            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)']
+            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', 'Free Layout']
             self._method_combo.set_active(_ml.index(_m) if _m in _ml else 0)
             self._toggle_entry.set_text(conf['ToggleKey'])
             pm = conf['PreeditMode']
@@ -1396,7 +1545,7 @@ class SettingsWindow(Gtk.Window):
         save_clipboard_conf(conf)
         self._show_info(_('Clipboard History settings saved.\nChanges will take effect on next popup open.'))
 
-    # ── Tab 4: Screenshot ──────────────────────────────────────────────────────
+    # ── Tab 4: Screenshot ─────────────────────────────────────────────────────
 
     def _build_screenshot_tab(self):
         conf   = load_screenshot_conf()
@@ -1560,7 +1709,224 @@ class SettingsWindow(Gtk.Window):
         else:
             self._show_error('farolkey-screenshot not found in PATH.')
 
-    # ── Tab 5: About & Diagnostics ─────────────────────────────────────────────
+    # ── Tab 5: Free Layout ─────────────────────────────────────────────────────
+
+    def _build_free_layout_tab(self):
+        self._fl_conf_path = str(Path.home() / '.config' / 'farolkey' / 'free_layout.json')
+        self._fl_entries   = self._fl_load()
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        vbox.set_margin_top(12); vbox.set_margin_bottom(12)
+        vbox.set_margin_start(12); vbox.set_margin_end(12)
+
+        # ── Top bar ───────────────────────────────────────────────────────────
+        top_bar = Gtk.Box(spacing=8)
+        top_bar.set_margin_bottom(6)
+        tone_btn = Gtk.Button(label=_('🎹 Custom Tone Keys'))
+        tone_btn.set_tooltip_text(_('Assign keys for tone and diacritic actions'))
+        tone_btn.connect('clicked', self._on_fl_tone_keys)
+        top_bar.pack_end(tone_btn, False, False, 0)
+
+        hint_lbl = Gtk.Label(xalign=0)
+        hint_lbl.set_markup(_('<small>Define shortcuts: key → output string. Tones are configured separately.</small>'))
+        hint_lbl.set_line_wrap(True)
+        top_bar.pack_start(hint_lbl, True, True, 0)
+        vbox.pack_start(top_bar, False, False, 0)
+        vbox.pack_start(Gtk.Separator(), False, False, 4)
+
+        # ── Table ─────────────────────────────────────────────────────────────
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_margin_bottom(8)
+
+        self._fl_store = Gtk.ListStore(str, str)
+        self._fl_tree  = Gtk.TreeView(model=self._fl_store)
+        self._fl_tree.set_headers_visible(True)
+        self._fl_tree.set_grid_lines(Gtk.TreeViewGridLines.HORIZONTAL)
+        self._fl_tree.connect('row-activated', self._on_fl_row_activated)
+
+        for i, (title, expand) in enumerate([(_('Key'), False), (_('Output'), True)]):
+            renderer = Gtk.CellRendererText()
+            renderer.set_property('ellipsize', Pango.EllipsizeMode.END)
+            col = Gtk.TreeViewColumn(title, renderer, text=i)
+            col.set_resizable(True); col.set_expand(expand)
+            if i == 0: col.set_min_width(70)
+            self._fl_tree.append_column(col)
+
+        self._fl_selection = self._fl_tree.get_selection()
+        self._fl_selection.connect('changed', self._on_fl_selection_changed)
+        scroll.add(self._fl_tree)
+        vbox.pack_start(scroll, True, True, 0)
+
+        # ── Button bar ────────────────────────────────────────────────────────
+        vbox.pack_start(Gtk.Separator(), False, False, 4)
+        btn_bar = Gtk.Box(spacing=8)
+        self._fl_btn_add    = Gtk.Button(label=_('+ Add'))
+        self._fl_btn_edit   = Gtk.Button(label=_('✏ Edit'))
+        self._fl_btn_delete = Gtk.Button(label=_('🗑 Delete'))
+        fl_btn_import       = Gtk.Button(label=_('⬆ Import JSON'))
+        fl_btn_export       = Gtk.Button(label=_('⬇ Export JSON'))
+        self._fl_btn_edit.set_sensitive(False)
+        self._fl_btn_delete.set_sensitive(False)
+        self._fl_btn_add.connect('clicked',    self._on_fl_add)
+        self._fl_btn_edit.connect('clicked',   self._on_fl_edit)
+        self._fl_btn_delete.connect('clicked', self._on_fl_delete)
+        fl_btn_import.connect('clicked',       self._on_fl_import)
+        fl_btn_export.connect('clicked',       self._on_fl_export)
+        for b in [self._fl_btn_add, self._fl_btn_edit, self._fl_btn_delete, fl_btn_import, fl_btn_export]:
+            btn_bar.pack_start(b, False, False, 0)
+
+        save_btn = Gtk.Button(label=_('Save & Apply'))
+        save_btn.get_style_context().add_class('suggested-action')
+        save_btn.connect('clicked', self._on_fl_save)
+        btn_bar.pack_end(save_btn, False, False, 0)
+        vbox.pack_start(btn_bar, False, False, 0)
+
+        self._fl_refresh_table()
+        return vbox
+
+    # ── Free Layout helpers ────────────────────────────────────────────────────
+
+    _FL_TONE_FIELDS = [
+        ('tone_sac',        'Sắc  (á)'),
+        ('tone_huyen',      'Huyền  (à)'),
+        ('tone_hoi',        'Hỏi  (ả)'),
+        ('tone_nga',        'Ngã  (ã)'),
+        ('tone_nang',       'Nặng  (ạ)'),
+        ('diacritic_mui',   'Mũ  (â ê ô)'),
+        ('diacritic_breve', 'Breve  (ă)'),
+        ('diacritic_moc',   'Móc  (ơ ư)'),
+        ('diacritic_d',     'D gạch  (d→đ)'),
+        ('remove',          'Xóa dấu'),
+    ]
+
+    def _fl_load(self):
+        try:
+            with open(self._fl_conf_path, encoding='utf-8') as f:
+                data = json.load(f)
+            return {
+                'tones':     data.get('tones', {}),
+                'shortcuts': data.get('shortcuts', []),
+            }
+        except Exception:
+            return {'tones': {}, 'shortcuts': []}
+
+    def _fl_save_file(self):
+        os.makedirs(os.path.dirname(self._fl_conf_path), exist_ok=True)
+        tmp = self._fl_conf_path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(self._fl_entries, f, ensure_ascii=False, indent=2)
+            f.write('\n')
+        os.replace(tmp, self._fl_conf_path)
+
+    def _fl_refresh_table(self):
+        self._fl_store.clear()
+        for rule in self._fl_entries.get('shortcuts', []):
+            self._fl_store.append([rule.get('key', ''), rule.get('output', '')])
+
+    def _fl_selected_index(self):
+        model, it = self._fl_selection.get_selected()
+        if it is None: return -1
+        return model.get_path(it).get_indices()[0]
+
+    def _on_fl_selection_changed(self, _sel):
+        has = self._fl_selected_index() >= 0
+        self._fl_btn_edit.set_sensitive(has)
+        self._fl_btn_delete.set_sensitive(has)
+
+    def _on_fl_row_activated(self, *_): self._on_fl_edit(None)
+
+    def _on_fl_add(self, _btn):
+        dlg = _FreeLayoutRuleDialog(self.get_toplevel())
+        if dlg.run() == Gtk.ResponseType.OK:
+            k, o = dlg.get_rule()
+            if k and o:
+                shortcuts = self._fl_entries.setdefault('shortcuts', [])
+                # Replace existing entry with same key
+                shortcuts = [r for r in shortcuts if r.get('key') != k]
+                shortcuts.append({'key': k, 'output': o})
+                self._fl_entries['shortcuts'] = shortcuts
+                self._fl_refresh_table()
+        dlg.destroy()
+
+    def _on_fl_edit(self, _btn):
+        idx = self._fl_selected_index()
+        if idx < 0: return
+        shortcuts = self._fl_entries.get('shortcuts', [])
+        rule = shortcuts[idx]
+        dlg = _FreeLayoutRuleDialog(self.get_toplevel(), rule.get('key',''), rule.get('output',''))
+        if dlg.run() == Gtk.ResponseType.OK:
+            k, o = dlg.get_rule()
+            if k and o:
+                shortcuts[idx] = {'key': k, 'output': o}
+                self._fl_entries['shortcuts'] = shortcuts
+                self._fl_refresh_table()
+        dlg.destroy()
+
+    def _on_fl_delete(self, _btn):
+        idx = self._fl_selected_index()
+        if idx < 0: return
+        shortcuts = self._fl_entries.get('shortcuts', [])
+        del shortcuts[idx]
+        self._fl_entries['shortcuts'] = shortcuts
+        self._fl_refresh_table()
+
+    def _on_fl_save(self, _btn):
+        self._fl_save_file()
+        try:
+            subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
+        except Exception:
+            pass
+        self._show_info(_('Free Layout saved. Changes take effect immediately.'))
+
+    def _on_fl_import(self, _btn):
+        dlg = Gtk.FileChooserDialog(title=_('Import Free Layout JSON'), transient_for=self.get_toplevel(),
+                                    action=Gtk.FileChooserAction.OPEN)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Open'), Gtk.ResponseType.OK)
+        ff = Gtk.FileFilter(); ff.set_name('JSON (*.json)'); ff.add_pattern('*.json'); dlg.add_filter(ff)
+        if dlg.run() == Gtk.ResponseType.OK:
+            try:
+                with open(dlg.get_filename(), encoding='utf-8') as f:
+                    data = json.load(f)
+                if 'shortcuts' in data:
+                    self._fl_entries['shortcuts'] = data['shortcuts']
+                if 'tones' in data:
+                    self._fl_entries['tones'] = data['tones']
+                self._fl_refresh_table()
+                self._show_info(_('Imported successfully.'))
+            except Exception as e:
+                self._show_error(f'Import failed: {e}')
+        dlg.destroy()
+
+    def _on_fl_export(self, _btn):
+        dlg = Gtk.FileChooserDialog(title=_('Export Free Layout JSON'), transient_for=self.get_toplevel(),
+                                    action=Gtk.FileChooserAction.SAVE)
+        dlg.add_buttons(_('Cancel'), Gtk.ResponseType.CANCEL, _('Save'), Gtk.ResponseType.OK)
+        dlg.set_current_name('free_layout.json')
+        dlg.set_do_overwrite_confirmation(True)
+        if dlg.run() == Gtk.ResponseType.OK:
+            try:
+                path = dlg.get_filename()
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(self._fl_entries, f, ensure_ascii=False, indent=2)
+                    f.write('\n')
+                self._show_info(f'Exported to:\n{path}')
+            except Exception as e:
+                self._show_error(f'Export failed: {e}')
+        dlg.destroy()
+
+    def _on_fl_tone_keys(self, _btn):
+        dlg = _ToneKeyDialog(self.get_toplevel(), dict(self._fl_entries.get('tones', {})))
+        if dlg.run() == Gtk.ResponseType.OK:
+            self._fl_entries['tones'] = dlg.get_tones()
+            self._fl_save_file()
+            try:
+                subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
+            except Exception:
+                pass
+        dlg.destroy()
+
+    # ── Tab 6: About & Diagnostics ─────────────────────────────────────────────
 
     def _build_about_tab(self):
         scroll = Gtk.ScrolledWindow()

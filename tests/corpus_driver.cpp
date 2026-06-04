@@ -5,6 +5,7 @@
 
 #include "farolkey/config/config.h"
 #include "farolkey/core/engine.h"
+#include "farolkey/core/free_layout_config.h"
 
 namespace farolkey::test {
 namespace {
@@ -192,6 +193,22 @@ CorpusOutcome runCorpusCase(const nlohmann::json& c, CorpusRunStats* stats) {
         cfg.method = InputMethod::Microsoft;
     } else if (cfgName == "toc_ky") {
         cfg.method = InputMethod::TocKy;
+    } else if (cfgName == "free_layout") {
+        cfg.method = InputMethod::FreeLayout;
+        // Standard test layout: VNI-style tones (1-5, 0-9) + consonant shortcuts
+        cfg.freeLayout.tones.tone_sac      = '1';
+        cfg.freeLayout.tones.tone_huyen    = '2';
+        cfg.freeLayout.tones.tone_hoi      = '3';
+        cfg.freeLayout.tones.tone_nga      = '4';
+        cfg.freeLayout.tones.tone_nang     = '5';
+        cfg.freeLayout.tones.diacritic_mui   = '6';
+        cfg.freeLayout.tones.diacritic_breve = '8';
+        cfg.freeLayout.tones.diacritic_moc   = '7';
+        cfg.freeLayout.tones.diacritic_d     = '9';
+        cfg.freeLayout.tones.remove          = '0';
+        cfg.freeLayout.shortcuts = {
+            {'f', "ph"}, {'j', "gi"}, {'w', "ng"},
+        };
     } else if (cfgName == "default" || cfgName == "telex") {
         // default Telex
     } else {

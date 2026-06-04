@@ -14,6 +14,7 @@ add_library(farolkey_core
     src/core/engine.cpp
     src/core/vi_syllable.cpp
     src/core/user_dict.cpp
+    src/core/free_layout_config.cpp
     src/config/config.cpp
     src/common/logger.cpp
 )
@@ -159,6 +160,10 @@ if(FAROLKEY_BUILD_TESTS)
     add_executable(farolkey_toc_ky_smoke_test tests/toc_ky_smoke_test.cpp)
     target_link_libraries(farolkey_toc_ky_smoke_test PRIVATE farolkey_core)
     add_test(NAME farolkey_toc_ky_smoke_test COMMAND farolkey_toc_ky_smoke_test)
+
+    add_executable(farolkey_free_layout_smoke_test tests/free_layout_smoke_test.cpp)
+    target_link_libraries(farolkey_free_layout_smoke_test PRIVATE farolkey_core)
+    add_test(NAME farolkey_free_layout_smoke_test COMMAND farolkey_free_layout_smoke_test)
 
     add_executable(farolkey_config_smoke_test tests/config_smoke_test.cpp)
     target_link_libraries(farolkey_config_smoke_test PRIVATE farolkey_core)
