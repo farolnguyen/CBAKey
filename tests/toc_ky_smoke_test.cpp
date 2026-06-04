@@ -68,8 +68,8 @@ static void test_toc_ky_initial_shortcuts() {
     assert(typeAndFlush(e, "fo") == "pho");  resetEngine(e);
     // j → gi
     assert(typeAndFlush(e, "ja") == "gia");  resetEngine(e);
-    // k → kh (initial, no vowel)
-    assert(typeAndFlush(e, "ki") == "khi");  resetEngine(e);
+    // k without vowel = literal 'k' (no shortcut — users type kh literally)
+    assert(typeAndFlush(e, "ki") == "ki");   resetEngine(e);
     // c → k
     assert(typeAndFlush(e, "ca") == "ka");   resetEngine(e);
     // z → d
@@ -94,14 +94,14 @@ static void test_toc_ky_final_shortcuts() {
     assert(typeAndFlush(e, "ak") == "ach");  resetEngine(e);
 }
 
-// ── k disambiguation: initial vs final ────────────────────────────────────────
+// ── k: literal initial, ch final ─────────────────────────────────────────────
 
 static void test_toc_ky_k_disambiguation() {
     auto e = makeTocKy();
-    // k without vowel = kh (initial)
-    assert(typeAndFlush(e, "ki") == "khi");  resetEngine(e);
-    assert(typeAndFlush(e, "koa") == "khoa"); resetEngine(e);
-    // k after vowel = ch (final)
+    // k without vowel = literal 'k' (type 'kh' normally for kh-sound)
+    assert(typeAndFlush(e, "ki") == "ki");   resetEngine(e);
+    assert(typeAndFlush(e, "koa") == "koa"); resetEngine(e);
+    // k after vowel = ch (final coda shortcut)
     assert(typeAndFlush(e, "ak") == "ach");  resetEngine(e);
     assert(typeAndFlush(e, "ik") == "ich");  resetEngine(e);
 }
@@ -114,8 +114,8 @@ static void test_toc_ky_words() {
     assert(typeAndFlush(e, "fo73") == "phở");    resetEngine(e);
     // "giờ": j + o7 + 2 → gi + ơ + huyền
     assert(typeAndFlush(e, "jo72") == "giờ");    resetEngine(e);
-    // "khi": k + i → khi
-    assert(typeAndFlush(e, "ki") == "khi");      resetEngine(e);
+    // "khi": k (literal) + h + i → khi
+    assert(typeAndFlush(e, "khi") == "khi");     resetEngine(e);
     // "được": d→đ, u+o+7→ươ, c, 5→nặng = "đươc5" → "được"
     assert(typeAndFlush(e, "duoc75") == "được"); resetEngine(e);
     // "ngang": w + a + g → ng + a + ng

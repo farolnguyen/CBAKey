@@ -948,10 +948,12 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             const bool hasVowel = hasVietnameseVowel(decoded);
             if (!hasVowel) {
                 // Initial shortcuts: active when no vowel in buffer yet.
+                // Note: 'k' is NOT a shortcut here — it stays literal so users can
+                // type words spelled with 'k' (e.g. "kế", "kỳ") without confusion.
+                // The sound /kh/ is typed literally as 'k'+'h'.
                 switch (key) {
                     case 'f': decoded.push_back(U'p'); decoded.push_back(U'h'); transformed = true; break;
                     case 'j': decoded.push_back(U'g'); decoded.push_back(U'i'); transformed = true; break;
-                    case 'k': decoded.push_back(U'k'); decoded.push_back(U'h'); transformed = true; break;
                     case 'c': decoded.push_back(U'k');                          transformed = true; break;
                     case 'z': decoded.push_back(U'd');                          transformed = true; break;
                     case 'd': decoded.push_back(U'đ');                     transformed = true; break;  // đ
