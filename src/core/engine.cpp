@@ -954,7 +954,6 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
                 switch (key) {
                     case 'f': decoded.push_back(U'p'); decoded.push_back(U'h'); transformed = true; break;
                     case 'j': decoded.push_back(U'g'); decoded.push_back(U'i'); transformed = true; break;
-                    case 'c': decoded.push_back(U'k');                          transformed = true; break;
                     case 'z': decoded.push_back(U'd');                          transformed = true; break;
                     case 'd': decoded.push_back(U'đ');                     transformed = true; break;  // đ
                     case 'w': decoded.push_back(U'n'); decoded.push_back(U'g'); transformed = true; break;

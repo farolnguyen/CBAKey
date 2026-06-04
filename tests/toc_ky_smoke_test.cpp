@@ -70,8 +70,8 @@ static void test_toc_ky_initial_shortcuts() {
     assert(typeAndFlush(e, "ja") == "gia");  resetEngine(e);
     // k without vowel = literal 'k' (no shortcut — users type kh literally)
     assert(typeAndFlush(e, "ki") == "ki");   resetEngine(e);
-    // c → k
-    assert(typeAndFlush(e, "ca") == "ka");   resetEngine(e);
+    // c → literal 'c' (c and k are different letters in Vietnamese orthography)
+    assert(typeAndFlush(e, "ca") == "ca");   resetEngine(e);
     // z → d
     assert(typeAndFlush(e, "zo") == "do");   resetEngine(e);
     // d → đ
@@ -122,10 +122,10 @@ static void test_toc_ky_words() {
     assert(typeAndFlush(e, "wag") == "ngang");   resetEngine(e);
     // "anh": a + h → a + nh
     assert(typeAndFlush(e, "ah") == "anh");      resetEngine(e);
-    // c→k, a, h→nh, 5→nặng: output "kạnh" (c and k are same phoneme in Tốc ký)
-    assert(typeAndFlush(e, "cah5") == "kạnh");   resetEngine(e);
-    // c→k, a, k→ch, 5→nặng: output "kạch"
-    assert(typeAndFlush(e, "cak5") == "kạch");   resetEngine(e);
+    // c literal, a, h→nh, 5→nặng: "cạnh"
+    assert(typeAndFlush(e, "cah5") == "cạnh");   resetEngine(e);
+    // c literal, a, k→ch, 5→nặng: "cạch"
+    assert(typeAndFlush(e, "cak5") == "cạch");   resetEngine(e);
     // "quê": q + e6 → qu + ê
     assert(typeAndFlush(e, "qe6") == "quê");     resetEngine(e);
     // "phím": f + i + m → ph + i + m (no tone)
