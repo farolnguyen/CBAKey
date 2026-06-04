@@ -58,6 +58,7 @@ struct UIStrings {
     const char* methodViqrStar;      // "Input Method: VIQR*"
     const char* methodSimpleTelex;    // "Input Method: Simple Telex"
     const char* methodSimpleTelex2;   // "Input Method: Simple Telex 2"
+    const char* methodMicrosoft;      // "Input Method: Microsoft Vietnamese"
     const char* screenshotLong;
 };
 
@@ -69,7 +70,7 @@ static constexpr UIStrings kStringsEn {
     "Underline while composing",
     "Settings (v" FAROLKEY_VERSION ")", "FarolKey Settings (v" FAROLKEY_VERSION ")",
     "Input Method: Telex", "Input Method: VNI", "Input Method: VIQR", "Input Method: VIQR*",
-    "Input Method: Simple Telex", "Input Method: Simple Telex 2",
+    "Input Method: Simple Telex", "Input Method: Simple Telex 2", "Input Method: Microsoft Vietnamese",
     "Take a screenshot with FarolKey",
 };
 
@@ -81,7 +82,7 @@ static constexpr UIStrings kStringsVi {
     "Gạch chân khi gõ",
     "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
     "Phương thức: Telex", "Phương thức: VNI", "Phương thức: VIQR", "Phương thức: VIQR*",
-    "Phương thức: Simple Telex", "Phương thức: Simple Telex 2",
+    "Phương thức: Simple Telex", "Phương thức: Simple Telex 2", "Phương thức: Microsoft Vietnamese",
     "Chụp màn hình với FarolKey",
 };
 
@@ -205,6 +206,7 @@ farolkey::config::RuntimeConfig toRuntimeConfig(
         case farolkey::adapter::fcitx5::FarolKeyMethod::ViqrStar:     rc.method = farolkey::core::InputMethod::ViqrStar;     break;
         case farolkey::adapter::fcitx5::FarolKeyMethod::SimpleTelex:  rc.method = farolkey::core::InputMethod::SimpleTelex;  break;
         case farolkey::adapter::fcitx5::FarolKeyMethod::SimpleTelex2: rc.method = farolkey::core::InputMethod::SimpleTelex2; break;
+        case farolkey::adapter::fcitx5::FarolKeyMethod::Microsoft:    rc.method = farolkey::core::InputMethod::Microsoft;    break;
     }
     rc.enableUserDictionary   = enableUserDict;
     rc.fcitx5CommittedRewrite = cfg.committedRewrite.value();
@@ -386,6 +388,7 @@ public:
         ui.unregisterAction(&viqrStarAction_);
         ui.unregisterAction(&simpleTelexAction_);
         ui.unregisterAction(&simpleTelex2Action_);
+        ui.unregisterAction(&microsoftAction_);
         ui.unregisterAction(&dictAction_);
         ui.unregisterAction(&clipboardAction_);
         ui.unregisterAction(&underlineAction_);
@@ -807,12 +810,22 @@ private:
         });
         ui.registerAction("farolkey-simple-telex2", &simpleTelex2Action_);
 
+        microsoftAction_.setShortText("Microsoft Vietnamese");
+        microsoftAction_.setChecked(config_.method.value() ==
+                                    farolkey::adapter::fcitx5::FarolKeyMethod::Microsoft);
+        microsoftAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
+            FCITX_UNUSED(ic);
+            switchMethod(farolkey::adapter::fcitx5::FarolKeyMethod::Microsoft);
+        });
+        ui.registerAction("farolkey-microsoft", &microsoftAction_);
+
         methodMenu_.addAction(&telexAction_);
         methodMenu_.addAction(&vniAction_);
         methodMenu_.addAction(&viqrAction_);
         methodMenu_.addAction(&viqrStarAction_);
         methodMenu_.addAction(&simpleTelexAction_);
         methodMenu_.addAction(&simpleTelex2Action_);
+        methodMenu_.addAction(&microsoftAction_);
         // Show active method in the parent action text so it's visible without opening menu.
         refreshMethodMenuLabel();
         methodMenuAction_.setMenu(&methodMenu_);
@@ -902,6 +915,7 @@ private:
                 case farolkey::core::InputMethod::ViqrStar:     *config_.method.mutableValue() = M::ViqrStar;     break;
                 case farolkey::core::InputMethod::SimpleTelex:  *config_.method.mutableValue() = M::SimpleTelex;  break;
                 case farolkey::core::InputMethod::SimpleTelex2: *config_.method.mutableValue() = M::SimpleTelex2; break;
+                case farolkey::core::InputMethod::Microsoft:    *config_.method.mutableValue() = M::Microsoft;    break;
             }
             *config_.committedRewrite.mutableValue() = legacy.fcitx5CommittedRewrite;
         }
@@ -955,6 +969,7 @@ private:
             case M::ViqrStar:     methodMenuAction_.setShortText(uiStrings_.methodViqrStar);     break;
             case M::SimpleTelex:  methodMenuAction_.setShortText(uiStrings_.methodSimpleTelex);  break;
             case M::SimpleTelex2: methodMenuAction_.setShortText(uiStrings_.methodSimpleTelex2); break;
+            case M::Microsoft:    methodMenuAction_.setShortText(uiStrings_.methodMicrosoft);    break;
         }
     }
 
@@ -996,6 +1011,7 @@ private:
         viqrStarAction_.setChecked(m == M::ViqrStar);
         simpleTelexAction_.setChecked(m == M::SimpleTelex);
         simpleTelex2Action_.setChecked(m == M::SimpleTelex2);
+        microsoftAction_.setChecked(m == M::Microsoft);
         underlineAction_.setChecked(config_.showPreeditUnderline.value());
         refreshMethodMenuLabel();
         refreshScreenshotLabel();   // pick up hotkey changes from screenshot.conf
@@ -1158,6 +1174,7 @@ private:
     fcitx::SimpleAction viqrStarAction_;
     fcitx::SimpleAction simpleTelexAction_;
     fcitx::SimpleAction simpleTelex2Action_;
+    fcitx::SimpleAction microsoftAction_;
     fcitx::SimpleAction dictAction_;
     fcitx::SimpleAction clipboardAction_;
     fcitx::SimpleAction screenshotAction_;

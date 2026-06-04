@@ -622,13 +622,13 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(section(_('Input')), False, False, 0)
 
         self._method_combo = Gtk.ComboBoxText()
-        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2']
+        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese']
         for m in _methods:
             self._method_combo.append_text(m)
         _cur_method = conf.get('Method', 'Telex')
         # map config file enum names to UI display names
         _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
-                       'SimpleTelex2': 'Simple Telex 2'}
+                       'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese'}
         _cur_method = _method_map.get(_cur_method, _cur_method)
         self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
@@ -693,7 +693,7 @@ class SettingsWindow(Gtk.Window):
         return scroll
 
     def _on_general_save(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft']
         pmodes  = ['Auto', 'Client', 'Panel']
         new_lang = self._lang_combo.get_active_id() or 'en'
         updates = {
@@ -716,7 +716,7 @@ class SettingsWindow(Gtk.Window):
         self._show_info(msg)
 
     def _on_general_reset(self, _btn):
-        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2']
+        methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft']
         pmodes  = ['Auto', 'Client', 'Panel']
         current = {
             'Method':               methods[self._method_combo.get_active()],
@@ -798,9 +798,9 @@ class SettingsWindow(Gtk.Window):
             conf = load_general_conf()
             _m = conf.get('Method', 'Telex')
             _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
-                           'SimpleTelex2': 'Simple Telex 2'}
+                           'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese'}
             _m = _method_map.get(_m, _m)
-            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2']
+            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese']
             self._method_combo.set_active(_ml.index(_m) if _m in _ml else 0)
             self._toggle_entry.set_text(conf['ToggleKey'])
             pm = conf['PreeditMode']
