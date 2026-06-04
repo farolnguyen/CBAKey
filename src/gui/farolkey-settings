@@ -541,6 +541,281 @@ label.status-ok   { color: #4caf50; }
 label.status-err  { color: #f44336; }
 """
 
+# ── Method Reference Data (Vietnamese) ───────────────────────────────────────
+
+_METHOD_REFS = {
+    'Telex': {
+        'desc': 'Dùng chữ cái để tạo dấu và thanh điệu. Đây là kiểu gõ phổ biến nhất tại Việt Nam.',
+        'sections': [
+            ('Dấu chữ cái', 'table', [
+                ('aa', 'â — a mũ'),   ('ee', 'ê — e mũ'),   ('oo', 'ô — o mũ'),
+                ('aw', 'ă — a ngắn'), ('ow', 'ơ — o râu'),  ('uw / w', 'ư — u râu'),
+                ('dd', 'đ — d gạch'),
+            ]),
+            ('Thanh điệu', 'table', [
+                ('s', 'Sắc  ´  →  á ấ ắ ớ ứ'),
+                ('f', 'Huyền  `  →  à ầ ằ ờ ừ'),
+                ('r', 'Hỏi  ̉  →  ả ẩ ẳ ở ử'),
+                ('x', 'Ngã  ̃  →  ã ẫ ẵ ỡ ữ'),
+                ('j', 'Nặng  ̣  →  ạ ậ ặ ợ ự'),
+            ]),
+            ('Đặc biệt', 'notes', [
+                'z — xóa tất cả dấu (bổ → bo)',
+                'Hoàn tác double-key: gõ lại cùng phím để về ký tự thường (aaa → aa)',
+                'Thứ tự linh hoạt: as = sa (đều ra á)',
+            ]),
+        ],
+    },
+    'VNI': {
+        'desc': 'Dùng phím số để tạo dấu và thanh điệu. Phổ biến trong cộng đồng người Việt hải ngoại.',
+        'sections': [
+            ('Dấu số', 'table', [
+                ('a6', 'â'),  ('e6', 'ê'),  ('o6', 'ô'),
+                ('a8', 'ă'),  ('o7', 'ơ'),  ('u7', 'ư'),
+                ('d9', 'đ'),
+            ]),
+            ('Thanh điệu', 'table', [
+                ('1', 'Sắc  →  á'),
+                ('2', 'Huyền  →  à'),
+                ('3', 'Hỏi  →  ả'),
+                ('4', 'Ngã  →  ã'),
+                ('5', 'Nặng  →  ạ'),
+            ]),
+            ('Đặc biệt', 'notes', [
+                '0 — xóa dấu',
+                'Thứ tự số linh hoạt: a16 = a61 = ấ (â + sắc)',
+                'Ví dụ: viet6 → việt,  duong72 → đường',
+            ]),
+        ],
+    },
+    'VIQR': {
+        'desc': 'Chuẩn ASCII (RFC 1456). Dùng ký hiệu đặc biệt biểu diễn dấu. Phù hợp khi chỉ có bàn phím ASCII.',
+        'sections': [
+            ('Dấu ký hiệu', 'table', [
+                ('^',  'Mũ  →  â ê ô  (gõ: a^ e^ o^)'),
+                ('(',  'Ngắn  →  ă  (gõ: a()'),
+                ('+',  'Móc  →  ơ ư  (gõ: o+ u+)'),
+                ('dd', 'đ'),
+            ]),
+            ('Thanh điệu', 'table', [
+                ("'", "Sắc  →  á"),
+                ('`', 'Huyền  →  à'),
+                ('?', 'Hỏi  →  ả'),
+                ('~', 'Ngã  →  ã'),
+                ('.', 'Nặng  →  ạ'),
+            ]),
+            ('Đặc biệt', 'notes', [
+                "\\ — xóa dấu",
+                "Ký tự thật (gõ double-key): ''→'   ..→.   \\\\→\\   ^^→^",
+                "Ví dụ: a^' = ấ,  o+. = ợ,  u+' = ứ",
+            ]),
+        ],
+    },
+    'VIQR*': {
+        'desc': 'Biến thể VIQR: dùng dấu sao (*) thay dấu cộng (+) để tạo chữ có móc (ơ, ư). Phím + là ký tự bình thường.',
+        'sections': [
+            ('Khác biệt so với VIQR', 'table', [
+                ('o*', 'ơ  (trong VIQR là o+)'),
+                ('u*', 'ư  (trong VIQR là u+)'),
+                ('+',  'Ký tự + bình thường (không tạo dấu)'),
+                ('**', '* — ký tự bình thường (double-key)'),
+            ]),
+            ('Còn lại giống VIQR', 'notes', [
+                'Dấu mũ: a^  e^  o^  →  â ê ô',
+                'Dấu ngắn: a(  →  ă',
+                "Thanh điệu: '  `  ?  ~  .",
+                'Xóa dấu: \\',
+            ]),
+        ],
+    },
+    'Simple Telex': {
+        'desc': 'Telex đơn giản — chỉ xử lý thanh điệu, không tạo dấu chữ cái. Dành cho người hay mix tiếng Anh vào văn bản.',
+        'sections': [
+            ('Thanh điệu (duy nhất hoạt động)', 'table', [
+                ('s', 'Sắc  →  á'),
+                ('f', 'Huyền  →  à'),
+                ('r', 'Hỏi  →  ả'),
+                ('x', 'Ngã  →  ã'),
+                ('j', 'Nặng  →  ạ'),
+            ]),
+            ('Lưu ý', 'notes', [
+                'w  a  e  o  d  z — là ký tự thường, KHÔNG tạo dấu',
+                'Để gõ â ê ô ă ơ ư đ: cần chọn từ bảng ký tự hệ thống',
+                'Cảnh báo: từ tiếng Anh chứa s/f/r/x/j sẽ bị thêm dấu nếu sau nguyên âm',
+                'Ví dụ: "soft" → s(phụ âm) + o + f(huyền→ò) + t = "sòt" (không phải "soft")',
+            ]),
+        ],
+    },
+    'Simple Telex 2': {
+        'desc': 'Telex đầy đủ + tính năng bổ sung: w đứng một mình tạo ư ngay cả khi không có nguyên âm trước. Tương đương stelex2 trong ibus-unikey.',
+        'sections': [
+            ('Tính năng thêm so với Telex', 'table', [
+                ('w (đứng một mình)', 'ư'),
+                ('wng', 'ưng'),
+                ('wj', 'ự'),
+                ('ww', 'w  (double-key hoàn tác)'),
+            ]),
+            ('Còn lại giống Telex', 'notes', [
+                'Dấu: aa→â  ee→ê  oo→ô  aw→ă  ow→ơ  uw→ư  dd→đ',
+                'Thanh điệu: s f r x j',
+                'Xóa dấu: z',
+                'Telex thông thường: w sau nguyên âm vẫn hoạt động bình thường (ow→ơ)',
+            ]),
+        ],
+    },
+    'Microsoft Vietnamese': {
+        'desc': 'Kiểu gõ của Microsoft, tích hợp sẵn trong Windows 10+. Phím số trực tiếp cho ra ký tự đặc biệt — không cần gõ chữ cái nền trước.',
+        'sections': [
+            ('Phím số tạo ký tự trực tiếp', 'table', [
+                ('1', 'ă'),  ('2', 'â'),  ('3', 'ê'),
+                ('4', 'ô'),  ('7', 'ư'),  ('8', 'ơ'),
+                ('0', 'đ'),
+            ]),
+            ('Thanh điệu', 'table', [
+                ('s', 'Sắc  →  á ắ ấ ớ ứ'),
+                ('j', 'Nặng  →  ạ ặ ậ ợ ự'),
+                ('5', 'Huyền  →  à ằ ầ ờ ừ'),
+                ('6', 'Hỏi  →  ả ẳ ẩ ở ử'),
+                ('9', 'Ngã  →  ã ẵ ẫ ỡ ữ'),
+            ]),
+            ('Lưu ý quan trọng', 'notes', [
+                's trước nguyên âm = phụ âm bình thường',
+                's sau nguyên âm = dấu sắc  (ví dụ: 1+s = ắ)',
+                'Double-key hoàn tác: 11 → 1,  77 → 7',
+                'Ví dụ gõ "thắng":  t → h → 1(ă) → s(sắc→ắ) → n → g',
+                'Ví dụ gõ "sắc":  s(phụ âm) → 1(ă) → s(sắc→ắ) → c',
+            ]),
+        ],
+    },
+}
+
+
+class MethodReferenceDialog(Gtk.Dialog):
+    _METHODS = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese']
+
+    def __init__(self, parent, initial_method='Telex'):
+        super().__init__(
+            title=_('Hướng dẫn kiểu gõ'),
+            transient_for=parent,
+            modal=True,
+            destroy_with_parent=True,
+        )
+        self.set_default_size(760, 540)
+        self.add_button(_('Đóng'), Gtk.ResponseType.CLOSE)
+        self.connect('response', lambda d, _r: d.destroy())
+
+        content = self.get_content_area()
+        content.set_spacing(0)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+
+        # ── Sidebar ───────────────────────────────────────────────────────────
+        sidebar_scroll = Gtk.ScrolledWindow()
+        sidebar_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sidebar_scroll.set_size_request(172, -1)
+
+        self._listbox = Gtk.ListBox()
+        self._listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+
+        for m in self._METHODS:
+            lb_row = Gtk.ListBoxRow()
+            lbl = Gtk.Label(label=m, xalign=0)
+            lbl.set_margin_start(14)
+            lbl.set_margin_end(14)
+            lbl.set_margin_top(9)
+            lbl.set_margin_bottom(9)
+            lb_row.add(lbl)
+            self._listbox.add(lb_row)
+
+        sidebar_scroll.add(self._listbox)
+        outer.pack_start(sidebar_scroll, False, False, 0)
+        outer.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 0)
+
+        # ── Content ───────────────────────────────────────────────────────────
+        self._content_scroll = Gtk.ScrolledWindow()
+        self._content_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        self._content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self._content_box.set_margin_start(20)
+        self._content_box.set_margin_end(20)
+        self._content_box.set_margin_top(16)
+        self._content_box.set_margin_bottom(16)
+        self._content_scroll.add(self._content_box)
+
+        outer.pack_start(self._content_scroll, True, True, 0)
+        content.pack_start(outer, True, True, 0)
+
+        self._listbox.connect('row-selected', self._on_select)
+
+        idx = self._METHODS.index(initial_method) if initial_method in self._METHODS else 0
+        self._listbox.select_row(self._listbox.get_row_at_index(idx))
+
+        self.show_all()
+
+    # ── Rendering ─────────────────────────────────────────────────────────────
+
+    def _clear(self):
+        for child in self._content_box.get_children():
+            self._content_box.remove(child)
+
+    def _lbl(self, markup, wrap=False, margin_start=0):
+        w = Gtk.Label()
+        w.set_markup(markup)
+        w.set_halign(Gtk.Align.START)
+        w.set_margin_start(margin_start)
+        if wrap:
+            w.set_line_wrap(True)
+            w.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self._content_box.pack_start(w, False, False, 0)
+
+    def _table(self, rows):
+        grid = Gtk.Grid()
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(3)
+        grid.set_margin_start(12)
+        for i, (key, val) in enumerate(rows):
+            k = Gtk.Label()
+            k.set_markup('<tt><b>' + GLib.markup_escape_text(key) + '</b></tt>')
+            k.set_halign(Gtk.Align.START)
+            a = Gtk.Label(label='→')
+            a.set_halign(Gtk.Align.CENTER)
+            v = Gtk.Label(label=val)
+            v.set_halign(Gtk.Align.START)
+            v.set_line_wrap(True)
+            grid.attach(k, 0, i, 1, 1)
+            grid.attach(a, 1, i, 1, 1)
+            grid.attach(v, 2, i, 1, 1)
+        self._content_box.pack_start(grid, False, False, 0)
+
+    def _notes(self, items):
+        for item in items:
+            self._lbl(GLib.markup_escape_text('• ' + item), wrap=True, margin_start=12)
+
+    def _on_select(self, _lb, row):
+        if row is None:
+            return
+        self._clear()
+        name = row.get_child().get_text()
+        data = _METHOD_REFS.get(name)
+        if not data:
+            return
+
+        self._lbl('<span size="x-large" weight="bold">' +
+                  GLib.markup_escape_text(name) + '</span>')
+        self._lbl(GLib.markup_escape_text(data['desc']), wrap=True)
+        self._content_box.pack_start(Gtk.Separator(), False, False, 4)
+
+        for sec_title, sec_type, sec_data in data.get('sections', []):
+            self._lbl('<b>' + GLib.markup_escape_text(sec_title) + '</b>')
+            if sec_type == 'table':
+                self._table(sec_data)
+            elif sec_type == 'notes':
+                self._notes(sec_data)
+            self._content_box.pack_start(Gtk.Box(), False, False, 2)
+
+        self._content_box.show_all()
+
+
 class SettingsWindow(Gtk.Window):
 
     def __init__(self):
@@ -632,7 +907,21 @@ class SettingsWindow(Gtk.Window):
         _cur_method = _method_map.get(_cur_method, _cur_method)
         self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
-        vbox.pack_start(row(_('Input method'), self._method_combo), False, False, 4)
+
+        _ref_btn = Gtk.Button(label=_('? Hướng dẫn'))
+        _ref_btn.set_tooltip_text(_('Xem bảng phím tắt và luật gõ của từng kiểu'))
+        _ref_btn.connect('clicked', lambda _: MethodReferenceDialog(
+            self.get_toplevel(),
+            self._method_combo.get_active_text() or 'Telex',
+        ).run())
+
+        _method_row = Gtk.Box(spacing=12)
+        _method_lbl = Gtk.Label(label=_('Input method'), xalign=0)
+        _method_lbl.set_size_request(220, -1)
+        _method_row.pack_start(_method_lbl, False, False, 0)
+        _method_row.pack_start(self._method_combo, False, False, 0)
+        _method_row.pack_start(_ref_btn, False, False, 0)
+        vbox.pack_start(_method_row, False, False, 4)
 
         self._toggle_entry = Gtk.Entry()
         self._toggle_entry.set_text(conf.get('ToggleKey', 'Control+Alt+z'))
