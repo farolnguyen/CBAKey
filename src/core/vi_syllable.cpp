@@ -695,6 +695,15 @@ bool applyTelexTransform(std::u32string& buffer, char key) {
         if (oaGlide) {
             pos = rightmostNucleusCharWithBase(buffer, *span, U"aă");  // 'a' or 'ă'
             newSetIdx = 1;  // → ă (breve)
+        } else if (nucleusLen == 2 &&
+                   tonePatternBucket(buffer[span->medial_end])     == U'u' &&
+                   tonePatternBucket(buffer[span->medial_end + 1]) == U'u') {
+            // "uu" + 'w' → transform the LEFTMOST 'u' to 'ư', keeping the
+            // second 'u' as the glide/coda vowel.  Result: "ưu" (valid
+            // Vietnamese diphthong), not "uư" (invalid).
+            // This lets users type "lưu" as "luuw" alongside the standard "luwu".
+            pos = span->medial_end;
+            newSetIdx = 10;  // u → ư
         } else {
             pos = rightmostNucleusCharWithBase(buffer, *span, U"ou");
             if (!pos) {
