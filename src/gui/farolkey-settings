@@ -1624,32 +1624,34 @@ class SettingsWindow(Gtk.Window):
         self._fl_conf_path = str(Path.home() / '.config' / 'farolkey' / 'free_layout.json')
         self._fl_entries   = self._fl_load()
 
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        # Single scrollable panel — shortcuts on top, tone keys below
+        outer_scroll = Gtk.ScrolledWindow()
+        outer_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        vbox.set_margin_top(14); vbox.set_margin_bottom(14)
+        vbox.set_margin_start(20); vbox.set_margin_end(20)
 
-        # ── Two-panel split ───────────────────────────────────────────────────
-        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        paned.set_position(360)
+        def section(text):
+            lbl = Gtk.Label(label=text, xalign=0)
+            lbl.get_style_context().add_class('section-hdr')
+            return lbl
 
-        # ── LEFT: Shortcut table ──────────────────────────────────────────────
-        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        left.set_margin_top(10); left.set_margin_start(12)
-        left.set_margin_end(6);  left.set_margin_bottom(10)
+        def hint(text):
+            lbl = Gtk.Label(label=text, xalign=0)
+            lbl.set_line_wrap(True)
+            lbl.get_style_context().add_class('hint')
+            lbl.set_margin_start(4)
+            return lbl
 
-        sec_lbl = Gtk.Label(label=_('Shortcut Keys'), xalign=0)
-        sec_lbl.get_style_context().add_class('section-hdr')
-        left.pack_start(sec_lbl, False, False, 0)
-
-        hint_lbl = Gtk.Label(xalign=0)
-        hint_lbl.set_markup('<small>' +
-            GLib.markup_escape_text(_('key → output, active only when no vowel in buffer')) +
-            '</small>')
-        hint_lbl.set_line_wrap(True)
-        hint_lbl.get_style_context().add_class('hint')
-        hint_lbl.set_margin_bottom(4)
-        left.pack_start(hint_lbl, False, False, 0)
+        # ── Section 1: Shortcut Keys ──────────────────────────────────────────
+        vbox.pack_start(section(_('Shortcut Keys')), False, False, 0)
+        vbox.pack_start(hint(_('key → output, active only when no vowel in buffer')), False, False, 2)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_size_request(-1, 150)
+        scroll.set_margin_top(6)
+
         self._fl_store = Gtk.ListStore(str, str)
         self._fl_tree  = Gtk.TreeView(model=self._fl_store)
         self._fl_tree.set_headers_visible(True)
@@ -1665,10 +1667,10 @@ class SettingsWindow(Gtk.Window):
         self._fl_selection = self._fl_tree.get_selection()
         self._fl_selection.connect('changed', self._on_fl_selection_changed)
         scroll.add(self._fl_tree)
-        left.pack_start(scroll, True, True, 0)
+        vbox.pack_start(scroll, False, False, 0)
 
-        left.pack_start(Gtk.Separator(), False, False, 4)
         btn_bar = Gtk.Box(spacing=6)
+        btn_bar.set_margin_top(6)
         self._fl_btn_add    = Gtk.Button(label=_('+ Add'))
         self._fl_btn_edit   = Gtk.Button(label=_('✏ Edit'))
         self._fl_btn_delete = Gtk.Button(label=_('🗑 Delete'))
@@ -1683,32 +1685,16 @@ class SettingsWindow(Gtk.Window):
         fl_btn_export.connect('clicked',       self._on_fl_export)
         for b in [self._fl_btn_add, self._fl_btn_edit, self._fl_btn_delete, fl_btn_import, fl_btn_export]:
             btn_bar.pack_start(b, False, False, 0)
-        left.pack_start(btn_bar, False, False, 0)
-        paned.pack1(left, True, True)
+        vbox.pack_start(btn_bar, False, False, 0)
 
-        # ── RIGHT: Tone keys inline ───────────────────────────────────────────
-        right_scroll = Gtk.ScrolledWindow()
-        right_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        right.set_margin_top(10); right.set_margin_start(6)
-        right.set_margin_end(12); right.set_margin_bottom(10)
+        # ── Section 2: Tone & Diacritic Keys ─────────────────────────────────
+        vbox.pack_start(Gtk.Separator(), False, False, 12)
+        vbox.pack_start(section(_('Tone & Diacritic Keys')), False, False, 0)
+        vbox.pack_start(hint(_('Click a key cell and press a key to assign. Leave empty to disable.')),
+                        False, False, 2)
 
-        sec_lbl2 = Gtk.Label(label=_('Tone & Diacritic Keys'), xalign=0)
-        sec_lbl2.get_style_context().add_class('section-hdr')
-        right.pack_start(sec_lbl2, False, False, 0)
-
-        hint_lbl2 = Gtk.Label(xalign=0)
-        hint_lbl2.set_markup('<small>' +
-            GLib.markup_escape_text(_('Click a key cell and press a key to assign. Leave empty to disable.')) +
-            '</small>')
-        hint_lbl2.set_line_wrap(True)
-        hint_lbl2.get_style_context().add_class('hint')
-        hint_lbl2.set_margin_bottom(6)
-        right.pack_start(hint_lbl2, False, False, 0)
-
-        # Tone grid
-        grid = Gtk.Grid(row_spacing=2, column_spacing=8)
-        grid.set_margin_start(4)
+        grid = Gtk.Grid(row_spacing=4, column_spacing=16)
+        grid.set_margin_top(8); grid.set_margin_start(4)
         for col_i, col_title in enumerate([_('Action'), _('Example'), _('Key')]):
             h = Gtk.Label()
             h.set_markup(f'<b>{GLib.markup_escape_text(col_title)}</b>')
@@ -1722,12 +1708,12 @@ class SettingsWindow(Gtk.Window):
         for row_i, (field, label, example) in enumerate(self._FL_TONE_FIELDS):
             r = row_i + 2
             lbl_a = Gtk.Label(label=label, xalign=0)
-            lbl_a.set_margin_top(4); lbl_a.set_margin_bottom(4)
+            lbl_a.set_margin_top(2); lbl_a.set_margin_bottom(2)
             lbl_e = Gtk.Label(label=example, xalign=0)
             lbl_e.get_style_context().add_class('hint')
             entry = Gtk.Entry()
             entry.set_max_length(1)
-            entry.set_width_chars(4)
+            entry.set_width_chars(5)
             cur = tones_data.get(field, '')
             entry.set_text(cur if len(cur) == 1 else '')
             entry.connect('key-press-event', self._on_fl_tone_key_press, field)
@@ -1735,34 +1721,26 @@ class SettingsWindow(Gtk.Window):
             grid.attach(lbl_a, 0, r, 1, 1)
             grid.attach(lbl_e, 1, r, 1, 1)
             grid.attach(entry, 2, r, 1, 1)
-
-        right.pack_start(grid, False, False, 0)
-        right.pack_start(Gtk.Separator(), False, False, 8)
+        vbox.pack_start(grid, False, False, 0)
 
         clear_btn = Gtk.Button(label=_('Clear all tone keys'))
         clear_btn.get_style_context().add_class('destructive-action')
         clear_btn.set_halign(Gtk.Align.START)
+        clear_btn.set_margin_top(10)
         clear_btn.connect('clicked', self._on_fl_clear_tones)
-        right.pack_start(clear_btn, False, False, 0)
+        vbox.pack_start(clear_btn, False, False, 0)
 
-        right_scroll.add(right)
-        paned.pack2(right_scroll, True, True)
-
-        outer.pack_start(paned, True, True, 0)
-
-        # ── Bottom: Save & Apply ──────────────────────────────────────────────
-        outer.pack_start(Gtk.Separator(), False, False, 0)
-        bot = Gtk.Box(spacing=8)
-        bot.set_margin_top(8); bot.set_margin_bottom(8)
-        bot.set_margin_start(12); bot.set_margin_end(12)
+        # ── Save & Apply ──────────────────────────────────────────────────────
+        vbox.pack_start(Gtk.Separator(), False, False, 12)
         save_btn = Gtk.Button(label=_('Save & Apply'))
         save_btn.get_style_context().add_class('suggested-action')
+        save_btn.set_halign(Gtk.Align.END)
         save_btn.connect('clicked', self._on_fl_save)
-        bot.pack_end(save_btn, False, False, 0)
-        outer.pack_start(bot, False, False, 0)
+        vbox.pack_start(save_btn, False, False, 0)
 
+        outer_scroll.add(vbox)
         self._fl_refresh_table()
-        return outer
+        return outer_scroll
 
     # ── Free Layout helpers ────────────────────────────────────────────────────
 
