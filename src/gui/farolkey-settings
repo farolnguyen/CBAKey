@@ -1767,16 +1767,16 @@ class SettingsWindow(Gtk.Window):
     # ── Free Layout helpers ────────────────────────────────────────────────────
 
     _FL_TONE_FIELDS = [
-        ('tone_sac',        'Sắc  (á)'),
-        ('tone_huyen',      'Huyền  (à)'),
-        ('tone_hoi',        'Hỏi  (ả)'),
-        ('tone_nga',        'Ngã  (ã)'),
-        ('tone_nang',       'Nặng  (ạ)'),
-        ('diacritic_mui',   'Mũ  (â ê ô)'),
-        ('diacritic_breve', 'Breve  (ă)'),
-        ('diacritic_moc',   'Móc  (ơ ư)'),
-        ('diacritic_d',     'D gạch  (d→đ)'),
-        ('remove',          'Xóa dấu'),
+        ('tone_sac',        'Sắc',       'á'),
+        ('tone_huyen',      'Huyền',     'à'),
+        ('tone_hoi',        'Hỏi',       'ả'),
+        ('tone_nga',        'Ngã',       'ã'),
+        ('tone_nang',       'Nặng',      'ạ'),
+        ('diacritic_mui',   'Mũ',        'â ê ô'),
+        ('diacritic_breve', 'Breve',     'ă'),
+        ('diacritic_moc',   'Móc',       'ơ ư'),
+        ('diacritic_d',     'D gạch',    'd→đ'),
+        ('remove',          'Xóa dấu',   '—'),
     ]
 
     def _fl_load(self):
