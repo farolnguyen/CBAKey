@@ -1727,6 +1727,7 @@ class SettingsWindow(Gtk.Window):
             cur = tones_data.get(field, '')
             entry.set_text(cur if len(cur) == 1 else '')
             entry.connect('key-press-event', self._on_fl_tone_key_press, field)
+            entry.connect('changed', self._on_fl_tone_changed, field)
             self._fl_tone_entries[field] = entry
             grid.attach(lbl_a, 0, r, 1, 1)
             grid.attach(lbl_e, 1, r, 1, 1)
@@ -1852,13 +1853,22 @@ class SettingsWindow(Gtk.Window):
         if keyval == Gdk.KEY_Escape: return False
         ch = chr(keyval) if 32 <= keyval <= 126 else None
         if ch:
-            # Auto-remove from any other tone field that uses the same key
-            for other_field, other_entry in self._fl_tone_entries.items():
-                if other_field != field and other_entry.get_text() == ch:
-                    other_entry.set_text('')
-            entry.set_text(ch)
+            entry.set_text(ch)  # dedup handled by 'changed' signal
             return True
         return False
+
+    def _on_fl_tone_changed(self, entry, field):
+        # Fires for ALL text changes — direct key, IM commit, paste, set_text().
+        ch = entry.get_text()
+        if len(ch) != 1:
+            return
+        # Remove the same key from every other tone field.
+        for other_field, other_entry in self._fl_tone_entries.items():
+            if other_field != field and other_entry.get_text() == ch:
+                # Block this handler on other_entry to avoid recursion.
+                other_entry.handler_block_by_func(self._on_fl_tone_changed)
+                other_entry.set_text('')
+                other_entry.handler_unblock_by_func(self._on_fl_tone_changed)
 
     def _on_fl_clear_tones(self, _btn):
         for entry in self._fl_tone_entries.values():
