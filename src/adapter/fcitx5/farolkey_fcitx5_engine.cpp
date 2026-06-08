@@ -88,7 +88,7 @@ static constexpr UIStrings kStringsVi {
     "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
     "Phương thức: Telex", "Phương thức: VNI", "Phương thức: VIQR", "Phương thức: VIQR*",
     "Phương thức: Simple Telex", "Phương thức: Simple Telex 2", "Phương thức: Microsoft Vietnamese",
-    "Phương thức: Tốc ký (VNI)", "Phương thức: Free Layout",
+    "Phương thức: Tốc ký (VNI)", "Phương thức: Kiểu gõ tùy biến",
     "Chụp màn hình", "Chụp màn hình với FarolKey",
 };
 

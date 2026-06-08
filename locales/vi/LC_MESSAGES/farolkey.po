@@ -386,3 +386,58 @@ msgstr "● Đang chạy"
 
 msgid "✕ Not running"
 msgstr "✕ Không chạy"
+
+# ── Free Layout tab ────────────────────────────────────────────────────────────
+msgid "Free Layout"
+msgstr "Kiểu gõ tùy biến"
+
+msgid "Shortcut Keys"
+msgstr "Phím tắt phụ âm"
+
+msgid "key → output, active only when no vowel in buffer"
+msgstr "phím → chuỗi output, chỉ áp dụng khi chưa có nguyên âm"
+
+msgid "Tone & Diacritic Keys"
+msgstr "Phím Tone & Dấu"
+
+msgid "Click a key cell and press a key to assign. Leave empty to disable."
+msgstr "Click ô Phím rồi nhấn phím muốn gán. Để trống = tắt."
+
+msgid "Clear all tone keys"
+msgstr "Xóa tất cả phím tone"
+
+msgid "Tone keys cleared."
+msgstr "Đã xóa tất cả phím tone."
+
+msgid "Free Layout saved. Changes take effect immediately."
+msgstr "Đã lưu Kiểu gõ tùy biến. Thay đổi có hiệu lực ngay."
+
+msgid "Import Free Layout JSON"
+msgstr "Nhập cấu hình JSON"
+
+msgid "Export Free Layout JSON"
+msgstr "Xuất cấu hình JSON"
+
+msgid "Imported successfully."
+msgstr "Nhập thành công."
+
+msgid "Edit Shortcut Rule"
+msgstr "Sửa phím tắt"
+
+msgid "Key (1 char):"
+msgstr "Phím (1 ký tự):"
+
+msgid "Output string:"
+msgstr "Chuỗi output:"
+
+msgid "⬆ Import JSON"
+msgstr "⬆ Nhập JSON"
+
+msgid "⬇ Export JSON"
+msgstr "⬇ Xuất JSON"
+
+msgid "Action"
+msgstr "Hành động"
+
+msgid "Example"
+msgstr "Ví dụ"
