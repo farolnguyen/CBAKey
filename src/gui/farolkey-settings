@@ -19,6 +19,9 @@ from farolkey_i18n import setup_i18n, read_ui_language
 _STARTUP_LANGUAGE = read_ui_language()
 _ = setup_i18n(_STARTUP_LANGUAGE)
 
+# Short display name for Free Layout in dropdown / systray menu.
+_FL_DISPLAY_NAME = 'Tuỳ biến' if _STARTUP_LANGUAGE == 'vi' else 'Free Layout'
+
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
@@ -663,7 +666,7 @@ _METHOD_REFS = {
             ]),
         ],
     },
-    'Free Layout': {
+    'Free Layout (Kiểu gõ Tuỳ biến)': {
         'desc': 'Kiểu gõ hoàn toàn tự định nghĩa. Người dùng tự gán phím tắt phụ âm và phím tone/dấu theo ý muốn. Cấu hình lưu trong ~/.config/farolkey/free_layout.json.',
         'sections': [
             ('Shortcut phụ âm', 'notes', [
@@ -746,7 +749,7 @@ _METHOD_REFS = {
 
 
 class MethodReferenceDialog(Gtk.Dialog):
-    _METHODS = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', 'Free Layout']
+    _METHODS = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', 'Free Layout (Kiểu gõ Tuỳ biến)']
 
     def __init__(self, parent, initial_method='Telex'):
         super().__init__(
@@ -989,14 +992,14 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(section(_('Input')), False, False, 0)
 
         self._method_combo = Gtk.ComboBoxText()
-        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', 'Free Layout']
+        _methods = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', _FL_DISPLAY_NAME]
         for m in _methods:
             self._method_combo.append_text(m)
         _cur_method = conf.get('Method', 'Telex')
         # map config file enum names to UI display names
         _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
                        'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese',
-                       'TocKy': 'Tốc ký (VNI)', 'FreeLayout': 'Free Layout'}
+                       'TocKy': 'Tốc ký (VNI)', 'FreeLayout': _FL_DISPLAY_NAME}
         _cur_method = _method_map.get(_cur_method, _cur_method)
         self._method_combo.set_active(_methods.index(_cur_method) if _cur_method in _methods else 0)
         self._method_combo.set_hexpand(False)
@@ -1181,9 +1184,9 @@ class SettingsWindow(Gtk.Window):
             _m = conf.get('Method', 'Telex')
             _method_map = {'ViqrStar': 'VIQR*', 'SimpleTelex': 'Simple Telex',
                            'SimpleTelex2': 'Simple Telex 2', 'Microsoft': 'Microsoft Vietnamese',
-                           'TocKy': 'Tốc ký (VNI)', 'FreeLayout': 'Free Layout'}
+                           'TocKy': 'Tốc ký (VNI)', 'FreeLayout': _FL_DISPLAY_NAME}
             _m = _method_map.get(_m, _m)
-            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', 'Free Layout']
+            _ml = ['Telex', 'VNI', 'VIQR', 'VIQR*', 'Simple Telex', 'Simple Telex 2', 'Microsoft Vietnamese', 'Tốc ký (VNI)', _FL_DISPLAY_NAME]
             self._method_combo.set_active(_ml.index(_m) if _m in _ml else 0)
             self._toggle_entry.set_text(conf['ToggleKey'])
             pm = conf['PreeditMode']

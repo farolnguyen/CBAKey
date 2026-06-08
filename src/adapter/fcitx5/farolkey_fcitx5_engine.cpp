@@ -61,7 +61,8 @@ struct UIStrings {
     const char* methodSimpleTelex2;   // "Input Method: Simple Telex 2"
     const char* methodMicrosoft;      // "Input Method: Microsoft Vietnamese"
     const char* methodTocKy;          // "Input Method: Tốc ký (VNI)"
-    const char* methodFreeLayout;     // "Input Method: Free Layout"
+    const char* methodFreeLayout;      // "Input Method: Free Layout"
+    const char* methodFreeLayoutShort; // "Free Layout" / "Tuỳ biến"
     const char* screenshotPrefix;   // "Screenshot" / "Chụp màn hình"
     const char* screenshotLong;
 };
@@ -75,7 +76,7 @@ static constexpr UIStrings kStringsEn {
     "Settings (v" FAROLKEY_VERSION ")", "FarolKey Settings (v" FAROLKEY_VERSION ")",
     "Input Method: Telex", "Input Method: VNI", "Input Method: VIQR", "Input Method: VIQR*",
     "Input Method: Simple Telex", "Input Method: Simple Telex 2", "Input Method: Microsoft Vietnamese",
-    "Input Method: Tốc ký (VNI)", "Input Method: Free Layout",
+    "Input Method: Tốc ký (VNI)", "Input Method: Free Layout", "Free Layout",
     "Screenshot", "Take a screenshot with FarolKey",
 };
 
@@ -88,7 +89,7 @@ static constexpr UIStrings kStringsVi {
     "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
     "Phương thức: Telex", "Phương thức: VNI", "Phương thức: VIQR", "Phương thức: VIQR*",
     "Phương thức: Simple Telex", "Phương thức: Simple Telex 2", "Phương thức: Microsoft Vietnamese",
-    "Phương thức: Tốc ký (VNI)", "Phương thức: Kiểu gõ tùy biến",
+    "Phương thức: Tốc ký (VNI)", "Phương thức: Tuỳ biến", "Tuỳ biến",
     "Chụp màn hình", "Chụp màn hình với FarolKey",
 };
 
@@ -847,7 +848,7 @@ private:
         methodMenu_.addAction(&microsoftAction_);
         methodMenu_.addAction(&tockyAction_);
 
-        freelayoutAction_.setShortText("Free Layout");
+        freelayoutAction_.setShortText(uiStrings_.methodFreeLayoutShort);
         freelayoutAction_.setChecked(config_.method.value() ==
                                      farolkey::adapter::fcitx5::FarolKeyMethod::FreeLayout);
         freelayoutAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
