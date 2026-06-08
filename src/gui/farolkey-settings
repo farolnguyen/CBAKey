@@ -1852,7 +1852,12 @@ class SettingsWindow(Gtk.Window):
         if keyval == Gdk.KEY_Escape: return False
         ch = chr(keyval) if 32 <= keyval <= 126 else None
         if ch:
-            entry.set_text(ch); return True
+            # Auto-remove from any other tone field that uses the same key
+            for other_field, other_entry in self._fl_tone_entries.items():
+                if other_field != field and other_entry.get_text() == ch:
+                    other_entry.set_text('')
+            entry.set_text(ch)
+            return True
         return False
 
     def _on_fl_clear_tones(self, _btn):
