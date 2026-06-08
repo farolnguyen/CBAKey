@@ -169,6 +169,10 @@ if(FAROLKEY_BUILD_TESTS)
     target_link_libraries(farolkey_free_layout_smoke_test PRIVATE farolkey_core)
     add_test(NAME farolkey_free_layout_smoke_test COMMAND farolkey_free_layout_smoke_test)
 
+    add_executable(farolkey_charset_smoke_test tests/charset_smoke_test.cpp)
+    target_link_libraries(farolkey_charset_smoke_test PRIVATE farolkey_core gtest_main)
+    add_test(NAME farolkey_charset_smoke_test COMMAND farolkey_charset_smoke_test)
+
     add_executable(farolkey_config_smoke_test tests/config_smoke_test.cpp)
     target_link_libraries(farolkey_config_smoke_test PRIVATE farolkey_core)
     add_test(NAME farolkey_config_smoke_test COMMAND farolkey_config_smoke_test)
