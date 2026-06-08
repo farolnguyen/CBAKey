@@ -15,6 +15,9 @@ FCITX_CONFIG_ENUM(FarolKeyMethod, Telex, VNI, VIQR, ViqrStar, SimpleTelex, Simpl
 // Preedit display mode enum.
 FCITX_CONFIG_ENUM(FarolKeyPreeditMode, Auto, Client, Panel)
 
+// Output charset enum.
+FCITX_CONFIG_ENUM(FarolKeyOutputCharset, Unicode, TCVN3, CP1258, VISCII)
+
 // Config class — auto-renders as a settings panel in fcitx5-configtool when
 // the user clicks the ⚙ gear icon next to FarolKey.
 FCITX_CONFIGURATION(
@@ -45,6 +48,11 @@ FCITX_CONFIGURATION(
         this, "CommittedRewrite",
         N_("Allow modifying committed text via surrounding-text (experimental)"),
         true};
+
+    fcitx::Option<FarolKeyOutputCharset> outputCharset{
+        this, "OutputCharset",
+        N_("Output encoding (TCVN3/CP1258/VISCII only for legacy XIM apps)"),
+        FarolKeyOutputCharset::Unicode};
 
     fcitx::ExternalOption exportLog{
         this, "ExportLog", N_("Export log bundle (for bug reports)"),

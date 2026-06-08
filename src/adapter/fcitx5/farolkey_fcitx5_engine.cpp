@@ -34,6 +34,7 @@
 #include "farolkey/adapter/fcitx5/x11_click_interceptor.h"
 #include "farolkey/common/logger.h"
 #include "farolkey/config/config.h"
+#include "farolkey/core/charset/output_charset.h"
 #include "farolkey/core/free_layout_config.h"
 #include "farolkey/core/types.h"
 
@@ -577,7 +578,7 @@ public:
         }
 
         if (!dispatch.commit.empty() && ic) {
-            ic->commitString(dispatch.commit);
+            commitConverted(ic, dispatch.commit);
             // Track sentence-end for auto-capitalize.
             if (commitTriggersCapitalize(dispatch.commit)) {
                 capitalizeNext_[ic] = true;
@@ -1091,6 +1092,25 @@ private:
         }
     }
 
+    // ── Output charset conversion ────────────────────────────────────────────
+
+    static farolkey::core::charset::OutputCharset toOutputCharset(
+            farolkey::adapter::fcitx5::FarolKeyOutputCharset fc) {
+        using farolkey::core::charset::OutputCharset;
+        using farolkey::adapter::fcitx5::FarolKeyOutputCharset;
+        switch (fc) {
+            case FarolKeyOutputCharset::TCVN3:  return OutputCharset::TCVN3;
+            case FarolKeyOutputCharset::CP1258: return OutputCharset::CP1258;
+            case FarolKeyOutputCharset::VISCII: return OutputCharset::VISCII;
+            default:                            return OutputCharset::Unicode;
+        }
+    }
+
+    void commitConverted(fcitx::InputContext* ic, const std::string& text) {
+        const auto charset = toOutputCharset(config_.outputCharset.value());
+        ic->commitString(farolkey::core::charset::charsetConvert(text, charset));
+    }
+
     // ── Flush & cleanup on deactivate ────────────────────────────────────────
 
     // Commit preedit only when using Panel preedit (true preedit in fcitx5 panel).
@@ -1106,7 +1126,7 @@ private:
         const std::string pending = bridge.takeCompositionForCommit();
         if (!pending.empty() &&
             presentation == PreeditPresentation::Panel) {
-            ic->commitString(pending);
+            commitConverted(ic, pending);
         }
     }
 
@@ -1139,7 +1159,7 @@ private:
         if (pending.empty()) return;
 
         if (presentation == PreeditPresentation::Panel) {
-            ic->commitString(pending);
+            commitConverted(ic, pending);
         } else {
             if (fe == "xim" || fe == "waylandim" || fe == "fcitx4" || fe == "ibus" ||
                 (fromInterceptor && fe == "dbus")) {
@@ -1149,7 +1169,7 @@ private:
                 // arrives before the click unfreezes. In reset/deactivate path,
                 // fcitx5-gtk already auto-committed via preedit_changed, so we
                 // skip explicit commit to avoid double-commit.
-                ic->commitString(pending);
+                commitConverted(ic, pending);
             }
         }
     }

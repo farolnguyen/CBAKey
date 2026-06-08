@@ -15,6 +15,10 @@ add_library(farolkey_core
     src/core/vi_syllable.cpp
     src/core/user_dict.cpp
     src/core/free_layout_config.cpp
+    src/core/charset/output_charset.cpp
+    src/core/charset/tcvn3_table.cpp
+    src/core/charset/cp1258_table.cpp
+    src/core/charset/viscii_table.cpp
     src/config/config.cpp
     src/common/logger.cpp
 )
