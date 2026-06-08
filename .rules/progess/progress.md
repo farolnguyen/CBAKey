@@ -553,7 +553,7 @@ Thêm test cho các pattern ít gặp: `quyền`, `ngoài`, `toán`, `thuở`, `
 
 ---
 
-### Milestone M14 — Input Method mở rộng ✅ M14.1–M14.7, M14.9, M14.10, M14.11 DONE | M14.8, M14.12 PLANNED
+### Milestone M14 — Input Method mở rộng ✅ M14.1–M14.7, M14.9–M14.12 DONE | M14.8 PLANNED
 
 **Bối cảnh:** FarolKey hiện hỗ trợ Telex + VNI + VIQR + VIQR* + Simple Telex + Simple Telex 2 + Microsoft Vietnamese + Tốc ký. Còn M14.8 (Tự nhiên — complex) và M14.12 (Free Layout — planned).
 
@@ -599,7 +599,7 @@ M14.5 → M14.9 (Simple Telex 2)      ✅ DONE
 M14.5 → M14.8 (Tự nhiên — PLANNED)
 M14.5 → M14.10 (Microsoft Vietnamese)   ✅ DONE
 M14.5 → M14.11 (Tốc ký)                 ✅ DONE
-M14.5 → M14.12 (Free Layout)            📋 PLANNED
+M14.5 → M14.12 (Free Layout)            ✅ DONE
 ```
 
 ---
@@ -1065,6 +1065,15 @@ Các hạng mục dưới đây là **nền móng đã có trong repo**, nhưng 
 - 2026-06-01: **M18 — Auto-capitalize cleanup:** Revert re-focus mechanism (`everActivated_`, `icDestroyHandle_`, `isFirstActivation` param); giữ chỉ terminal fix (`isTerminalContext` + program name heuristic). Label UI: `'Auto-capitalize sentences (not fully optimized)'`. Re-focus bug ghi nhận là known limitation.
 - 2026-06-01: **M21 ✅ DONE — Đa ngôn ngữ UI (i18n):** `farolkey_i18n.py` shared helper; `locales/en|vi/LC_MESSAGES/farolkey.po` (117 strings); Language dropdown trong Settings General tab (save `language=` vào farolkey.conf, restart required); `UIStrings` struct EN/VI trong C++ engine + `readUiLanguage()`; `tools/compile_po.py` pure-Python .po→.mo compiler (fix pybabel broken trên Python 3.12/Ubuntu 24.04). User test OK ✓
 - 2026-06-01: **Release v0.1.5:** Bump version CMakeLists + `deploy/fcitx5/addon/farolkey.conf` + `install.sh` + `src/gui/farolkey-settings` + `locales/*/farolkey.po` → `0.1.5`. Release notes `.rules/v0.1.5.md`. ✓
+- 2026-06-04: **M14.10 — Microsoft Vietnamese input method:** Direct char push (1→ă, 2→â, 3→ê, 4→ô, 7→ư, 8→ơ, 0→đ) + tone keys (s/j/5/6/9). `s` disambiguation: consonant nếu không có nguyên âm. 37 corpus cases, 6/6 smoke tests. ✓
+- 2026-06-04: **Sửa lỗi i18n:** Nút `? Guide` hardcode VI → đổi msgid sang EN convention; label "Screenshot (hotkey)" trên systray không đổi khi chuyển ngôn ngữ → thêm `screenshotPrefix` vào `UIStrings`. ✓
+- 2026-06-04: **Input method reference dialog (? Guide):** `MethodReferenceDialog` trong Settings — bảng phím tắt cho từng method, dịch sang VI. ✓
+- 2026-06-04: **M14.11 — Tốc ký (VNI) input method:** VNI base + phụ âm rút gọn đầu từ (f→ph, j→gi, z→d, d→đ, w→ng, q→qu) + cuối từ (g→ng, h→nh, k→ch). k/c đầu từ = literal. Sau điều chỉnh: đổi tên systray/dropdown thành "Tốc ký (VNI)". 37 corpus, 7/7 smoke. ✓
+- 2026-06-04: **M14.6 — VIQR* input method:** VIQR variant dùng `*` thay `+` cho dấu móc (ơ, ư). ✓
+- 2026-06-04: **M14.7/M14.9 — Simple Telex & Simple Telex 2:** Tone key only (không expand diacritic); STel2 thêm `w` standalone → ư. ✓
+- 2026-06-08: **M14.12 — Free Layout (Kiểu gõ Tuỳ biến):** Input method 100% do user tự định nghĩa. Shortcut table (key→Unicode, chỉ khi không có nguyên âm) + Tone/Diacritic map (10 actions, user gán phím). Context-based conflict. Config hot-reload `~/.config/farolkey/free_layout.json`. UI 2 cột trong Settings. Tone dedup tự động (Wayland-safe via `changed` signal). i18n đầy đủ. Display: "Tuỳ biến" (dropdown/systray), "Kiểu gõ Tuỳ biến" (tab). 24 corpus, 8/8 smoke. ✓
+- 2026-06-08: **Bugfix Telex — "luuw" → "lưu":** nucleus "uu" + key 'w', `rightmostNucleusCharWithBase` lấy 'u' cuối → "uư" (sai). Fix: special case biến đổi 'u' đầu tiên → "ưu" (nguyên âm đôi hợp lệ). 3 regression corpus entries. ✓
+- 2026-06-08: **Release v0.1.6:** Bump version 7 file → `0.1.6`. Release notes `.rules/v0.1.6.md`. ✓
 - 2026-05-28: **Điều tra Bug FB3 — Enter 2 lần trên máy một user cụ thể (chưa có root cause):** User báo Enter cần nhấn 2 lần để gửi tin trong Teams (Edge) dù đã cài v0.1.4. Developer + user khác test cùng config không tái hiện. Đã xác minh trực tiếp: fcitx5 đã restart, config mặc định, cùng OS spec + fcitx5 version qua install.sh. Điều tra frontend: Edge trên máy dev → `dbus + x11 + preedit=1 + autoCmt=1` (same path as Chrome, FB1 fix đã cover). Insight quan trọng: log chỉ từ máy dev, chưa có log từ máy user thực tế. Tạo `tools/farolkey_frontend_probe.py` — Python script dùng dbus-monitor để capture frontend + capability của bất kỳ app nào, không cần rebuild/install. Bước tiếp theo: gửi script cho user chạy để xác minh config thực tế trên máy đó.
 
 ## 10. Checklist release version mới
