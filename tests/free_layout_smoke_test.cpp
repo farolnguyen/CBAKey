@@ -84,8 +84,8 @@ static void test_d_stroke() {
 static void test_remove() {
     auto e = makeFL();
     assert(typeAndFlush(e, "a10") == "a"); reset(e);
-    assert(typeAndFlush(e, "a61") == "á"); reset(e);  // â + sắc = ấ ... actually â+1=ấ
-    assert(typeAndFlush(e, "a610") == "a"); reset(e); // â → remove all → a
+    assert(typeAndFlush(e, "a61") == "ấ"); reset(e);  // â + sắc = ấ
+    assert(typeAndFlush(e, "a610") == "a"); reset(e); // â+sắc → remove all → a
 }
 
 // ── Shortcut keys (initial — no vowel) ───────────────────────────────────────
@@ -115,7 +115,7 @@ static void test_words() {
     auto e = makeFL();
     assert(typeAndFlush(e, "fo73") == "phở");  reset(e);  // f→ph, o7→ơ, 3→hỏi
     assert(typeAndFlush(e, "ja2")  == "già");   reset(e);  // j→gi, a, 2→huyền
-    assert(typeAndFlush(e, "wag")  == "ngang"); reset(e);  // w→ng, a, g literal
+    assert(typeAndFlush(e, "wang") == "ngang"); reset(e);  // w→ng, a, n, g literal
     assert(typeAndFlush(e, "a6")   == "â");     reset(e);  // diacritic mũ
 }
 

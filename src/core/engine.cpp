@@ -404,6 +404,15 @@ bool isTocKyRepeatableKey(char key) {
     return key >= '1' && key <= '5';  // same as VNI tone keys
 }
 
+bool isFreeLayoutToneKey(char key, const farolkey::core::FreeLayoutToneMap& t) {
+    if (!key) return false;
+    return key == t.tone_sac   || key == t.tone_huyen || key == t.tone_hoi  ||
+           key == t.tone_nga   || key == t.tone_nang  ||
+           key == t.diacritic_mui   || key == t.diacritic_breve ||
+           key == t.diacritic_moc   || key == t.diacritic_d;
+    // Note: remove key is handled separately (like 'z'/'0'), not repeatable.
+}
+
 // Returns true if the decoded buffer contains at least one Vietnamese vowel.
 // Used by Tốc ký to distinguish initial (onset) vs final (coda) shortcut context.
 bool hasVietnameseVowel(const std::u32string& buf) {
@@ -859,7 +868,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
          (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key)) ||
          (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))        ||
          (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key))    ||
-         (config_.method == farolkey::core::InputMethod::TocKy        && isTocKyRepeatableKey(key)))) {
+         (config_.method == farolkey::core::InputMethod::TocKy        && isTocKyRepeatableKey(key))        ||
+         (config_.method == farolkey::core::InputMethod::FreeLayout   && isFreeLayoutToneKey(key, config_.freeLayout.tones)))) {
         std::u32string reverted = decodeUtf8Normalized(repeatTransformState_.buffer_before);
         reverted.push_back(static_cast<unsigned char>(raw));
         if (config_.method == farolkey::core::InputMethod::Telex) {
@@ -995,8 +1005,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             else if (t.diacritic_moc   != '\0' && key == t.diacritic_moc)   { transformed = vi_syllable::applyVniTransform(decoded, '7'); }
         }
 
-        // 2. Shortcut table (fires when tone/diacritic didn't consume the key).
-        if (!transformed) {
+        // 2. Shortcut table: only fires when no vowel in buffer (initial position).
+        if (!transformed && !hasVowel) {
             for (const auto& rule : fl.shortcuts) {
                 if (rule.key == key) {
                     const std::u32string out = decodeUtf8Normalized(rule.output);
@@ -1028,7 +1038,8 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
             (config_.method == farolkey::core::InputMethod::SimpleTelex  && isSimpleTelexRepeatableKey(key))  ||
             (config_.method == farolkey::core::InputMethod::SimpleTelex2 && isTelexRepeatableKey(key))        ||
             (config_.method == farolkey::core::InputMethod::Microsoft    && isMicrosoftRepeatableKey(key))    ||
-            (config_.method == farolkey::core::InputMethod::TocKy        && isTocKyRepeatableKey(key))) {
+            (config_.method == farolkey::core::InputMethod::TocKy        && isTocKyRepeatableKey(key))        ||
+            (config_.method == farolkey::core::InputMethod::FreeLayout   && isFreeLayoutToneKey(key, config_.freeLayout.tones))) {
             repeatTransformState_.active = true;
             repeatTransformState_.key = key;
             repeatTransformState_.buffer_before = bufferBefore;
