@@ -186,6 +186,105 @@ TEST(charset_cp1258, unmappable_passthrough) {
     EXPECT_EQ(charsetConvert(han_char, OutputCharset::CP1258), han_char);
 }
 
+// ── VISCII ───────────────────────────────────────────────────────────────────
+
+TEST(charset_viscii, ascii_passthrough) {
+    std::string ascii = "Hello, world! 0123";
+    EXPECT_EQ(charsetConvert(ascii, OutputCharset::VISCII), ascii);
+}
+
+TEST(charset_viscii, base_chars) {
+    // ă Ă â Â ê Ê ô Ô ơ Ơ ư Ư đ Đ — single-byte VISCII forms
+    EXPECT_EQ(charsetConvert("ă", OutputCharset::VISCII), bytes({0xE5}));
+    EXPECT_EQ(charsetConvert("Ă", OutputCharset::VISCII), bytes({0xC5}));
+    EXPECT_EQ(charsetConvert("â", OutputCharset::VISCII), bytes({0xE2}));
+    EXPECT_EQ(charsetConvert("Â", OutputCharset::VISCII), bytes({0xC2}));
+    EXPECT_EQ(charsetConvert("ê", OutputCharset::VISCII), bytes({0xEA}));
+    EXPECT_EQ(charsetConvert("Ê", OutputCharset::VISCII), bytes({0xCA}));
+    EXPECT_EQ(charsetConvert("ô", OutputCharset::VISCII), bytes({0xF4}));
+    EXPECT_EQ(charsetConvert("Ô", OutputCharset::VISCII), bytes({0xD4}));
+    EXPECT_EQ(charsetConvert("ơ", OutputCharset::VISCII), bytes({0xBD}));
+    EXPECT_EQ(charsetConvert("Ơ", OutputCharset::VISCII), bytes({0xB4}));
+    EXPECT_EQ(charsetConvert("ư", OutputCharset::VISCII), bytes({0xDF}));
+    EXPECT_EQ(charsetConvert("Ư", OutputCharset::VISCII), bytes({0xBF}));
+    EXPECT_EQ(charsetConvert("đ", OutputCharset::VISCII), bytes({0xF0}));
+    EXPECT_EQ(charsetConvert("Đ", OutputCharset::VISCII), bytes({0xD0}));
+}
+
+TEST(charset_viscii, tones_a) {
+    EXPECT_EQ(charsetConvert("à", OutputCharset::VISCII), bytes({0xE0}));  // à
+    EXPECT_EQ(charsetConvert("á", OutputCharset::VISCII), bytes({0xE1}));  // á
+    EXPECT_EQ(charsetConvert("ả", OutputCharset::VISCII), bytes({0xE4}));  // ả
+    EXPECT_EQ(charsetConvert("ã", OutputCharset::VISCII), bytes({0xE3}));  // ã
+    EXPECT_EQ(charsetConvert("ạ", OutputCharset::VISCII), bytes({0xD5}));  // ạ
+}
+
+TEST(charset_viscii, circumflex_family) {
+    // â family
+    EXPECT_EQ(charsetConvert("ầ", OutputCharset::VISCII), bytes({0xA5}));  // ầ
+    EXPECT_EQ(charsetConvert("ấ", OutputCharset::VISCII), bytes({0xA4}));  // ấ
+    EXPECT_EQ(charsetConvert("ậ", OutputCharset::VISCII), bytes({0xA7}));  // ậ
+    // ô family
+    EXPECT_EQ(charsetConvert("ồ", OutputCharset::VISCII), bytes({0xB0}));  // ồ
+    EXPECT_EQ(charsetConvert("ố", OutputCharset::VISCII), bytes({0xAF}));  // ố
+    EXPECT_EQ(charsetConvert("ộ", OutputCharset::VISCII), bytes({0xB5}));  // ộ
+    // ê family
+    EXPECT_EQ(charsetConvert("ề", OutputCharset::VISCII), bytes({0xAB}));  // ề
+    EXPECT_EQ(charsetConvert("ế", OutputCharset::VISCII), bytes({0xAA}));  // ế
+    EXPECT_EQ(charsetConvert("ệ", OutputCharset::VISCII), bytes({0xAE}));  // ệ
+}
+
+TEST(charset_viscii, horn_family) {
+    // ơ family
+    EXPECT_EQ(charsetConvert("ờ", OutputCharset::VISCII), bytes({0xB6}));  // ờ
+    EXPECT_EQ(charsetConvert("ớ", OutputCharset::VISCII), bytes({0xBE}));  // ớ
+    EXPECT_EQ(charsetConvert("ợ", OutputCharset::VISCII), bytes({0xFE}));  // ợ
+    // ư family
+    EXPECT_EQ(charsetConvert("ừ", OutputCharset::VISCII), bytes({0xD7}));  // ừ
+    EXPECT_EQ(charsetConvert("ứ", OutputCharset::VISCII), bytes({0xD1}));  // ứ
+    EXPECT_EQ(charsetConvert("ự", OutputCharset::VISCII), bytes({0xF1}));  // ự
+}
+
+TEST(charset_viscii, words) {
+    // "tiếng" = t + i + ế + n + g
+    EXPECT_EQ(charsetConvert("tiếng", OutputCharset::VISCII),
+              bytes({'t', 'i', 0xAA, 'n', 'g'}));
+
+    // "việt" = v + i + ệ + t
+    EXPECT_EQ(charsetConvert("việt", OutputCharset::VISCII),
+              bytes({'v', 'i', 0xAE, 't'}));
+
+    // "được" = đ + ư + ợ + c
+    EXPECT_EQ(charsetConvert("được", OutputCharset::VISCII),
+              bytes({0xF0, 0xDF, 0xFE, 'c'}));
+
+    // "hoặc" = h + o + ặ + c
+    EXPECT_EQ(charsetConvert("hoặc", OutputCharset::VISCII),
+              bytes({'h', 'o', 0xA3, 'c'}));
+}
+
+TEST(charset_viscii, control_char_reassignment) {
+    // VISCII reassigns 6 ASCII control-char byte positions to Vietnamese letters
+    EXPECT_EQ(charsetConvert("Ẳ", OutputCharset::VISCII), bytes({0x02}));  // Ẳ
+    EXPECT_EQ(charsetConvert("Ẵ", OutputCharset::VISCII), bytes({0x05}));  // Ẵ
+    EXPECT_EQ(charsetConvert("Ẫ", OutputCharset::VISCII), bytes({0x06}));  // Ẫ
+    EXPECT_EQ(charsetConvert("Ỷ", OutputCharset::VISCII), bytes({0x14}));  // Ỷ
+    EXPECT_EQ(charsetConvert("Ỹ", OutputCharset::VISCII), bytes({0x19}));  // Ỹ
+    EXPECT_EQ(charsetConvert("Ỵ", OutputCharset::VISCII), bytes({0x1E}));  // Ỵ
+}
+
+TEST(charset_viscii, full_alphabet_coverage) {
+    // Unlike TCVN3, VISCII has a single byte for every Vietnamese letter,
+    // including uppercase Ứ/Ừ/Ử/Ữ/Ự which TCVN3 lacks.
+    EXPECT_EQ(charsetConvert("Ứ", OutputCharset::VISCII), bytes({0xBA}));  // Ứ
+}
+
+TEST(charset_viscii, unmappable_passthrough) {
+    // Non-Vietnamese codepoints fall back to UTF-8
+    std::string han_char = "\xE4\xB8\xAD";  // 中 U+4E2D in UTF-8
+    EXPECT_EQ(charsetConvert(han_char, OutputCharset::VISCII), han_char);
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
