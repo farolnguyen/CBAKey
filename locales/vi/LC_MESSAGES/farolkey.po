@@ -82,8 +82,8 @@ msgstr "Đầu ra"
 msgid "Output encoding"
 msgstr "Bảng mã đầu ra"
 
-msgid "⚠ TCVN3/CP1258/VISCII send raw legacy bytes — only readable by old XIM apps. Modern GTK/Qt/Electron apps expect UTF-8 and will show garbled text."
-msgstr "⚠ TCVN3/CP1258/VISCII gửi byte mã cũ — chỉ ứng dụng XIM cũ đọc được. Ứng dụng GTK/Qt/Electron hiện đại cần UTF-8 và sẽ hiển thị sai."
+msgid "⚠ TCVN3/CP1258/VISCII send raw legacy bytes — only readable by old XIM apps. Modern GTK/Qt/Electron apps use DBus (UTF-8 only), so these characters will silently disappear instead of being typed."
+msgstr "⚠ TCVN3/CP1258/VISCII gửi byte mã cũ — chỉ ứng dụng XIM cũ đọc được. Ứng dụng GTK/Qt/Electron hiện đại dùng DBus (chỉ nhận UTF-8) nên các ký tự này sẽ biến mất hoàn toàn thay vì hiển thị đúng."
 
 msgid "Behavior"
 msgstr "Hành vi"
