@@ -284,6 +284,21 @@ msgstr ""
 msgid "💡 super = Windows key (⊞)"
 msgstr ""
 
+msgid "When hotkey is pressed"
+msgstr ""
+
+msgid "Show capture menu (default)"
+msgstr ""
+
+msgid "Capture full screen"
+msgstr ""
+
+msgid "Select a region"
+msgstr ""
+
+msgid "Choose what happens when you press the screenshot hotkey"
+msgstr ""
+
 msgid "Capture"
 msgstr ""
 

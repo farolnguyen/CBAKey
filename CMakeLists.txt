@@ -354,11 +354,10 @@ if(FAROLKEY_BUILD_FCITX5_PLUGIN)
         COMPONENT runtime
     )
 
-    # Screenshot tool, daemon, and settings (Python + GTK3)
+    # Screenshot tool + daemon (Python + GTK3)
     install(PROGRAMS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/screenshot/farolkey-screenshot"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/screenshot/farolkey-screenshot-daemon"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/screenshot/farolkey-screenshot-settings"
         DESTINATION "bin"
         COMPONENT runtime
     )

@@ -66,6 +66,7 @@ _DEFAULTS = {
     'hotkey':           'super+shift+s',
     'capture_mode':     'all',   # 'all' = all monitors | 'cursor' = monitor with cursor
     'instant_capture':  'false', # 'true' = confirm on mouse release; 'false' = review mode
+    'hotkey_action':    'menu',  # 'menu' = show capture menu | 'fullscreen' | 'region'
 }
 
 def load_conf() -> dict:
@@ -543,10 +544,10 @@ class MonitorOverlay(Gtk.Window):
     # ── Toolbar actions ───────────────────────────────────────────────────────
 
     def _act_settings(self):
-        tool = shutil.which('farolkey-screenshot-settings') or str(
-            Path(__file__).parent / 'farolkey-screenshot-settings'
+        tool = shutil.which('farolkey-settings') or str(
+            Path(__file__).parent / 'farolkey-settings'
         )
-        subprocess.Popen([tool], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen([tool, '--tab=screenshot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _act_start_region(self):
         self._sel.mode = 'selecting'
@@ -974,8 +975,9 @@ def main():
 
     conf = load_conf()
 
-    skip_review   = '--fullscreen' in sys.argv
-    direct_region = '--region'     in sys.argv
+    hotkey_action = conf.get('hotkey_action', 'menu')
+    skip_review   = '--fullscreen' in sys.argv or hotkey_action == 'fullscreen'
+    direct_region = '--region'     in sys.argv or hotkey_action == 'region'
     capture_mode  = conf.get('capture_mode', 'all')
     log.info('screenshot started: capture_mode=%s, skip_review=%s', capture_mode, skip_review)
 

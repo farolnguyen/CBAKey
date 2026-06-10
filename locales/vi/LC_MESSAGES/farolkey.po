@@ -293,6 +293,21 @@ msgstr "Dùng + để kết hợp phím. Modifier hợp lệ: super, ctrl, alt, 
 msgid "💡 super = Windows key (⊞)"
 msgstr "💡 super = phím Windows (⊞)"
 
+msgid "When hotkey is pressed"
+msgstr "Khi nhấn phím tắt"
+
+msgid "Show capture menu (default)"
+msgstr "Hiện thanh chọn chế độ (mặc định)"
+
+msgid "Capture full screen"
+msgstr "Chụp toàn màn hình"
+
+msgid "Select a region"
+msgstr "Chọn vùng"
+
+msgid "Choose what happens when you press the screenshot hotkey"
+msgstr "Chọn hành động khi bạn nhấn phím tắt chụp màn hình"
+
 msgid "Capture"
 msgstr "Chụp ảnh"
 

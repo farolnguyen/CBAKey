@@ -30,12 +30,11 @@ from typing import Optional
 # farolkey_log lives alongside this script (in the same bin/ directory)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
-    from farolkey_log import get_logger as _get_logger, export_log_bundle as _export_log_bundle
+    from farolkey_log import get_logger as _get_logger
     log = _get_logger('clipboard')
 except Exception:
     import logging
     log = logging.getLogger('farolkey.clipboard')
-    _export_log_bundle = None
 
 # ---------------------------------------------------------------------------
 # Paths & constants
@@ -597,7 +596,7 @@ class ClipboardPopup(Gtk.Window):
         title.get_style_context().add_class('cb-title')
         settings_btn = Gtk.Button(label='⚙')
         settings_btn.get_style_context().add_class('cb-hbtn')
-        settings_btn.set_tooltip_text('Cài đặt vị trí popup')
+        settings_btn.set_tooltip_text('Cài đặt')
         settings_btn.connect('clicked', self._on_settings)
         clear_btn = Gtk.Button(label='Clear all')
         clear_btn.get_style_context().add_class('cb-hbtn')
@@ -791,107 +790,10 @@ class ClipboardPopup(Gtk.Window):
             self._rebuild()
 
     def _on_settings(self, btn):
-        conf = load_clipboard_conf()
-        current_pos    = conf.get('popup_position', POPUP_POSITION_DEFAULT)
-        current_close  = conf.get('close_on_click_outside', 'true') == 'true'
-
-        self._settings_open = True
-        dlg = Gtk.Dialog(title='Clipboard History Settings', transient_for=self,
-                         flags=Gtk.DialogFlags.MODAL)
-        dlg.set_resizable(False)
-        box = dlg.get_content_area()
-        box.set_spacing(8)
-        box.set_margin_top(16); box.set_margin_bottom(8)
-        box.set_margin_start(16); box.set_margin_end(16)
-
-        # ── Popup position ────────────────────────────────────────────────────
-        box.pack_start(Gtk.Label(label='Popup position:', xalign=0), False, False, 0)
-        radio_mouse = Gtk.RadioButton.new_with_label(None,
-            '🖱  Near mouse cursor (default)')
-        radio_corner = Gtk.RadioButton.new_with_label_from_widget(radio_mouse,
-            '📐  Bottom-right corner of screen')
-        if current_pos == 'corner':
-            radio_corner.set_active(True)
-        else:
-            radio_mouse.set_active(True)
-        box.pack_start(radio_mouse,  False, False, 0)
-        box.pack_start(radio_corner, False, False, 0)
-
-        box.pack_start(Gtk.Separator(), False, False, 4)
-
-        # ── Behaviour ─────────────────────────────────────────────────────────
-        close_cb = Gtk.CheckButton(label='Close when clicking outside the popup')
-        close_cb.set_active(current_close)
-        close_cb.set_tooltip_text(
-            'On: clicking anywhere outside closes the popup.\n'
-            'Off: only Esc or the ✕ button closes it.')
-        box.pack_start(close_cb, False, False, 0)
-
-        box.pack_start(Gtk.Separator(), False, False, 4)
-
-        # ── System tools ──────────────────────────────────────────────────────
-        box.pack_start(Gtk.Label(label='System tools:', xalign=0), False, False, 0)
-        tools = [
-            (_WL_COPY,  'wl-copy',    'Clipboard write (Wayland)'),
-            (_XCLIP,    'xclip',      'Clipboard write (X11)'),
-            (_XDOTOOL,  'xdotool',    'Auto-paste Ctrl+V (X11)'),
-            (_WTYPE,    'wtype',      'Auto-paste Ctrl+V (Wayland)'),
-        ]
-        tools_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        tools_box.set_margin_top(4)
-        for found, name, desc in tools:
-            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            icon  = '✓' if found else '✗'
-            color = '#4caf50' if found else '#f44336'
-            lbl = Gtk.Label()
-            lbl.set_markup(f'<span foreground="{color}">{icon} {name}</span>')
-            lbl.set_xalign(0)
-            sub = Gtk.Label(label=desc)
-            sub.set_xalign(0)
-            sub.get_style_context().add_class('dim-label')
-            col.pack_start(lbl, False, False, 0)
-            col.pack_start(sub, False, False, 0)
-            tools_box.pack_start(col, False, False, 0)
-        box.pack_start(tools_box, False, False, 0)
-
-        miss = [n for f, n, _ in tools if not f]
-        if miss:
-            hint = Gtk.Label(label=f'Missing: {", ".join(miss)} — run: sudo apt install {" ".join(miss)}')
-            hint.set_xalign(0)
-            hint.set_line_wrap(True)
-            hint.get_style_context().add_class('dim-label')
-            box.pack_start(hint, False, False, 0)
-
-        box.pack_start(Gtk.Separator(), False, False, 4)
-
-        # ── Debug ─────────────────────────────────────────────────────────────
-        box.pack_start(Gtk.Label(label='Debug:', xalign=0), False, False, 0)
-        debug_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        debug_lbl = Gtk.Label(label='Export log bundle for bug reports:')
-        debug_lbl.set_xalign(0)
-        debug_row.pack_start(debug_lbl, True, True, 0)
-        export_btn = Gtk.Button(label='Export log…')
-        export_btn.connect('clicked', lambda *_: self._do_export_log(dlg))
-        debug_row.pack_start(export_btn, False, False, 0)
-        box.pack_start(debug_row, False, False, 0)
-        hint2 = Gtk.Label(label='Creates a .zip with log files — send to developer when reporting a bug')
-        hint2.set_xalign(0)
-        hint2.set_line_wrap(True)
-        hint2.get_style_context().add_class('dim-label')
-        box.pack_start(hint2, False, False, 0)
-
-        dlg.add_buttons('Cancel', Gtk.ResponseType.CANCEL,
-                        'Save',   Gtk.ResponseType.OK)
-        dlg.get_widget_for_response(Gtk.ResponseType.OK) \
-           .get_style_context().add_class('suggested-action')
-        dlg.show_all()
-        resp = dlg.run()
-        if resp == Gtk.ResponseType.OK:
-            conf['popup_position']         = 'corner' if radio_corner.get_active() else 'mouse'
-            conf['close_on_click_outside'] = 'true' if close_cb.get_active() else 'false'
-            save_clipboard_conf(conf)
-        dlg.destroy()
-        self._settings_open = False
+        tool = shutil.which('farolkey-settings') or str(
+            Path(__file__).parent / 'farolkey-settings'
+        )
+        subprocess.Popen([tool, '--tab=clipboard'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # ---- Keyboard ----
 
@@ -1000,47 +902,6 @@ class ClipboardPopup(Gtk.Window):
     def _on_button_press_outside(self, widget, event):
         """No-op: click-outside is handled via focus-out-event on both X11 and Wayland."""
         return False
-
-    def _do_export_log(self, parent):
-        default_name = f'farolkey_log_{time.strftime("%Y%m%d_%H%M%S")}.zip'
-        fc = Gtk.FileChooserDialog(
-            title='Save log bundle',
-            parent=parent,
-            action=Gtk.FileChooserAction.SAVE,
-        )
-        fc.add_buttons('Cancel', Gtk.ResponseType.CANCEL, 'Save', Gtk.ResponseType.OK)
-        fc.set_current_name(default_name)
-        desktop = Path.home() / 'Desktop'
-        fc.set_current_folder(str(desktop) if desktop.exists() else str(Path.home()))
-        fc.set_do_overwrite_confirmation(True)
-        if fc.run() == Gtk.ResponseType.OK and _export_log_bundle:
-            dest = fc.get_filename()
-            fc.destroy()
-            try:
-                _export_log_bundle(dest)
-                info = Gtk.MessageDialog(
-                    parent=parent,
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text='Log exported successfully',
-                    secondary_text=f'File saved to:\n{dest}\n\nSend this file to the developer.',
-                )
-                info.run()
-                info.destroy()
-                subprocess.Popen(['xdg-open', str(Path(dest).parent)],
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception as e:
-                err = Gtk.MessageDialog(
-                    parent=parent,
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text='Export failed',
-                    secondary_text=str(e),
-                )
-                err.run()
-                err.destroy()
-        else:
-            fc.destroy()
 
     def _on_drag(self, widget, event):
         if event.button == 1:

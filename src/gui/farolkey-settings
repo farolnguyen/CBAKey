@@ -33,7 +33,9 @@ import io
 import json
 import re
 import shutil
+import socket
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -50,6 +52,61 @@ def _acquire_single_instance():
         return True
     except OSError:
         return False
+
+# ── Cross-instance tab switching (IPC) ──────────────────────────────────────────
+# Lets other FarolKey tools (screenshot overlay, clipboard popup) open this
+# window directly on a given tab via `farolkey-settings --tab=<name>`, even if
+# an instance is already running.
+
+_SOCK_PATH = f'/tmp/farolkey-settings-{os.getuid()}.sock'
+
+# Must match the nb.append_page() order in SettingsWindow.__init__
+_TAB_INDEX = {
+    'general':     0,
+    'dict':        1,
+    'clipboard':   2,
+    'screenshot':  3,
+    'free_layout': 4,
+    'about':       5,
+}
+
+def _start_ipc_listener(win):
+    try:
+        if os.path.exists(_SOCK_PATH):
+            os.unlink(_SOCK_PATH)
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(_SOCK_PATH)
+        srv.listen(4)
+    except OSError:
+        return
+
+    def _loop():
+        while True:
+            try:
+                conn, _addr = srv.accept()
+            except OSError:
+                return
+            with conn:
+                tab = conn.recv(64).decode().strip()
+            GLib.idle_add(_switch_tab, win, tab)
+
+    threading.Thread(target=_loop, daemon=True).start()
+
+def _switch_tab(win, tab: str):
+    idx = _TAB_INDEX.get(tab)
+    if idx is not None:
+        win._nb.set_current_page(idx)
+    win.present()
+    return False
+
+def _send_tab_request(tab: str):
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(_SOCK_PATH)
+        sock.sendall(tab.encode())
+        sock.close()
+    except OSError:
+        subprocess.run(['wmctrl', '-a', 'FarolKey Settings'], capture_output=True)
 
 # ── Version ────────────────────────────────────────────────────────────────────
 
@@ -355,6 +412,7 @@ _SS_DEFAULTS = {
     'hotkey':          'super+shift+s',
     'instant_capture': 'false',
     'capture_mode':    'all',
+    'hotkey_action':   'menu',
 }
 
 def load_screenshot_conf() -> dict:
@@ -1148,7 +1206,7 @@ class _FreeLayoutRuleDialog(Gtk.Dialog):
 
 class SettingsWindow(Gtk.Window):
 
-    def __init__(self):
+    def __init__(self, initial_tab=None):
         super().__init__(title=f'FarolKey Settings — v{FAROLKEY_VERSION}')
         self.set_default_size(740, 580)
         self.set_border_width(0)
@@ -1176,6 +1234,12 @@ class SettingsWindow(Gtk.Window):
         nb.append_page(self._build_screenshot_tab(),   Gtk.Label(label=_('Screenshot')))
         nb.append_page(self._build_free_layout_tab(),  Gtk.Label(label=_('Free Layout')))
         nb.append_page(self._build_about_tab(),        Gtk.Label(label=_('About')))
+        self._nb = nb
+
+        if initial_tab in _TAB_INDEX:
+            # set_current_page() has no effect this early (notebook not yet
+            # realized) — defer to the first idle iteration, like _switch_tab.
+            GLib.idle_add(nb.set_current_page, _TAB_INDEX[initial_tab])
 
         self._refresh_table()
         self._refresh_template_table()
@@ -1768,6 +1832,14 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(hint(_('Use + to combine keys. Valid modifiers: super, ctrl, alt, shift')), False, False, 0)
         vbox.pack_start(hint(_('💡 super = Windows key (⊞)')), False, False, 0)
 
+        self._ss_action_combo = Gtk.ComboBoxText()
+        self._ss_action_combo.append('menu',       _('Show capture menu (default)'))
+        self._ss_action_combo.append('fullscreen', _('Capture full screen'))
+        self._ss_action_combo.append('region',     _('Select a region'))
+        self._ss_action_combo.set_active_id(conf.get('hotkey_action', 'menu'))
+        vbox.pack_start(row(_('When hotkey is pressed'), self._ss_action_combo), False, False, 6)
+        vbox.pack_start(hint(_('Choose what happens when you press the screenshot hotkey')), False, False, 0)
+
         vbox.pack_start(Gtk.Separator(), False, False, 8)
         vbox.pack_start(section(_('Capture')), False, False, 0)
         self._ss_cap_all_radio    = Gtk.RadioButton.new_with_label(None, _('All screens (default)'))
@@ -1872,6 +1944,7 @@ class SettingsWindow(Gtk.Window):
             'hotkey':          self._ss_hotkey_entry.get_text().strip(),
             'capture_mode':    'cursor' if self._ss_cap_cursor_radio.get_active() else 'all',
             'instant_capture': 'true' if self._ss_instant_switch.get_active() else 'false',
+            'hotkey_action':   self._ss_action_combo.get_active_id() or 'menu',
             'save_path':       self._ss_path_entry.get_text().strip(),
             'ask_before_save': 'true' if self._ss_ask_switch.get_active() else 'false',
             'auto_save':       'true' if self._ss_auto_switch.get_active() else 'false',
@@ -2622,11 +2695,20 @@ class SettingsWindow(Gtk.Window):
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main():
+    tab_arg = None
+    for arg in sys.argv[1:]:
+        if arg.startswith('--tab='):
+            tab_arg = arg.split('=', 1)[1]
+
     if not _acquire_single_instance():
-        subprocess.run(['wmctrl', '-a', 'FarolKey Settings'], capture_output=True)
+        if tab_arg:
+            _send_tab_request(tab_arg)
+        else:
+            subprocess.run(['wmctrl', '-a', 'FarolKey Settings'], capture_output=True)
         sys.exit(0)
 
-    win = SettingsWindow()
+    win = SettingsWindow(initial_tab=tab_arg)
+    _start_ipc_listener(win)
     win.show_all()
     Gtk.main()
 
