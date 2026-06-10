@@ -1040,25 +1040,6 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(row(_('EN/VI toggle key'), self._toggle_entry, expand=True), False, False, 4)
         vbox.pack_start(hint(_('Enter key name in Fcitx5 format. e.g. Control+Alt+z')), False, False, 0)
 
-        # ── Display ────────────────────────────────────────────────────────────
-        vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section(_('Display')), False, False, 0)
-
-        self._preedit_combo = Gtk.ComboBoxText()
-        for m in ['Auto', 'Client', 'Panel']:
-            self._preedit_combo.append_text(m)
-        pm = conf.get('PreeditMode', 'Auto')
-        self._preedit_combo.set_active(['Auto', 'Client', 'Panel'].index(pm) if pm in ['Auto', 'Client', 'Panel'] else 0)
-        self._preedit_combo.set_hexpand(False)
-        vbox.pack_start(row(_('Preedit mode'), self._preedit_combo), False, False, 4)
-        vbox.pack_start(hint(_('⚠ Chrome, Edge, Electron always show underline in Auto/Client mode. Choose Panel to disable it completely.')), False, False, 0)
-
-        self._underline_switch = Gtk.Switch()
-        self._underline_switch.set_active(conf.get('ShowPreeditUnderline', 'True').lower() == 'true')
-        self._underline_switch.set_valign(Gtk.Align.CENTER)
-        self._underline_switch.set_hexpand(False)
-        vbox.pack_start(row(_('Show underline while composing'), self._underline_switch), False, False, 6)
-
         # ── Output ─────────────────────────────────────────────────────────────
         vbox.pack_start(Gtk.Separator(), False, False, 8)
         vbox.pack_start(section(_('Output')), False, False, 0)
@@ -1080,6 +1061,25 @@ class SettingsWindow(Gtk.Window):
         self._charset_warning.set_visible(oc != 'Unicode')
         vbox.pack_start(self._charset_warning, False, False, 0)
         self._charset_combo.connect('changed', self._on_charset_changed)
+
+        # ── Display ────────────────────────────────────────────────────────────
+        vbox.pack_start(Gtk.Separator(), False, False, 8)
+        vbox.pack_start(section(_('Display')), False, False, 0)
+
+        self._preedit_combo = Gtk.ComboBoxText()
+        for m in ['Auto', 'Client', 'Panel']:
+            self._preedit_combo.append_text(m)
+        pm = conf.get('PreeditMode', 'Auto')
+        self._preedit_combo.set_active(['Auto', 'Client', 'Panel'].index(pm) if pm in ['Auto', 'Client', 'Panel'] else 0)
+        self._preedit_combo.set_hexpand(False)
+        vbox.pack_start(row(_('Preedit mode'), self._preedit_combo), False, False, 4)
+        vbox.pack_start(hint(_('⚠ Chrome, Edge, Electron always show underline in Auto/Client mode. Choose Panel to disable it completely.')), False, False, 0)
+
+        self._underline_switch = Gtk.Switch()
+        self._underline_switch.set_active(conf.get('ShowPreeditUnderline', 'True').lower() == 'true')
+        self._underline_switch.set_valign(Gtk.Align.CENTER)
+        self._underline_switch.set_hexpand(False)
+        vbox.pack_start(row(_('Show underline while composing'), self._underline_switch), False, False, 6)
 
         # ── Behaviour ──────────────────────────────────────────────────────────
         vbox.pack_start(Gtk.Separator(), False, False, 8)
