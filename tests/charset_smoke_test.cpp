@@ -112,6 +112,80 @@ TEST(charset_tcvn3, mixed_ascii_and_vietnamese) {
               bytes({'X', 'i', 'n', ' ', 'c', 'h', 0xB5, 'o', '!'}));
 }
 
+// ── CP1258 ───────────────────────────────────────────────────────────────────
+
+TEST(charset_cp1258, ascii_passthrough) {
+    std::string ascii = "Hello, world! 0123";
+    EXPECT_EQ(charsetConvert(ascii, OutputCharset::CP1258), ascii);
+}
+
+TEST(charset_cp1258, base_chars_direct) {
+    // ă Â â Ê ê Ô ô Ơ ơ Ư ư đ Đ — single-byte direct mappings
+    EXPECT_EQ(charsetConvert("ă", OutputCharset::CP1258), bytes({0xE3}));
+    EXPECT_EQ(charsetConvert("Â", OutputCharset::CP1258), bytes({0xC2}));
+    EXPECT_EQ(charsetConvert("â", OutputCharset::CP1258), bytes({0xE2}));
+    EXPECT_EQ(charsetConvert("Ê", OutputCharset::CP1258), bytes({0xCA}));
+    EXPECT_EQ(charsetConvert("ê", OutputCharset::CP1258), bytes({0xEA}));
+    EXPECT_EQ(charsetConvert("ô", OutputCharset::CP1258), bytes({0xF4}));
+    EXPECT_EQ(charsetConvert("Ơ", OutputCharset::CP1258), bytes({0xD5}));
+    EXPECT_EQ(charsetConvert("ơ", OutputCharset::CP1258), bytes({0xF5}));
+    EXPECT_EQ(charsetConvert("Ư", OutputCharset::CP1258), bytes({0xDD}));
+    EXPECT_EQ(charsetConvert("ư", OutputCharset::CP1258), bytes({0xFD}));
+    EXPECT_EQ(charsetConvert("đ", OutputCharset::CP1258), bytes({0xF0}));
+    EXPECT_EQ(charsetConvert("Đ", OutputCharset::CP1258), bytes({0xD0}));
+}
+
+TEST(charset_cp1258, tones_direct_single_byte) {
+    // à á è é í ó ù ú have direct single-byte CP1258 forms
+    EXPECT_EQ(charsetConvert("à", OutputCharset::CP1258), bytes({0xE0}));
+    EXPECT_EQ(charsetConvert("á", OutputCharset::CP1258), bytes({0xE1}));
+    EXPECT_EQ(charsetConvert("é", OutputCharset::CP1258), bytes({0xE9}));
+    EXPECT_EQ(charsetConvert("ú", OutputCharset::CP1258), bytes({0xFA}));
+}
+
+TEST(charset_cp1258, tones_decomposed_two_bytes) {
+    // ã ì ò õ ý have NO single CP1258 byte: base letter + combining-mark byte
+    EXPECT_EQ(charsetConvert("ã", OutputCharset::CP1258), bytes({0x61, 0xDE}));  // a + tilde
+    EXPECT_EQ(charsetConvert("ì", OutputCharset::CP1258), bytes({0x69, 0xCC}));  // i + grave
+    EXPECT_EQ(charsetConvert("ò", OutputCharset::CP1258), bytes({0x6F, 0xCC}));  // o + grave
+    EXPECT_EQ(charsetConvert("õ", OutputCharset::CP1258), bytes({0x6F, 0xDE}));  // o + tilde
+    EXPECT_EQ(charsetConvert("ý", OutputCharset::CP1258), bytes({0x79, 0xEC}));  // y + acute
+}
+
+TEST(charset_cp1258, circumflex_and_horn_family_decomposed) {
+    // â/ê/ô/ơ/ư + tone -> precomposed-base byte + combining-mark byte
+    EXPECT_EQ(charsetConvert("ấ", OutputCharset::CP1258), bytes({0xE2, 0xEC}));  // â + acute
+    EXPECT_EQ(charsetConvert("ầ", OutputCharset::CP1258), bytes({0xE2, 0xCC}));  // â + grave
+    EXPECT_EQ(charsetConvert("ậ", OutputCharset::CP1258), bytes({0xE2, 0xF2}));  // â + dot below
+    EXPECT_EQ(charsetConvert("ờ", OutputCharset::CP1258), bytes({0xF5, 0xCC}));  // ơ + grave
+    EXPECT_EQ(charsetConvert("ữ", OutputCharset::CP1258), bytes({0xFD, 0xDE}));  // ư + tilde
+    EXPECT_EQ(charsetConvert("Ứ", OutputCharset::CP1258), bytes({0xDD, 0xEC}));  // Ư + acute
+}
+
+TEST(charset_cp1258, words) {
+    // "tiếng" = t + i + ế(ê+acute) + n + g
+    EXPECT_EQ(charsetConvert("tiếng", OutputCharset::CP1258),
+              bytes({'t', 'i', 0xEA, 0xEC, 'n', 'g'}));
+
+    // "việt" = v + i + ệ(ê+dot below) + t
+    EXPECT_EQ(charsetConvert("việt", OutputCharset::CP1258),
+              bytes({'v', 'i', 0xEA, 0xF2, 't'}));
+
+    // "được" = đ + ư + ợ(ơ+dot below) + c
+    EXPECT_EQ(charsetConvert("được", OutputCharset::CP1258),
+              bytes({0xF0, 0xFD, 0xF5, 0xF2, 'c'}));
+
+    // "hoặc" = h + o + ặ(ă+dot below) + c
+    EXPECT_EQ(charsetConvert("hoặc", OutputCharset::CP1258),
+              bytes({'h', 'o', 0xE3, 0xF2, 'c'}));
+}
+
+TEST(charset_cp1258, unmappable_passthrough) {
+    // Non-Vietnamese, non-Latin-1 codepoints fall back to UTF-8
+    std::string han_char = "\xE4\xB8\xAD";  // 中 U+4E2D in UTF-8
+    EXPECT_EQ(charsetConvert(han_char, OutputCharset::CP1258), han_char);
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

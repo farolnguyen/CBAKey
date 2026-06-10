@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace farolkey::core::charset {
 
@@ -35,6 +36,7 @@ static char32_t nextCodepoint(const char*& it, const char* end) {
 // Forward-declared table accessors — each charset file defines its own.
 const std::unordered_map<char32_t, uint8_t>& tcvn3Table();
 const std::unordered_map<char32_t, uint8_t>& cp1258Table();
+const std::unordered_map<char32_t, std::pair<uint8_t, uint8_t>>& cp1258DecomposeTable();
 const std::unordered_map<char32_t, uint8_t>& visciiTable();
 
 // ── Core conversion ────────────────────────────────────────────────────────────
@@ -65,13 +67,45 @@ static std::string convertWithTable(
     return out;
 }
 
+// CP1258 (Windows-1258) needs a second table: codepoints with no single-byte
+// CP1258 form are emitted as base-letter byte + combining-diacritic byte.
+static std::string convertCp1258(const std::string& utf8text) {
+    const auto& table = cp1258Table();
+    const auto& decomposeTable = cp1258DecomposeTable();
+    std::string out;
+    out.reserve(utf8text.size());
+    const char* it  = utf8text.data();
+    const char* end = it + utf8text.size();
+    while (it != end) {
+        const char* before = it;
+        char32_t cp = nextCodepoint(it, end);
+        if (cp < 0x80) {
+            // ASCII: always 1:1
+            out += static_cast<char>(cp);
+            continue;
+        }
+        if (auto found = table.find(cp); found != table.end()) {
+            out += static_cast<char>(found->second);
+            continue;
+        }
+        if (auto found = decomposeTable.find(cp); found != decomposeTable.end()) {
+            out += static_cast<char>(found->second.first);
+            out += static_cast<char>(found->second.second);
+            continue;
+        }
+        // Unmappable: keep original UTF-8 bytes
+        out.append(before, it);
+    }
+    return out;
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 std::string charsetConvert(const std::string& utf8text, OutputCharset charset) {
     switch (charset) {
         case OutputCharset::Unicode: return utf8text;
         case OutputCharset::TCVN3:   return convertWithTable(utf8text, tcvn3Table());
-        case OutputCharset::CP1258:  return convertWithTable(utf8text, cp1258Table());
+        case OutputCharset::CP1258:  return convertCp1258(utf8text);
         case OutputCharset::VISCII:  return convertWithTable(utf8text, visciiTable());
     }
     return utf8text;

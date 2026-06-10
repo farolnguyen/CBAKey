@@ -1,12 +1,178 @@
 #include <cstdint>
 #include <unordered_map>
+#include <utility>
 
 namespace farolkey::core::charset {
 
-// Windows-1258 (CP1258): Unicode NFC codepoint → CP1258 byte.
-// Table populated in M22.3.
+// Windows-1258 (CP1258): Unicode NFC codepoint -> single CP1258 byte.
+// Generated from iconv WINDOWS-1258 (byte <-> codepoint scan over 0x80-0xFF).
+// ASCII (0x00-0x7F) passes through unchanged and is not in this table.
+// Codepoints requiring decomposition (no single-byte CP1258 form) are in
+// cp1258DecomposeTable() instead.
 const std::unordered_map<char32_t, uint8_t>& cp1258Table() {
-    static const std::unordered_map<char32_t, uint8_t> kTable{};
+    static const std::unordered_map<char32_t, uint8_t> kTable{
+        // ── Vietnamese-specific base characters (no tone) ──────────────────────
+        {0x0102, 0xC3},  // Ă
+        {0x0103, 0xE3},  // ă
+        {0x00C2, 0xC2},  // Â
+        {0x00E2, 0xE2},  // â
+        {0x00CA, 0xCA},  // Ê
+        {0x00EA, 0xEA},  // ê
+        {0x00D4, 0xD4},  // Ô
+        {0x00F4, 0xF4},  // ô
+        {0x01A0, 0xD5},  // Ơ
+        {0x01A1, 0xF5},  // ơ
+        {0x01AF, 0xDD},  // Ư
+        {0x01B0, 0xFD},  // ư
+        {0x0110, 0xD0},  // Đ
+        {0x0111, 0xF0},  // đ
+        // ── Latin a/e/i/o/u + huyen (grave) / sac (acute), single-byte in CP1258 ─
+        {0x00C0, 0xC0},  // À
+        {0x00E0, 0xE0},  // à
+        {0x00C1, 0xC1},  // Á
+        {0x00E1, 0xE1},  // á
+        {0x00C8, 0xC8},  // È
+        {0x00E8, 0xE8},  // è
+        {0x00C9, 0xC9},  // É
+        {0x00E9, 0xE9},  // é
+        {0x00CD, 0xCD},  // Í
+        {0x00ED, 0xED},  // í
+        {0x00D3, 0xD3},  // Ó
+        {0x00F3, 0xF3},  // ó
+        {0x00D9, 0xD9},  // Ù
+        {0x00F9, 0xF9},  // ù
+        {0x00DA, 0xDA},  // Ú
+        {0x00FA, 0xFA},  // ú
+    };
+    return kTable;
+}
+
+// Codepoints with no single-byte CP1258 representation.
+// CP1258 encodes these as a precomposed base-letter byte followed by one of
+// the 5 Vietnamese combining-diacritic bytes:
+//   0xCC = combining grave (U+0300, huyen)   0xEC = combining acute (U+0301, sac)
+//   0xD2 = combining hook above (U+0309, hoi) 0xDE = combining tilde (U+0303, nga)
+//   0xF2 = combining dot below (U+0323, nang)
+// Unicode NFC codepoint -> {base byte, combining-mark byte}.
+const std::unordered_map<char32_t, std::pair<uint8_t, uint8_t>>& cp1258DecomposeTable() {
+    static const std::unordered_map<char32_t, std::pair<uint8_t, uint8_t>> kTable{
+        // ── A plain + tone (nga/Ã, dot below/ạ, hook/ả) ────────────────────────
+        {0x00C3, {0x41, 0xDE}},  // Ã
+        {0x00E3, {0x61, 0xDE}},  // ã
+        {0x1EA0, {0x41, 0xF2}},  // Ạ
+        {0x1EA1, {0x61, 0xF2}},  // ạ
+        {0x1EA2, {0x41, 0xD2}},  // Ả
+        {0x1EA3, {0x61, 0xD2}},  // ả
+        // ── I plain + tone ──────────────────────────────────────────────────────
+        {0x00CC, {0x49, 0xCC}},  // Ì
+        {0x00EC, {0x69, 0xCC}},  // ì
+        {0x0128, {0x49, 0xDE}},  // Ĩ
+        {0x0129, {0x69, 0xDE}},  // ĩ
+        {0x1EC8, {0x49, 0xD2}},  // Ỉ
+        {0x1EC9, {0x69, 0xD2}},  // ỉ
+        {0x1ECA, {0x49, 0xF2}},  // Ị
+        {0x1ECB, {0x69, 0xF2}},  // ị
+        // ── O plain + tone ──────────────────────────────────────────────────────
+        {0x00D2, {0x4F, 0xCC}},  // Ò
+        {0x00F2, {0x6F, 0xCC}},  // ò
+        {0x00D5, {0x4F, 0xDE}},  // Õ
+        {0x00F5, {0x6F, 0xDE}},  // õ
+        {0x1ECC, {0x4F, 0xF2}},  // Ọ
+        {0x1ECD, {0x6F, 0xF2}},  // ọ
+        {0x1ECE, {0x4F, 0xD2}},  // Ỏ
+        {0x1ECF, {0x6F, 0xD2}},  // ỏ
+        // ── U plain + tone ──────────────────────────────────────────────────────
+        {0x0168, {0x55, 0xDE}},  // Ũ
+        {0x0169, {0x75, 0xDE}},  // ũ
+        {0x1EE4, {0x55, 0xF2}},  // Ụ
+        {0x1EE5, {0x75, 0xF2}},  // ụ
+        {0x1EE6, {0x55, 0xD2}},  // Ủ
+        {0x1EE7, {0x75, 0xD2}},  // ủ
+        // ── Y plain + tone ──────────────────────────────────────────────────────
+        {0x00DD, {0x59, 0xEC}},  // Ý
+        {0x00FD, {0x79, 0xEC}},  // ý
+        {0x1EF2, {0x59, 0xCC}},  // Ỳ
+        {0x1EF3, {0x79, 0xCC}},  // ỳ
+        {0x1EF4, {0x59, 0xF2}},  // Ỵ
+        {0x1EF5, {0x79, 0xF2}},  // ỵ
+        {0x1EF6, {0x59, 0xD2}},  // Ỷ
+        {0x1EF7, {0x79, 0xD2}},  // ỷ
+        {0x1EF8, {0x59, 0xDE}},  // Ỹ
+        {0x1EF9, {0x79, 0xDE}},  // ỹ
+        // ── E plain + tone ──────────────────────────────────────────────────────
+        {0x1EB8, {0x45, 0xF2}},  // Ẹ
+        {0x1EB9, {0x65, 0xF2}},  // ẹ
+        {0x1EBA, {0x45, 0xD2}},  // Ẻ
+        {0x1EBB, {0x65, 0xD2}},  // ẻ
+        {0x1EBC, {0x45, 0xDE}},  // Ẽ
+        {0x1EBD, {0x65, 0xDE}},  // ẽ
+        // ── A with circumflex + tone (Â family) ────────────────────────────────
+        {0x1EA4, {0xC2, 0xEC}},  // Ấ
+        {0x1EA5, {0xE2, 0xEC}},  // ấ
+        {0x1EA6, {0xC2, 0xCC}},  // Ầ
+        {0x1EA7, {0xE2, 0xCC}},  // ầ
+        {0x1EA8, {0xC2, 0xD2}},  // Ẩ
+        {0x1EA9, {0xE2, 0xD2}},  // ẩ
+        {0x1EAA, {0xC2, 0xDE}},  // Ẫ
+        {0x1EAB, {0xE2, 0xDE}},  // ẫ
+        {0x1EAC, {0xC2, 0xF2}},  // Ậ
+        {0x1EAD, {0xE2, 0xF2}},  // ậ
+        // ── A with breve + tone (Ă family) ─────────────────────────────────────
+        {0x1EAE, {0xC3, 0xEC}},  // Ắ
+        {0x1EAF, {0xE3, 0xEC}},  // ắ
+        {0x1EB0, {0xC3, 0xCC}},  // Ằ
+        {0x1EB1, {0xE3, 0xCC}},  // ằ
+        {0x1EB2, {0xC3, 0xD2}},  // Ẳ
+        {0x1EB3, {0xE3, 0xD2}},  // ẳ
+        {0x1EB4, {0xC3, 0xDE}},  // Ẵ
+        {0x1EB5, {0xE3, 0xDE}},  // ẵ
+        {0x1EB6, {0xC3, 0xF2}},  // Ặ
+        {0x1EB7, {0xE3, 0xF2}},  // ặ
+        // ── E with circumflex + tone (Ê family) ────────────────────────────────
+        {0x1EBE, {0xCA, 0xEC}},  // Ế
+        {0x1EBF, {0xEA, 0xEC}},  // ế
+        {0x1EC0, {0xCA, 0xCC}},  // Ề
+        {0x1EC1, {0xEA, 0xCC}},  // ề
+        {0x1EC2, {0xCA, 0xD2}},  // Ể
+        {0x1EC3, {0xEA, 0xD2}},  // ể
+        {0x1EC4, {0xCA, 0xDE}},  // Ễ
+        {0x1EC5, {0xEA, 0xDE}},  // ễ
+        {0x1EC6, {0xCA, 0xF2}},  // Ệ
+        {0x1EC7, {0xEA, 0xF2}},  // ệ
+        // ── O with circumflex + tone (Ô family) ────────────────────────────────
+        {0x1ED0, {0xD4, 0xEC}},  // Ố
+        {0x1ED1, {0xF4, 0xEC}},  // ố
+        {0x1ED2, {0xD4, 0xCC}},  // Ồ
+        {0x1ED3, {0xF4, 0xCC}},  // ồ
+        {0x1ED4, {0xD4, 0xD2}},  // Ổ
+        {0x1ED5, {0xF4, 0xD2}},  // ổ
+        {0x1ED6, {0xD4, 0xDE}},  // Ỗ
+        {0x1ED7, {0xF4, 0xDE}},  // ỗ
+        {0x1ED8, {0xD4, 0xF2}},  // Ộ
+        {0x1ED9, {0xF4, 0xF2}},  // ộ
+        // ── O with horn + tone (Ơ family) ──────────────────────────────────────
+        {0x1EDA, {0xD5, 0xEC}},  // Ớ
+        {0x1EDB, {0xF5, 0xEC}},  // ớ
+        {0x1EDC, {0xD5, 0xCC}},  // Ờ
+        {0x1EDD, {0xF5, 0xCC}},  // ờ
+        {0x1EDE, {0xD5, 0xD2}},  // Ở
+        {0x1EDF, {0xF5, 0xD2}},  // ở
+        {0x1EE0, {0xD5, 0xDE}},  // Ỡ
+        {0x1EE1, {0xF5, 0xDE}},  // ỡ
+        {0x1EE2, {0xD5, 0xF2}},  // Ợ
+        {0x1EE3, {0xF5, 0xF2}},  // ợ
+        // ── U with horn + tone (Ư family) ──────────────────────────────────────
+        {0x1EE8, {0xDD, 0xEC}},  // Ứ
+        {0x1EE9, {0xFD, 0xEC}},  // ứ
+        {0x1EEA, {0xDD, 0xCC}},  // Ừ
+        {0x1EEB, {0xFD, 0xCC}},  // ừ
+        {0x1EEC, {0xDD, 0xD2}},  // Ử
+        {0x1EED, {0xFD, 0xD2}},  // ử
+        {0x1EEE, {0xDD, 0xDE}},  // Ữ
+        {0x1EEF, {0xFD, 0xDE}},  // ữ
+        {0x1EF0, {0xDD, 0xF2}},  // Ự
+        {0x1EF1, {0xFD, 0xF2}},  // ự
+    };
     return kTable;
 }
 
