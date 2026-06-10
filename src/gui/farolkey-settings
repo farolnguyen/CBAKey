@@ -94,6 +94,7 @@ _GENERAL_DEFAULTS = {
     'AutoCapitalize':       'False',
     'PreeditMode':          'Auto',
     'CommittedRewrite':     'True',
+    'OutputCharset':        'Unicode',
 }
 
 def load_general_conf() -> dict:
@@ -1058,6 +1059,28 @@ class SettingsWindow(Gtk.Window):
         self._underline_switch.set_hexpand(False)
         vbox.pack_start(row(_('Show underline while composing'), self._underline_switch), False, False, 6)
 
+        # ── Output ─────────────────────────────────────────────────────────────
+        vbox.pack_start(Gtk.Separator(), False, False, 8)
+        vbox.pack_start(section(_('Output')), False, False, 0)
+
+        self._charset_combo = Gtk.ComboBoxText()
+        _charsets = ['Unicode (UTF-8)', 'TCVN3 (ABC)', 'CP1258 (Windows-1258)', 'VISCII']
+        for c in _charsets:
+            self._charset_combo.append_text(c)
+        _charset_keys = ['Unicode', 'TCVN3', 'CP1258', 'VISCII']
+        oc = conf.get('OutputCharset', 'Unicode')
+        self._charset_combo.set_active(_charset_keys.index(oc) if oc in _charset_keys else 0)
+        self._charset_combo.set_hexpand(False)
+        vbox.pack_start(row(_('Output encoding'), self._charset_combo), False, False, 4)
+
+        self._charset_warning = hint(_(
+            '⚠ TCVN3/CP1258/VISCII send raw legacy bytes — only readable by old XIM '
+            'apps. Modern GTK/Qt/Electron apps expect UTF-8 and will show garbled text.'))
+        self._charset_warning.set_no_show_all(True)
+        self._charset_warning.set_visible(oc != 'Unicode')
+        vbox.pack_start(self._charset_warning, False, False, 0)
+        self._charset_combo.connect('changed', self._on_charset_changed)
+
         # ── Behaviour ──────────────────────────────────────────────────────────
         vbox.pack_start(Gtk.Separator(), False, False, 8)
         vbox.pack_start(section(_('Behavior')), False, False, 0)
@@ -1091,9 +1114,15 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(btn_row, False, False, 0)
         return scroll
 
+    def _on_charset_changed(self, _combo):
+        charset_keys = ['Unicode', 'TCVN3', 'CP1258', 'VISCII']
+        oc = charset_keys[self._charset_combo.get_active()]
+        self._charset_warning.set_visible(oc != 'Unicode')
+
     def _on_general_save(self, _btn):
         methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy', 'FreeLayout']
         pmodes  = ['Auto', 'Client', 'Panel']
+        charsets = ['Unicode', 'TCVN3', 'CP1258', 'VISCII']
         new_lang = self._lang_combo.get_active_id() or 'en'
         updates = {
             'Method':               methods[self._method_combo.get_active()],
@@ -1102,6 +1131,7 @@ class SettingsWindow(Gtk.Window):
             'ShowPreeditUnderline': 'True' if self._underline_switch.get_active() else 'False',
             'AutoCapitalize':       'True' if self._autocap_switch.get_active() else 'False',
             'CommittedRewrite':     'True' if self._rewrite_switch.get_active() else 'False',
+            'OutputCharset':        charsets[self._charset_combo.get_active()],
             'language':             new_lang,
         }
         save_general_conf(updates)
@@ -1117,6 +1147,7 @@ class SettingsWindow(Gtk.Window):
     def _on_general_reset(self, _btn):
         methods = ['Telex', 'VNI', 'VIQR', 'ViqrStar', 'SimpleTelex', 'SimpleTelex2', 'Microsoft', 'TocKy', 'FreeLayout']
         pmodes  = ['Auto', 'Client', 'Panel']
+        charsets = ['Unicode', 'TCVN3', 'CP1258', 'VISCII']
         current = {
             'Method':               methods[self._method_combo.get_active()],
             'ToggleKey':            self._toggle_entry.get_text().strip(),
@@ -1124,6 +1155,7 @@ class SettingsWindow(Gtk.Window):
             'ShowPreeditUnderline': 'True' if self._underline_switch.get_active() else 'False',
             'AutoCapitalize':       'True' if self._autocap_switch.get_active() else 'False',
             'CommittedRewrite':     'True' if self._rewrite_switch.get_active() else 'False',
+            'OutputCharset':        charsets[self._charset_combo.get_active()],
         }
 
         changes = [(k, current[k], _GENERAL_DEFAULTS[k])
@@ -1144,6 +1176,7 @@ class SettingsWindow(Gtk.Window):
             'ShowPreeditUnderline': _('Show underline while composing'),
             'AutoCapitalize':       _('Auto-capitalize sentences'),
             'CommittedRewrite':     _('Allow editing committed syllable'),
+            'OutputCharset':        _('Output encoding'),
         }
         _bool_display = {'True': _('On'), 'False': _('Off')}
 
@@ -1209,6 +1242,9 @@ class SettingsWindow(Gtk.Window):
             self._underline_switch.set_active(conf['ShowPreeditUnderline'].lower() == 'true')
             self._autocap_switch.set_active(conf['AutoCapitalize'].lower() == 'true')
             self._rewrite_switch.set_active(conf['CommittedRewrite'].lower() == 'true')
+            oc = conf.get('OutputCharset', 'Unicode')
+            _charset_keys = ['Unicode', 'TCVN3', 'CP1258', 'VISCII']
+            self._charset_combo.set_active(_charset_keys.index(oc) if oc in _charset_keys else 0)
             try:
                 subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
             except Exception:

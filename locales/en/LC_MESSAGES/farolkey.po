@@ -67,6 +67,15 @@ msgstr ""
 msgid "Show underline while composing"
 msgstr ""
 
+msgid "Output"
+msgstr ""
+
+msgid "Output encoding"
+msgstr ""
+
+msgid "⚠ TCVN3/CP1258/VISCII send raw legacy bytes — only readable by old XIM apps. Modern GTK/Qt/Electron apps expect UTF-8 and will show garbled text."
+msgstr ""
+
 msgid "Behavior"
 msgstr ""
 
