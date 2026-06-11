@@ -353,6 +353,9 @@ msgstr ""
 msgid "Notification"
 msgstr ""
 
+msgid "Shape capture"
+msgstr ""
+
 msgid "Test capture"
 msgstr ""
 

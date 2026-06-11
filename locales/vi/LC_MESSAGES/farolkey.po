@@ -362,6 +362,9 @@ msgstr "Clipboard X11"
 msgid "Notification"
 msgstr "Thông báo"
 
+msgid "Shape capture"
+msgstr "Vẽ shape"
+
 msgid "Test capture"
 msgstr "Chụp thử"
 

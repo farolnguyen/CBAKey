@@ -39,6 +39,17 @@ import threading
 import time
 from pathlib import Path
 
+
+def _has_gi_cairo() -> bool:
+    """True if PyGObject's Cairo integration (python3-gi-cairo) is available
+    — required by farolkey-screenshot for shape-based region capture (M23+)."""
+    try:
+        gi.require_foreign('cairo')
+        return True
+    except (ImportError, ValueError):
+        return False
+
+
 # ── Single-instance lock ───────────────────────────────────────────────────────
 
 _LOCK_PATH = f'/tmp/farolkey-settings-{os.getuid()}.lock'
@@ -1933,10 +1944,11 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(section(_('System tools')), False, False, 0)
         ss_tools = [('grim', _('Capture Wayland')), ('slurp', _('Region Wayland')),
                     ('maim', _('Capture X11')), ('wl-copy', _('Clipboard Wayland')),
-                    ('xclip', _('Clipboard X11')), ('notify-send', _('Notification'))]
+                    ('xclip', _('Clipboard X11')), ('notify-send', _('Notification')),
+                    ('python3-gi-cairo', _('Shape capture'))]
         tools_box = Gtk.Box(spacing=16); tools_box.set_margin_top(6)
         for tool, desc in ss_tools:
-            found = bool(shutil.which(tool))
+            found = _has_gi_cairo() if tool == 'python3-gi-cairo' else bool(shutil.which(tool))
             col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             name_lbl = Gtk.Label()
             name_lbl.set_markup(f'<span foreground="{"#4caf50" if found else "#f44336"}">{"✓" if found else "✗"} {tool}</span>')
