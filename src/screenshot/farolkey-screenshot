@@ -255,10 +255,12 @@ def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h:
     """Crop pixbuf to the bounding box of the selection and, for non-rect
     shapes, apply an alpha mask outside the shape (PNG with transparency).
 
-    'rect' is identical to crop_pixbuf() — no alpha mask. 'freeform' is
-    implemented in M23.4.
+    'rect' is identical to crop_pixbuf() — no alpha mask. For 'freeform',
+    `points` is the closed polygon path in coordinates local to the crop
+    (i.e. relative to (x, y)); falls back to a plain rect crop if it has
+    fewer than 3 points.
     """
-    if shape == 'rect':
+    if shape == 'rect' or (shape == 'freeform' and (not points or len(points) < 3)):
         return crop_pixbuf(pixbuf, x, y, w, h)
 
     pw, ph = pixbuf.get_width(), pixbuf.get_height()
@@ -279,6 +281,12 @@ def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h:
         cr.clip()
     elif shape == 'roundrect':
         _roundrect_path(cr, 0, 0, w, h, _roundrect_radius(w, h))
+        cr.clip()
+    elif shape == 'freeform':
+        cr.move_to(*points[0])
+        for px_, py_ in points[1:]:
+            cr.line_to(px_, py_)
+        cr.close_path()
         cr.clip()
     else:
         raise NotImplementedError(f'crop_shaped: shape={shape!r} not yet implemented')
@@ -615,12 +623,11 @@ label.hint-lbl {
 """
 
 # (id, label, enabled) — shown in the shape-picker toolbar in this order.
-# 'freeform' stays disabled until M23.4 implements it.
 _SHAPES = [
     ('rect',      '▭  Rectangle',   True),
     ('ellipse',   '○  Ellipse',     True),
     ('roundrect', '▢  Rounded Rect', True),
-    ('freeform',  '✏  Freeform',    False),
+    ('freeform',  '✏  Freeform',    True),
 ]
 
 
@@ -637,6 +644,14 @@ class _SelState:
 
     def rect(self):
         """Return (x, y, w, h) in absolute logical coords, normalised."""
+        if self.shape == 'freeform':
+            if not self.points:
+                return 0, 0, 0, 0
+            xs = [p[0] for p in self.points]
+            ys = [p[1] for p in self.points]
+            x1, y1 = min(xs), min(ys)
+            x2, y2 = max(xs), max(ys)
+            return x1, y1, x2 - x1, y2 - y1
         x = min(self.sx, self.ex)
         y = min(self.sy, self.ey)
         return x, y, abs(self.ex - self.sx), abs(self.ey - self.sy)
@@ -848,13 +863,38 @@ class MonitorOverlay(Gtk.Window):
     def _act_pick_shape(self, shape: str):
         if shape == self._sel.shape:
             return
+        switching_freeform = 'freeform' in (shape, self._sel.shape)
         self._sel.shape = shape
         for ov in self._overlays:
             ov._set_active_shape_btn(shape)
+        if switching_freeform and self._sel.mode != 'toolbar':
+            # Freeform uses a hand-drawn point list instead of the rect-based
+            # geometry the other shapes share — switching to/from it can't
+            # carry over the current selection, so restart the drag.
+            self._sel.points   = []
+            self._sel.dragging = False
+            self._sel.mode     = 'selecting'
+            self._reset_to_selecting_visuals()
+            return
         # Re-render an in-progress/finished selection in the new shape.
         x, y, w, h = self._sel.rect()
         if w > 0 and h > 0:
             self._update_all_sel_visuals()
+
+    def _reset_to_selecting_visuals(self):
+        """Hide selection visuals and reset hint/cursor for a fresh drag in
+        'selecting' mode (Esc from review, click-outside in review, or a
+        shape switch to/from freeform)."""
+        _sel_hint = 'Kéo chuột để chọn vùng  •  Esc để huỷ'
+        for ov in self._overlays:
+            ov._hint_lbl.set_text(_sel_hint)
+            ov._size_lbl.hide()
+            ov._sel_box.hide()
+            ov._sel_img_box.hide()
+            ov._shape_draw.hide()
+            ov._set_cursor(Gdk.CursorType.CROSSHAIR)
+            ov._rev_drag = None
+            GLib.idle_add(ov._position_hint)
 
     def _set_active_shape_btn(self, shape: str):
         for s, btn in self._shape_btns.items():
@@ -868,6 +908,7 @@ class MonitorOverlay(Gtk.Window):
         """Fully exit region-select mode, back to the main toolbar."""
         self._sel.mode     = 'toolbar'
         self._sel.dragging = False
+        self._sel.points   = []
         for ov in self._overlays:
             if ov._toolbar_box:
                 ov._toolbar_box.show()
@@ -924,7 +965,9 @@ class MonitorOverlay(Gtk.Window):
         return None, x1, y1, x2, y2
 
     def _update_cursor_for_review(self, ax, ay):
-        if ax is None:
+        if ax is None or self._sel.shape == 'freeform':
+            # Freeform review has no resize/move handles — any click restarts
+            # the drawing, so always show the crosshair.
             self._set_cursor(Gdk.CursorType.CROSSHAIR)
             return
         hit, *_ = self._review_hit_test(ax, ay)
@@ -954,26 +997,26 @@ class MonitorOverlay(Gtk.Window):
             self._sel.dragging = True
             self._sel.sx = self._sel.ex = ax
             self._sel.sy = self._sel.ey = ay
+            if self._sel.shape == 'freeform':
+                self._sel.points = [(ax, ay)]
             self._update_all_sel_visuals()
 
         elif self._sel.mode == 'review':
-            hit, ox1, oy1, ox2, oy2 = self._review_hit_test(ax, ay)
+            # Freeform review has no resize/move handles — any click
+            # restarts the drawing (same as clicking outside the selection).
+            if self._sel.shape == 'freeform':
+                hit, ox1, oy1, ox2, oy2 = None, 0, 0, 0, 0
+            else:
+                hit, ox1, oy1, ox2, oy2 = self._review_hit_test(ax, ay)
             if hit is None:
                 # Click outside selection → start a fresh drag
                 self._sel.mode = 'selecting'
-                self._rev_drag = None
-                _sel_hint = 'Kéo chuột để chọn vùng  •  Esc để huỷ'
-                for ov in self._overlays:
-                    ov._hint_lbl.set_text(_sel_hint)
-                    ov._size_lbl.hide()
-                    ov._sel_box.hide()
-                    ov._sel_img_box.hide()
-                    ov._shape_draw.hide()
-                    ov._set_cursor(Gdk.CursorType.CROSSHAIR)
-                    GLib.idle_add(ov._position_hint)
+                self._reset_to_selecting_visuals()
                 self._sel.dragging = True
                 self._sel.sx = self._sel.ex = ax
                 self._sel.sy = self._sel.ey = ay
+                if self._sel.shape == 'freeform':
+                    self._sel.points = [(ax, ay)]
             else:
                 self._rev_drag = {
                     'mode': hit,
@@ -987,6 +1030,8 @@ class MonitorOverlay(Gtk.Window):
         if self._sel.mode == 'selecting' and self._sel.dragging and not self._done:
             self._sel.ex = ax
             self._sel.ey = ay
+            if self._sel.shape == 'freeform':
+                self._sel.points.append((ax, ay))
             self._update_all_sel_visuals()
             self._update_size_labels()
 
@@ -1046,8 +1091,11 @@ class MonitorOverlay(Gtk.Window):
                     GLib.idle_add(self._deliver_region, x, y, w, h)
                 else:
                     self._sel.mode = 'review'
-                    _hint = ('Kéo góc/cạnh để chỉnh  •  Kéo trong vùng để di chuyển'
-                             '  •  Enter để xác nhận  •  Esc để chọn lại')
+                    if self._sel.shape == 'freeform':
+                        _hint = 'Enter để xác nhận  •  Esc để vẽ lại'
+                    else:
+                        _hint = ('Kéo góc/cạnh để chỉnh  •  Kéo trong vùng để di chuyển'
+                                 '  •  Enter để xác nhận  •  Esc để chọn lại')
                     for ov in self._overlays:
                         ov._hint_lbl.set_text(_hint)
                         ov._hint_lbl.show()
@@ -1068,16 +1116,8 @@ class MonitorOverlay(Gtk.Window):
                 # Return to selecting mode — clear selection, allow a new drag
                 self._sel.mode     = 'selecting'
                 self._sel.dragging = False
-                _sel_hint = 'Kéo chuột để chọn vùng  •  Esc để huỷ'
-                for ov in self._overlays:
-                    ov._hint_lbl.set_text(_sel_hint)
-                    ov._size_lbl.hide()
-                    ov._sel_box.hide()
-                    ov._sel_img_box.hide()
-                    ov._shape_draw.hide()
-                    ov._set_cursor(Gdk.CursorType.CROSSHAIR)
-                    ov._rev_drag = None
-                    GLib.idle_add(ov._position_hint)
+                self._sel.points   = []
+                self._reset_to_selecting_visuals()
             elif not self._done:
                 self._act_cancel()
             return True
@@ -1093,7 +1133,8 @@ class MonitorOverlay(Gtk.Window):
     def _deliver_region(self, ax, ay, aw, ah):
         for ov in self._overlays:
             ov.hide()
-        self._on_confirm((ax, ay, aw, ah, self._sel.shape))
+        points = [(px - ax, py - ay) for px, py in self._sel.points]
+        self._on_confirm((ax, ay, aw, ah, self._sel.shape, points))
         return False
 
     # ── Selection visuals ─────────────────────────────────────────────────────
@@ -1135,11 +1176,18 @@ class MonitorOverlay(Gtk.Window):
                 if self._sel.shape == 'ellipse':
                     # Ellipse centre/radii in _shape_draw-local coords (origin = cx1,cy1)
                     self._shape_geom = (lx + sw / 2 - cx1, ly + sh / 2 - cy1, sw / 2, sh / 2)
-                else:
+                elif self._sel.shape == 'roundrect':
                     # Roundrect bbox top-left + size + corner radius, in
                     # _shape_draw-local coords (origin = cx1,cy1)
                     bx, by = lx - cx1, ly - cy1
                     self._shape_geom = (bx, by, sw, sh, _roundrect_radius(sw, sh))
+                else:
+                    # Freeform: list of path points in _shape_draw-local
+                    # coords (origin = cx1,cy1)
+                    self._shape_geom = [
+                        (px - geo.x - cx1, py - geo.y - cy1)
+                        for px, py in self._sel.points
+                    ]
                 self._fixed.move(self._shape_draw, cx1, cy1)
                 self._shape_draw.set_size_request(cw, ch)
                 self._shape_draw.show()
@@ -1150,11 +1198,12 @@ class MonitorOverlay(Gtk.Window):
             self._shape_draw.hide()
 
     def _on_shape_draw(self, _widget, cr):
-        if self._sel.shape not in ('ellipse', 'roundrect') or self._shape_sub is None \
+        shape = self._sel.shape
+        if shape not in ('ellipse', 'roundrect', 'freeform') or self._shape_sub is None \
                 or self._shape_geom is None:
             return False
 
-        if self._sel.shape == 'ellipse':
+        if shape == 'ellipse':
             cx, cy, rx, ry = self._shape_geom
             if rx <= 0 or ry <= 0:
                 return False
@@ -1165,13 +1214,22 @@ class MonitorOverlay(Gtk.Window):
                 cr.scale(rx, ry)
                 cr.arc(0, 0, 1, 0, 2 * math.pi)
                 cr.restore()
-        else:
+        elif shape == 'roundrect':
             bx, by, bw, bh, br = self._shape_geom
             if bw <= 0 or bh <= 0:
                 return False
 
             def _path():
                 _roundrect_path(cr, bx, by, bw, bh, br)
+        else:
+            pts = self._shape_geom
+            if len(pts) < 2:
+                return False
+
+            def _path():
+                cr.move_to(*pts[0])
+                for p in pts[1:]:
+                    cr.line_to(*p)
 
         # Bright pixbuf masked to the shape, with the same blue tint as .sel-box
         _path()
@@ -1182,11 +1240,17 @@ class MonitorOverlay(Gtk.Window):
         cr.paint()
         cr.reset_clip()
 
-        # Outline
+        # Outline — for freeform, stay an open polyline while still dragging
+        # and only close the path once the mouse is released.
         _path()
+        if shape == 'freeform' and not self._sel.dragging:
+            cr.close_path()
         cr.set_source_rgba(60 / 255, 140 / 255, 255 / 255, 0.95)
         cr.set_line_width(2)
         cr.stroke()
+
+        if shape == 'freeform':
+            return False  # no resize handles → no dashed bounding box
 
         # Dashed bounding box — shows the drag/resize handle area (corners/edges)
         cw, ch = self._shape_sub.get_width(), self._shape_sub.get_height()
@@ -1318,13 +1382,13 @@ class CaptureReviewOverlay:
             log.info('full image used: %d bytes', len(self._full))
             finish(self._full, self._conf)
             return
-        ax, ay, aw, ah, shape = region
+        ax, ay, aw, ah, shape, points = region
         px = ax - self._pb_ox
         py = ay - self._pb_oy
         log.info('region selected: %dx%d shape=%s abs=(%d,%d) pb=(%d,%d)',
                  aw, ah, shape, ax, ay, px, py)
         try:
-            png = crop_shaped(self._pb, shape, px, py, aw, ah)
+            png = crop_shaped(self._pb, shape, px, py, aw, ah, points=points)
         except Exception as e:
             log.error('crop failed: %s', e)
             show_error(str(e))
