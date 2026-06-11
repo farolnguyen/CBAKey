@@ -707,8 +707,12 @@ class MonitorOverlay(Gtk.Window):
         GLib.idle_add(self._position_hint)
 
     def _position_toolbar(self):
+        # Skip hidden boxes: a hidden widget's get_preferred_size() can
+        # return 0, which would shift it to (geo.width // 2, 24) — left
+        # edge at screen-center instead of centered — and that wrong
+        # position sticks for when it's shown again later (e.g. "Back").
         for box in (self._toolbar_box, self._shape_toolbar):
-            if box is not None:
+            if box is not None and box.get_visible():
                 w = box.get_preferred_size()[1].width
                 self._fixed.move(box, (self._geo.width - w) // 2, 24)
         return False
