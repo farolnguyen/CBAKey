@@ -261,6 +261,23 @@ def notify(msg: str):
         subprocess.Popen([_NOTIFY, '-a', 'FarolKey', '-t', '2000', 'FarolKey', msg],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+# ─── farolkey-settings IPC (step aside while overlay is open) ────────────────
+
+_SETTINGS_SOCK_PATH = f'/tmp/farolkey-settings-{os.getuid()}.sock'
+
+def _send_settings_cmd(cmd: str):
+    """Best-effort: ask a running farolkey-settings instance to step aside
+    (__LOWER__) or come back (__RESTORE__) while the region-select overlay
+    is open. No-op if farolkey-settings isn't running.
+    """
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(0.3)
+            s.connect(_SETTINGS_SOCK_PATH)
+            s.sendall(cmd.encode())
+    except OSError:
+        pass
+
 # ─── Capture effect (flash + shutter sound) ──────────────────────────────────
 
 _FLASH_CSS     = b"window.flash-win { background-color: white; }"
@@ -1027,6 +1044,7 @@ class CaptureReviewOverlay:
     def _on_confirm(self, region):
         if self._done: return
         self._done = True
+        _send_settings_cmd('__RESTORE__')
         for ov in self._overlays:
             ov.destroy()
         if region is None:
@@ -1048,6 +1066,7 @@ class CaptureReviewOverlay:
     def _on_cancel(self):
         if self._done: return
         self._done = True
+        _send_settings_cmd('__RESTORE__')
         log.info('capture cancelled')
         for ov in self._overlays:
             ov.destroy()
@@ -1091,6 +1110,10 @@ def main():
         if skip_review:
             finish(png, conf)
             return
+        # farolkey-settings is also keep_above and would otherwise cover the
+        # fullscreen region-select overlay — ask it to step aside until the
+        # overlay closes (see CaptureReviewOverlay._on_confirm/_on_cancel).
+        _send_settings_cmd('__LOWER__')
         overlay = CaptureReviewOverlay(png, conf)
         overlay.show_all()
         if direct_region:

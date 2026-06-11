@@ -87,8 +87,13 @@ def _start_ipc_listener(win):
             except OSError:
                 return
             with conn:
-                tab = conn.recv(64).decode().strip()
-            GLib.idle_add(_switch_tab, win, tab)
+                msg = conn.recv(64).decode().strip()
+            if msg == '__LOWER__':
+                GLib.idle_add(_lower_settings, win)
+            elif msg == '__RESTORE__':
+                GLib.idle_add(_restore_settings, win)
+            else:
+                GLib.idle_add(_switch_tab, win, msg)
 
     threading.Thread(target=_loop, daemon=True).start()
 
@@ -96,6 +101,20 @@ def _switch_tab(win, tab: str):
     idx = _TAB_INDEX.get(tab)
     if idx is not None:
         win._nb.set_current_page(idx)
+    win.present()
+    return False
+
+def _lower_settings(win):
+    """Step aside for the screenshot region-select overlay (also keep_above)."""
+    win.set_keep_above(False)
+    gdkwin = win.get_window()
+    if gdkwin is not None:
+        gdkwin.lower()
+    return False
+
+def _restore_settings(win):
+    """Undo _lower_settings() once the screenshot overlay closes."""
+    win.set_keep_above(True)
     win.present()
     return False
 
