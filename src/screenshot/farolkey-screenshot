@@ -17,12 +17,11 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
-from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
+from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio
 
 import cairo
 gi.require_foreign('cairo')
 
-import io
 import math
 import os
 import shutil
@@ -233,6 +232,19 @@ def crop_pixbuf(pixbuf: GdkPixbuf.Pixbuf, x: int, y: int, w: int, h: int) -> byt
     return bytes(data)
 
 
+def _is_dark_theme() -> bool:
+    """Best-effort: True if the desktop prefers a dark color scheme.
+
+    Used by crop_shaped() to pick a fallback fill color for the area
+    outside non-rect shapes — apps that ignore the PNG alpha channel show
+    that color as a solid background instead of cairo's default black.
+    """
+    try:
+        scheme = Gio.Settings.new('org.gnome.desktop.interface').get_string('color-scheme')
+        return scheme == 'prefer-dark'
+    except Exception:
+        return False
+
 def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h: int,
                 points=None) -> bytes:
     """Crop pixbuf to the bounding box of the selection and, for non-rect
@@ -267,21 +279,33 @@ def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h:
         cr.paint()
         cr.reset_clip()
 
-        # Bake a white ring around the ellipse boundary so the crop reads as
-        # an intentional circle/oval — without it, apps that ignore the PNG
-        # alpha channel show the transparent corners as plain black, making
-        # the result look like a rectangular screenshot with a hole cut out.
+        # Thin ring around the ellipse boundary so the crop reads as an
+        # intentional circle/oval against either fallback fill below.
         _ellipse_path()
-        cr.set_source_rgba(1, 1, 1, 0.9)
-        cr.set_line_width(4)
+        cr.set_source_rgba(0.5, 0.5, 0.5, 0.8)
+        cr.set_line_width(2)
         cr.stroke()
     else:
         raise NotImplementedError(f'crop_shaped: shape={shape!r} not yet implemented')
     surface.flush()
 
-    buf = io.BytesIO()
-    surface.write_to_png(buf)
-    return buf.getvalue()
+    # cairo's premultiplied ARGB32 stores (0,0,0,0) for fully-transparent
+    # pixels, so apps that ignore the PNG alpha channel show solid black
+    # outside the shape. Composite onto a fallback fill matching the
+    # desktop's light/dark preference instead — alpha-aware apps still see
+    # true transparency (alpha stays 0 there), while alpha-naive apps show
+    # a plausible flat background (dark gray on a dark desktop, white on a
+    # light one) rather than black.
+    fill = (0x2d, 0x2d, 0x2d) if _is_dark_theme() else (0xff, 0xff, 0xff)
+    masked = Gdk.pixbuf_get_from_surface(surface, 0, 0, w, h)
+    bg = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, w, h)
+    bg.fill((fill[0] << 24) | (fill[1] << 16) | (fill[2] << 8))
+    masked.composite(bg, 0, 0, w, h, 0, 0, 1.0, 1.0, GdkPixbuf.InterpType.NEAREST, 255)
+
+    ok, data = bg.save_to_bufferv('png', [], [])
+    if not ok:
+        raise CaptureError('Failed to encode cropped PNG')
+    return bytes(data)
 
 # ─── Clipboard + notifications ────────────────────────────────────────────────
 
