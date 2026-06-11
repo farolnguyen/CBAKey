@@ -67,6 +67,7 @@ _DEFAULTS = {
     'capture_mode':     'all',   # 'all' = all monitors | 'cursor' = monitor with cursor
     'instant_capture':  'false', # 'true' = confirm on mouse release; 'false' = review mode
     'hotkey_action':    'menu',  # 'menu' = show capture menu | 'fullscreen' | 'region'
+    'show_notification': 'true',
 }
 
 def load_conf() -> dict:
@@ -351,7 +352,8 @@ def finish(png: bytes, conf: dict, region=None):
              conf.get('ask_before_save', 'true'))
     copy_to_clipboard(png)
     push_image_to_clipboard_history(png)
-    notify('Screenshot copied')
+    if conf.get('show_notification', 'true').lower() == 'true':
+        notify('Screenshot copied')
     play_capture_effect(region)
 
     auto = conf.get('auto_save', 'false').lower() == 'true'

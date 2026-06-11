@@ -326,6 +326,9 @@ msgstr "Chụp ngay khi thả chuột"
 msgid "If enabled: screenshot taken immediately on mouse release — no preview / region adjustment"
 msgstr "Nếu bật: chụp ảnh ngay khi thả chuột — không hiện preview / điều chỉnh vùng"
 
+msgid "Show notification after capture"
+msgstr "Hiện thông báo sau khi chụp"
+
 msgid "Storage"
 msgstr "Lưu trữ"
 

@@ -413,6 +413,7 @@ _SS_DEFAULTS = {
     'instant_capture': 'false',
     'capture_mode':    'all',
     'hotkey_action':   'menu',
+    'show_notification': 'true',
 }
 
 def load_screenshot_conf() -> dict:
@@ -1868,6 +1869,15 @@ class SettingsWindow(Gtk.Window):
         vbox.pack_start(instant_row, False, False, 6)
         vbox.pack_start(hint(_('If enabled: screenshot taken immediately on mouse release — no preview / region adjustment')), False, False, 0)
 
+        notify_row = Gtk.Box(spacing=12)
+        notify_lbl = Gtk.Label(label=_('Show notification after capture'), xalign=0)
+        self._ss_notify_switch = Gtk.Switch()
+        self._ss_notify_switch.set_active(conf.get('show_notification', 'true').lower() == 'true')
+        self._ss_notify_switch.set_valign(Gtk.Align.CENTER)
+        notify_row.pack_start(notify_lbl, True, True, 0)
+        notify_row.pack_start(self._ss_notify_switch, False, False, 0)
+        vbox.pack_start(notify_row, False, False, 6)
+
         vbox.pack_start(Gtk.Separator(), False, False, 8)
         vbox.pack_start(section(_('Storage')), False, False, 0)
         path_row = Gtk.Box(spacing=8)
@@ -1948,6 +1958,7 @@ class SettingsWindow(Gtk.Window):
             'hotkey':          self._ss_hotkey_entry.get_text().strip(),
             'capture_mode':    'cursor' if self._ss_cap_cursor_radio.get_active() else 'all',
             'instant_capture': 'true' if self._ss_instant_switch.get_active() else 'false',
+            'show_notification': 'true' if self._ss_notify_switch.get_active() else 'false',
             'hotkey_action':   self._ss_action_combo.get_active_id() or 'menu',
             'save_path':       self._ss_path_entry.get_text().strip(),
             'ask_before_save': 'true' if self._ss_ask_switch.get_active() else 'false',

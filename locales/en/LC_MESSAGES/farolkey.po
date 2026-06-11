@@ -317,6 +317,9 @@ msgstr ""
 msgid "If enabled: screenshot taken immediately on mouse release — no preview / region adjustment"
 msgstr ""
 
+msgid "Show notification after capture"
+msgstr ""
+
 msgid "Storage"
 msgstr ""
 
