@@ -279,6 +279,7 @@ def _make_flash_window() -> Gtk.Window:
     w.set_decorated(False)
     w.set_keep_above(True)
     w.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
+    w.set_accept_focus(False)
     w.get_style_context().add_class('flash-win')
     return w
 
@@ -287,10 +288,14 @@ def _show_flash(w: Gtk.Window):
 
     Gtk.Widget.set_opacity() is a no-op for toplevel X11 windows in this GTK
     version — _NET_WM_WINDOW_OPACITY must be set via Gdk.Window.set_opacity()
-    on the realized window, i.e. after show_all(). raise_() ensures the flash
-    is visible even if farolkey-settings (also keep_above) is open on top.
+    on the realized window, i.e. after show_all(). Under Mutter, plain
+    Gdk.Window.raise_() does NOT restack undecorated/SPLASHSCREEN windows
+    above an already-present()'d window (e.g. farolkey-settings) — only
+    present()+raise_() together do. set_accept_focus(False) keeps present()
+    from stealing keyboard focus from whatever app the user is using.
     """
     w.show_all()
+    w.present()
     gdkwin = w.get_window()
     gdkwin.set_opacity(_FLASH_OPACITY)
     gdkwin.raise_()
@@ -618,6 +623,10 @@ class MonitorOverlay(Gtk.Window):
         self._hint_lbl.hide()
         # Raise above other keep_above windows (e.g. farolkey-settings, which
         # may already be open and on top) so region selection stays usable.
+        # Under Mutter, plain raise_() does not restack undecorated/
+        # SPLASHSCREEN windows above an already-present()'d window —
+        # present()+raise_() together are needed.
+        self.present()
         self.get_window().raise_()
         GLib.idle_add(self._position_toolbar)
         GLib.idle_add(self._position_hint)
