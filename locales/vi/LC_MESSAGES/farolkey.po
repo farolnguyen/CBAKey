@@ -374,6 +374,95 @@ msgstr "Đã lưu cài đặt chụp màn hình."
 msgid "Select screenshot folder"
 msgstr "Chọn thư mục lưu ảnh"
 
+# ── Screenshot overlay (capture review) ──────────────────────────────────────────
+msgid "Screenshot copied"
+msgstr "Đã chụp ảnh màn hình"
+
+msgid "Screenshot failed"
+msgstr "Chụp màn hình thất bại"
+
+msgid "Save Screenshot"
+msgstr "Lưu ảnh chụp màn hình"
+
+msgid "Do you want to save this screenshot?"
+msgstr "Bạn có muốn lưu ảnh chụp màn hình không?"
+
+msgid "Save to:"
+msgstr "Lưu vào:"
+
+msgid "Don't ask again (change in Screenshot Settings)"
+msgstr "Không hỏi lại (thay đổi trong Screenshot Settings)"
+
+msgid "Don't Save"
+msgstr "Không lưu"
+
+msgid "Drag to select an area  •  Esc to cancel"
+msgstr "Kéo chuột để chọn vùng  •  Esc để huỷ"
+
+msgid "✂  Select area"
+msgstr "✂  Chọn vùng"
+
+msgid "✓  Use this image"
+msgstr "✓  Dùng ảnh này"
+
+msgid "✕  Cancel"
+msgstr "✕  Huỷ"
+
+msgid "⚙  Settings"
+msgstr "⚙  Cài đặt"
+
+msgid "▭  Rectangle"
+msgstr "▭  Chữ nhật"
+
+msgid "○  Ellipse"
+msgstr "○  Hình elip"
+
+msgid "▢  Rounded Rect"
+msgstr "▢  Bo góc"
+
+msgid "✏  Freeform"
+msgstr "✏  Tự do"
+
+msgid "←  Back"
+msgstr "←  Quay lại"
+
+msgid "Coming soon"
+msgstr "Sắp ra mắt"
+
+msgid "Enter to confirm  •  Esc to redraw"
+msgstr "Enter để xác nhận  •  Esc để vẽ lại"
+
+msgid "Drag corner/edge to resize  •  Drag inside to move  •  Enter to confirm  •  Esc to redo"
+msgstr "Kéo góc/cạnh để chỉnh  •  Kéo trong vùng để di chuyển  •  Enter để xác nhận  •  Esc để chọn lại"
+
+msgid ""
+"GNOME Wayland requires gnome-screenshot.\n"
+"Install: sudo apt install gnome-screenshot"
+msgstr ""
+"GNOME Wayland cần gnome-screenshot.\n"
+"Cài đặt: sudo apt install gnome-screenshot"
+
+msgid "gnome-screenshot failed: {error}"
+msgstr "gnome-screenshot lỗi: {error}"
+
+msgid "gnome-screenshot returned empty file"
+msgstr "gnome-screenshot trả về file rỗng"
+
+msgid "grim failed: {error}"
+msgstr "grim lỗi: {error}"
+
+msgid "grim is required: sudo apt install grim"
+msgstr "Cần cài grim: sudo apt install grim"
+
+msgid "maim failed: {error}"
+msgstr "maim lỗi: {error}"
+
+msgid "maim is required: sudo apt install maim"
+msgstr "Cần cài maim: sudo apt install maim"
+
+msgid "Failed to encode cropped PNG"
+msgstr "Lỗi khi mã hoá ảnh đã cắt"
+
 # ── About tab ──────────────────────────────────────────────────────────────────
 msgid "Vietnamese Input Method for Linux (Fcitx5)"
 msgstr "Bộ gõ tiếng Việt cho Linux (Fcitx5)"

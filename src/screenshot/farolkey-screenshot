@@ -3,9 +3,9 @@
 
 Flow:
   hotkey / CLI → capture fullscreen immediately → CaptureReviewOverlay
-    [✂ Vùng chọn]  → rubber-band region select on the captured image → crop
-    [✓ Dùng ảnh này] → use full screenshot
-    [✕ Huỷ]          → cancel
+    [✂ Select area]    → region select (rect/ellipse/roundrect/freeform) → crop
+    [✓ Use this image] → use full screenshot
+    [✕ Cancel]         → cancel
 
 Usage:
   farolkey-screenshot              # capture now, show review overlay
@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 from typing import Optional, Callable
 
-# farolkey_log lives alongside this script (in the same bin/ directory)
+# farolkey_log / farolkey_i18n live alongside this script (in the same bin/ directory)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
     from farolkey_log import get_logger as _get_logger
@@ -42,6 +42,9 @@ try:
 except Exception:
     import logging
     log = logging.getLogger('farolkey.screenshot')
+
+from farolkey_i18n import setup_i18n, read_ui_language
+_ = setup_i18n(read_ui_language())
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 
@@ -164,16 +167,17 @@ def _gnome_capture(x: int, y: int, w: int, h: int) -> bytes:
         # Fallback: full screenshot via gnome-screenshot
         if not _GNOME_SS:
             raise CaptureError(
-                'GNOME Wayland cần gnome-screenshot.\n'
-                'Cài đặt: sudo apt install gnome-screenshot'
+                _('GNOME Wayland requires gnome-screenshot.\n'
+                  'Install: sudo apt install gnome-screenshot')
             )
         r2 = subprocess.run([_GNOME_SS, '--file', tmp],
                             capture_output=True, timeout=10)
         if r2.returncode != 0:
-            raise CaptureError(f'gnome-screenshot failed: {r2.stderr.decode().strip()}')
+            raise CaptureError(_('gnome-screenshot failed: {error}').format(
+                error=r2.stderr.decode().strip()))
         data = Path(tmp).read_bytes()
         if not data:
-            raise CaptureError('gnome-screenshot returned empty file')
+            raise CaptureError(_('gnome-screenshot returned empty file'))
         return data
     finally:
         if os.path.exists(tmp):
@@ -201,10 +205,11 @@ def capture_fullscreen(capture_mode: str = 'all') -> bytes:
             geo_arg = f'{x},{y} {w}x{h}'
             r = subprocess.run([_GRIM, '-g', geo_arg, '-'], capture_output=True)
             if r.returncode != 0:
-                raise CaptureError(f'grim failed: {r.stderr.decode().strip()}')
+                raise CaptureError(_('grim failed: {error}').format(
+                    error=r.stderr.decode().strip()))
             log.info('capture ok: %d bytes (grim)', len(r.stdout))
             return r.stdout
-        raise CaptureError('Cần cài grim: sudo apt install grim')
+        raise CaptureError(_('grim is required: sudo apt install grim'))
     if _MAIM:
         if capture_mode == 'cursor':
             # maim supports --geometry=WxH+X+Y
@@ -215,10 +220,11 @@ def capture_fullscreen(capture_mode: str = 'all') -> bytes:
         else:
             r = subprocess.run([_MAIM], capture_output=True)
         if r.returncode != 0 or not r.stdout:
-            raise CaptureError(f'maim failed: {r.stderr.decode().strip()}')
+            raise CaptureError(_('maim failed: {error}').format(
+                error=r.stderr.decode().strip()))
         log.info('capture ok: %d bytes (maim)', len(r.stdout))
         return r.stdout
-    raise CaptureError('Cần cài maim: sudo apt install maim')
+    raise CaptureError(_('maim is required: sudo apt install maim'))
 
 def crop_pixbuf(pixbuf: GdkPixbuf.Pixbuf, x: int, y: int, w: int, h: int) -> bytes:
     pw, ph = pixbuf.get_width(), pixbuf.get_height()
@@ -229,7 +235,7 @@ def crop_pixbuf(pixbuf: GdkPixbuf.Pixbuf, x: int, y: int, w: int, h: int) -> byt
     cropped = pixbuf.new_subpixbuf(x, y, w, h)
     ok, data = cropped.save_to_bufferv('png', [], [])
     if not ok:
-        raise CaptureError('Failed to encode cropped PNG')
+        raise CaptureError(_('Failed to encode cropped PNG'))
     return bytes(data)
 
 
@@ -485,7 +491,7 @@ def finish(png: bytes, conf: dict, region=None, shape: str = 'rect'):
     copy_to_clipboard(png)
     push_image_to_clipboard_history(png)
     if conf.get('show_notification', 'true').lower() == 'true':
-        notify('Screenshot copied')
+        notify(_('Screenshot copied'))
     play_capture_effect(region, shape)
 
     auto = conf.get('auto_save', 'false').lower() == 'true'
@@ -520,7 +526,7 @@ def show_error(msg: str):
     dlg = Gtk.MessageDialog(
         message_type=Gtk.MessageType.ERROR,
         buttons=Gtk.ButtonsType.OK,
-        text='Chụp màn hình thất bại',
+        text=_('Screenshot failed'),
         secondary_text=msg,
     )
     dlg.run()
@@ -531,7 +537,7 @@ def show_error(msg: str):
 
 class SaveDialog(Gtk.Dialog):
     def __init__(self, png: bytes, conf: dict):
-        super().__init__(title='Lưu ảnh chụp màn hình')
+        super().__init__(title=_('Save Screenshot'))
         self.set_modal(True)
         self.set_resizable(False)
         self.set_position(Gtk.WindowPosition.CENTER)
@@ -553,19 +559,19 @@ class SaveDialog(Gtk.Dialog):
         box.set_margin_top(16); box.set_margin_bottom(8)
         box.set_margin_start(16); box.set_margin_end(16)
         box.pack_start(img, False, False, 0)
-        box.pack_start(Gtk.Label(label='Bạn có muốn lưu ảnh chụp màn hình không?'), False, False, 0)
+        box.pack_start(Gtk.Label(label=_('Do you want to save this screenshot?')), False, False, 0)
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        row.pack_start(Gtk.Label(label='Lưu vào:'), False, False, 0)
+        row.pack_start(Gtk.Label(label=_('Save to:')), False, False, 0)
         lbl = Gtk.Label(label=conf.get('save_path', ''))
         lbl.set_ellipsize(3)
         row.pack_start(lbl, True, True, 0)
         box.pack_start(row, False, False, 0)
 
-        self._cb = Gtk.CheckButton(label='Không hỏi lại (thay đổi trong Screenshot Settings)')
+        self._cb = Gtk.CheckButton(label=_("Don't ask again (change in Screenshot Settings)"))
         box.pack_start(self._cb, False, False, 0)
 
-        self.add_buttons('Không lưu', Gtk.ResponseType.NO, 'Lưu', Gtk.ResponseType.YES)
+        self.add_buttons(_("Don't Save"), Gtk.ResponseType.NO, _('Save'), Gtk.ResponseType.YES)
         self.get_widget_for_response(Gtk.ResponseType.YES).get_style_context().add_class('suggested-action')
         self.set_default_response(Gtk.ResponseType.YES)
         self.show_all()
@@ -624,10 +630,10 @@ label.hint-lbl {
 
 # (id, label, enabled) — shown in the shape-picker toolbar in this order.
 _SHAPES = [
-    ('rect',      '▭  Rectangle',   True),
-    ('ellipse',   '○  Ellipse',     True),
-    ('roundrect', '▢  Rounded Rect', True),
-    ('freeform',  '✏  Freeform',    True),
+    ('rect',      _('▭  Rectangle'),    True),
+    ('ellipse',   _('○  Ellipse'),      True),
+    ('roundrect', _('▢  Rounded Rect'), True),
+    ('freeform',  _('✏  Freeform'),     True),
 ]
 
 
@@ -740,7 +746,7 @@ class MonitorOverlay(Gtk.Window):
         self._fixed.put(self._size_lbl, 0, 0)
 
         self._hint_lbl = Gtk.Label(
-            label='Kéo chuột để chọn vùng  •  Esc để huỷ'
+            label=_('Drag to select an area  •  Esc to cancel')
         )
         self._hint_lbl.get_style_context().add_class('hint-lbl')
         self._hint_lbl.set_no_show_all(True)
@@ -766,10 +772,10 @@ class MonitorOverlay(Gtk.Window):
         box.set_margin_top(6); box.set_margin_bottom(6)
         box.set_margin_start(8); box.set_margin_end(8)
         for lbl, style, cb in [
-            ('✂  Select area',    'tb',        self._act_start_region),
-            ('✓  Use this image', 'tb ok',     self._act_use_full),
-            ('✕  Cancel',          'tb cancel', self._act_cancel),
-            ('⚙  Settings',      'tb',        self._act_settings),
+            (_('✂  Select area'),    'tb',        self._act_start_region),
+            (_('✓  Use this image'), 'tb ok',     self._act_use_full),
+            (_('✕  Cancel'),          'tb cancel', self._act_cancel),
+            (_('⚙  Settings'),      'tb',        self._act_settings),
         ]:
             btn = Gtk.Button(label=lbl)
             for cls in style.split():
@@ -792,11 +798,11 @@ class MonitorOverlay(Gtk.Window):
             btn.get_style_context().add_class('tb')
             btn.set_sensitive(enabled)
             if not enabled:
-                btn.set_tooltip_text('Coming soon')
+                btn.set_tooltip_text(_('Coming soon'))
             btn.connect('clicked', lambda _b, s=shape: self._act_pick_shape(s))
             box.pack_start(btn, False, False, 0)
             self._shape_btns[shape] = btn
-        back_btn = Gtk.Button(label='←  Back')
+        back_btn = Gtk.Button(label=_('←  Back'))
         back_btn.get_style_context().add_class('tb')
         back_btn.connect('clicked', lambda _b: self._act_back_to_main())
         box.pack_start(back_btn, False, False, 0)
@@ -885,7 +891,7 @@ class MonitorOverlay(Gtk.Window):
         """Hide selection visuals and reset hint/cursor for a fresh drag in
         'selecting' mode (Esc from review, click-outside in review, or a
         shape switch to/from freeform)."""
-        _sel_hint = 'Kéo chuột để chọn vùng  •  Esc để huỷ'
+        _sel_hint = _('Drag to select an area  •  Esc to cancel')
         for ov in self._overlays:
             ov._hint_lbl.set_text(_sel_hint)
             ov._size_lbl.hide()
@@ -1092,10 +1098,10 @@ class MonitorOverlay(Gtk.Window):
                 else:
                     self._sel.mode = 'review'
                     if self._sel.shape == 'freeform':
-                        _hint = 'Enter để xác nhận  •  Esc để vẽ lại'
+                        _hint = _('Enter to confirm  •  Esc to redraw')
                     else:
-                        _hint = ('Kéo góc/cạnh để chỉnh  •  Kéo trong vùng để di chuyển'
-                                 '  •  Enter để xác nhận  •  Esc để chọn lại')
+                        _hint = _('Drag corner/edge to resize  •  Drag inside to move'
+                                  '  •  Enter to confirm  •  Esc to redo')
                     for ov in self._overlays:
                         ov._hint_lbl.set_text(_hint)
                         ov._hint_lbl.show()

@@ -365,6 +365,93 @@ msgstr ""
 msgid "Select screenshot folder"
 msgstr ""
 
+# ── Screenshot overlay (capture review) ──────────────────────────────────────────
+msgid "Screenshot copied"
+msgstr ""
+
+msgid "Screenshot failed"
+msgstr ""
+
+msgid "Save Screenshot"
+msgstr ""
+
+msgid "Do you want to save this screenshot?"
+msgstr ""
+
+msgid "Save to:"
+msgstr ""
+
+msgid "Don't ask again (change in Screenshot Settings)"
+msgstr ""
+
+msgid "Don't Save"
+msgstr ""
+
+msgid "Drag to select an area  •  Esc to cancel"
+msgstr ""
+
+msgid "✂  Select area"
+msgstr ""
+
+msgid "✓  Use this image"
+msgstr ""
+
+msgid "✕  Cancel"
+msgstr ""
+
+msgid "⚙  Settings"
+msgstr ""
+
+msgid "▭  Rectangle"
+msgstr ""
+
+msgid "○  Ellipse"
+msgstr ""
+
+msgid "▢  Rounded Rect"
+msgstr ""
+
+msgid "✏  Freeform"
+msgstr ""
+
+msgid "←  Back"
+msgstr ""
+
+msgid "Coming soon"
+msgstr ""
+
+msgid "Enter to confirm  •  Esc to redraw"
+msgstr ""
+
+msgid "Drag corner/edge to resize  •  Drag inside to move  •  Enter to confirm  •  Esc to redo"
+msgstr ""
+
+msgid ""
+"GNOME Wayland requires gnome-screenshot.\n"
+"Install: sudo apt install gnome-screenshot"
+msgstr ""
+
+msgid "gnome-screenshot failed: {error}"
+msgstr ""
+
+msgid "gnome-screenshot returned empty file"
+msgstr ""
+
+msgid "grim failed: {error}"
+msgstr ""
+
+msgid "grim is required: sudo apt install grim"
+msgstr ""
+
+msgid "maim failed: {error}"
+msgstr ""
+
+msgid "maim is required: sudo apt install maim"
+msgstr ""
+
+msgid "Failed to encode cropped PNG"
+msgstr ""
+
 # ── About tab ──────────────────────────────────────────────────────────────────
 msgid "Vietnamese Input Method for Linux (Fcitx5)"
 msgstr ""
