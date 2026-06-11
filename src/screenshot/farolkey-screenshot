@@ -263,7 +263,7 @@ def notify(msg: str):
 # ─── Capture effect (flash + shutter sound) ──────────────────────────────────
 
 _FLASH_CSS     = b"window.flash-win { background-color: white; }"
-_FLASH_OPACITY = 0.45
+_FLASH_OPACITY = 0.15
 
 def _play_shutter_sound():
     if _CANBERRA:
