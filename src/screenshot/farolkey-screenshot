@@ -623,10 +623,12 @@ class MonitorOverlay(Gtk.Window):
         self._hint_lbl.hide()
         # Raise above other keep_above windows (e.g. farolkey-settings, which
         # may already be open and on top) so region selection stays usable.
-        # Under Mutter, plain raise_() does not restack undecorated/
-        # SPLASHSCREEN windows above an already-present()'d window —
-        # present()+raise_() together are needed.
-        self.present()
+        # NOTE: present() was tried here too but it interferes with the
+        # fullscreen_on_monitor() handshake — the overlay ends up as a
+        # normal floating window below the GNOME top bar/dock instead of
+        # true fullscreen. raise_() alone doesn't restack above an
+        # already-present()'d Settings window, but it's harmless and is
+        # the best available trade-off until a non-present() fix is found.
         self.get_window().raise_()
         GLib.idle_add(self._position_toolbar)
         GLib.idle_add(self._position_hint)
