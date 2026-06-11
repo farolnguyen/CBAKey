@@ -19,6 +19,11 @@ gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 
+import cairo
+gi.require_foreign('cairo')
+
+import io
+import math
 import os
 import shutil
 import socket
@@ -234,11 +239,36 @@ def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h:
     shapes, apply an alpha mask outside the shape (PNG with transparency).
 
     'rect' is identical to crop_pixbuf() — no alpha mask. Other shapes
-    (ellipse/triangle/freeform) are implemented in M23.2-M23.4.
+    (triangle/freeform) are implemented in M23.3/M23.4.
     """
     if shape == 'rect':
         return crop_pixbuf(pixbuf, x, y, w, h)
-    raise NotImplementedError(f'crop_shaped: shape={shape!r} not yet implemented')
+
+    pw, ph = pixbuf.get_width(), pixbuf.get_height()
+    x = max(0, min(x, pw - 1))
+    y = max(0, min(y, ph - 1))
+    w = max(1, min(w, pw - x))
+    h = max(1, min(h, ph - y))
+    sub = pixbuf.new_subpixbuf(x, y, w, h)
+
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+    cr = cairo.Context(surface)
+    if shape == 'ellipse':
+        cr.save()
+        cr.translate(w / 2, h / 2)
+        cr.scale(w / 2, h / 2)
+        cr.arc(0, 0, 1, 0, 2 * math.pi)
+        cr.restore()
+        cr.clip()
+    else:
+        raise NotImplementedError(f'crop_shaped: shape={shape!r} not yet implemented')
+    Gdk.cairo_set_source_pixbuf(cr, sub, 0, 0)
+    cr.paint()
+    surface.flush()
+
+    buf = io.BytesIO()
+    surface.write_to_png(buf)
+    return buf.getvalue()
 
 # ─── Clipboard + notifications ────────────────────────────────────────────────
 
@@ -508,6 +538,9 @@ box.sel-box {
     border: 2px solid rgba(60, 140, 255, 0.95);
     background-color: rgba(60, 140, 255, 0.12);
 }
+drawingarea.shape-draw {
+    background-color: transparent;
+}
 label.size-lbl {
     color: white;
     background-color: rgba(0,0,0,0.70);
@@ -526,10 +559,10 @@ label.hint-lbl {
 """
 
 # (id, label, enabled) — shown in the shape-picker toolbar in this order.
-# Only 'rect' is enabled until M23.2-M23.4 implement the other shapes.
+# 'triangle'/'freeform' stay disabled until M23.3/M23.4 implement them.
 _SHAPES = [
     ('rect',     '▭  Rectangle', True),
-    ('ellipse',  '○  Ellipse',   False),
+    ('ellipse',  '○  Ellipse',   True),
     ('triangle', '△  Triangle',  False),
     ('freeform', '✏  Freeform',  False),
 ]
@@ -605,11 +638,21 @@ class MonitorOverlay(Gtk.Window):
         self._sel_img_box.add(self._sel_img)
         self._fixed.put(self._sel_img_box, 0, 0)
 
-        # Selection border box (CSS .sel-box)
+        # Selection border box (CSS .sel-box) — used for shape == 'rect'
         self._sel_box = Gtk.Box()
         self._sel_box.get_style_context().add_class('sel-box')
         self._sel_box.set_no_show_all(True)
         self._fixed.put(self._sel_box, 0, 0)
+
+        # Cairo-rendered selection (ellipse/triangle/freeform): bright pixbuf
+        # masked to the shape + outline, drawn on top of the dimmed bg.
+        self._shape_sub  = None  # bright GdkPixbuf.Pixbuf for the current crop
+        self._shape_geom = None  # shape-specific geometry, in widget-local coords
+        self._shape_draw = Gtk.DrawingArea()
+        self._shape_draw.get_style_context().add_class('shape-draw')
+        self._shape_draw.set_no_show_all(True)
+        self._shape_draw.connect('draw', self._on_shape_draw)
+        self._fixed.put(self._shape_draw, 0, 0)
 
         self._toolbar_box = None
         self._shape_toolbar = None
@@ -752,6 +795,10 @@ class MonitorOverlay(Gtk.Window):
         self._sel.shape = shape
         for ov in self._overlays:
             ov._set_active_shape_btn(shape)
+        # Re-render an in-progress/finished selection in the new shape.
+        x, y, w, h = self._sel.rect()
+        if w > 0 and h > 0:
+            self._update_all_sel_visuals()
 
     def _set_active_shape_btn(self, shape: str):
         for s, btn in self._shape_btns.items():
@@ -774,6 +821,7 @@ class MonitorOverlay(Gtk.Window):
             ov._size_lbl.hide()
             ov._sel_box.hide()
             ov._sel_img_box.hide()
+            ov._shape_draw.hide()
             ov._set_cursor(Gdk.CursorType.ARROW)
             ov._rev_drag = None
 
@@ -864,6 +912,7 @@ class MonitorOverlay(Gtk.Window):
                     ov._size_lbl.hide()
                     ov._sel_box.hide()
                     ov._sel_img_box.hide()
+                    ov._shape_draw.hide()
                     ov._set_cursor(Gdk.CursorType.CROSSHAIR)
                     GLib.idle_add(ov._position_hint)
                 self._sel.dragging = True
@@ -969,6 +1018,7 @@ class MonitorOverlay(Gtk.Window):
                     ov._size_lbl.hide()
                     ov._sel_box.hide()
                     ov._sel_img_box.hide()
+                    ov._shape_draw.hide()
                     ov._set_cursor(Gdk.CursorType.CROSSHAIR)
                     ov._rev_drag = None
                     GLib.idle_add(ov._position_hint)
@@ -993,7 +1043,13 @@ class MonitorOverlay(Gtk.Window):
     # ── Selection visuals ─────────────────────────────────────────────────────
 
     def _update_sel_visuals(self):
-        """Update the sel-box border and bright inner image for this monitor."""
+        """Update the selection visuals for this monitor.
+
+        shape == 'rect' uses the CSS .sel-box border + a plain bright
+        sub-image (unchanged since M16). Other shapes are rendered via
+        Cairo in _shape_draw: the bright sub-image is masked to the shape
+        and an outline is stroked on top.
+        """
         sx, sy, sw, sh = self._sel.rect()
         geo = self._geo
         lx  = sx - geo.x
@@ -1005,18 +1061,70 @@ class MonitorOverlay(Gtk.Window):
         cw  = cx2 - cx1
         ch  = cy2 - cy1
         if cw > 2 and ch > 2:
-            # Bright sub-image (zero-copy view into the monitor pixbuf)
-            sub = self._pb.new_subpixbuf(cx1, cy1, cw, ch)
-            self._sel_img.set_from_pixbuf(sub)
-            self._fixed.move(self._sel_img_box, cx1, cy1)
-            self._sel_img_box.show()
-            # Border box
-            self._fixed.move(self._sel_box, cx1, cy1)
-            self._sel_box.set_size_request(cw, ch)
-            self._sel_box.show()
+            if self._sel.shape == 'rect':
+                self._shape_draw.hide()
+                # Bright sub-image (zero-copy view into the monitor pixbuf)
+                sub = self._pb.new_subpixbuf(cx1, cy1, cw, ch)
+                self._sel_img.set_from_pixbuf(sub)
+                self._fixed.move(self._sel_img_box, cx1, cy1)
+                self._sel_img_box.show()
+                # Border box
+                self._fixed.move(self._sel_box, cx1, cy1)
+                self._sel_box.set_size_request(cw, ch)
+                self._sel_box.show()
+            else:
+                self._sel_img_box.hide()
+                self._sel_box.hide()
+                self._shape_sub = self._pb.new_subpixbuf(cx1, cy1, cw, ch)
+                # Ellipse centre/radii in _shape_draw-local coords (origin = cx1,cy1)
+                self._shape_geom = (lx + sw / 2 - cx1, ly + sh / 2 - cy1, sw / 2, sh / 2)
+                self._fixed.move(self._shape_draw, cx1, cy1)
+                self._shape_draw.set_size_request(cw, ch)
+                self._shape_draw.show()
+                self._shape_draw.queue_draw()
         else:
             self._sel_img_box.hide()
             self._sel_box.hide()
+            self._shape_draw.hide()
+
+    def _on_shape_draw(self, _widget, cr):
+        if self._sel.shape != 'ellipse' or self._shape_sub is None or self._shape_geom is None:
+            return False
+        cx, cy, rx, ry = self._shape_geom
+        if rx <= 0 or ry <= 0:
+            return False
+
+        def _ellipse_path():
+            cr.save()
+            cr.translate(cx, cy)
+            cr.scale(rx, ry)
+            cr.arc(0, 0, 1, 0, 2 * math.pi)
+            cr.restore()
+
+        # Bright pixbuf masked to the ellipse, with the same blue tint as .sel-box
+        _ellipse_path()
+        cr.clip()
+        Gdk.cairo_set_source_pixbuf(cr, self._shape_sub, 0, 0)
+        cr.paint()
+        cr.set_source_rgba(60 / 255, 140 / 255, 255 / 255, 0.12)
+        cr.paint()
+        cr.reset_clip()
+
+        # Outline
+        _ellipse_path()
+        cr.set_source_rgba(60 / 255, 140 / 255, 255 / 255, 0.95)
+        cr.set_line_width(2)
+        cr.stroke()
+
+        # Dashed bounding box — shows the drag/resize handle area (corners/edges)
+        cw, ch = self._shape_sub.get_width(), self._shape_sub.get_height()
+        cr.set_dash([4, 4])
+        cr.set_source_rgba(1, 1, 1, 0.5)
+        cr.set_line_width(1)
+        cr.rectangle(0.5, 0.5, cw - 1, ch - 1)
+        cr.stroke()
+        cr.set_dash([])
+        return False
 
     def _update_all_sel_visuals(self):
         for ov in self._overlays:
