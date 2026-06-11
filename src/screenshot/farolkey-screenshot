@@ -262,7 +262,8 @@ def notify(msg: str):
 
 # ─── Capture effect (flash + shutter sound) ──────────────────────────────────
 
-_FLASH_CSS = b"window.flash-win { background-color: white; }"
+_FLASH_CSS     = b"window.flash-win { background-color: white; }"
+_FLASH_OPACITY = 0.45
 
 def _play_shutter_sound():
     if _CANBERRA:
@@ -272,8 +273,21 @@ def _play_shutter_sound():
         subprocess.Popen([_PAPLAY, _SHUTTER_SOUND],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def _flash_screen():
-    """Briefly flash all monitors white, like a camera shutter."""
+def _make_flash_window() -> Gtk.Window:
+    w = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
+    w.set_decorated(False)
+    w.set_keep_above(True)
+    w.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
+    w.set_opacity(_FLASH_OPACITY)
+    w.get_style_context().add_class('flash-win')
+    return w
+
+def _flash_screen(region=None):
+    """Briefly flash white, like a camera shutter.
+
+    If region (ax, ay, aw, ah) in absolute logical coords is given, flash
+    only that rectangle; otherwise flash every monitor fullscreen.
+    """
     css = Gtk.CssProvider()
     css.load_from_data(_FLASH_CSS)
     display = Gdk.Display.get_default()
@@ -282,15 +296,19 @@ def _flash_screen():
         screen, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     wins = []
-    for i in range(max(1, display.get_n_monitors())):
-        w = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-        w.set_decorated(False)
-        w.set_keep_above(True)
-        w.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
-        w.get_style_context().add_class('flash-win')
-        w.fullscreen_on_monitor(screen, i)
+    if region is not None:
+        ax, ay, aw, ah = region
+        w = _make_flash_window()
+        w.set_default_size(aw, ah)
+        w.move(ax, ay)
         w.show_all()
         wins.append(w)
+    else:
+        for i in range(max(1, display.get_n_monitors())):
+            w = _make_flash_window()
+            w.fullscreen_on_monitor(screen, i)
+            w.show_all()
+            wins.append(w)
 
     def _close():
         for w in wins:
@@ -298,8 +316,8 @@ def _flash_screen():
         return False
     GLib.timeout_add(120, _close)
 
-def play_capture_effect():
-    _flash_screen()
+def play_capture_effect(region=None):
+    _flash_screen(region)
     _play_shutter_sound()
 
 def save_file(png: bytes, path: str) -> str:
@@ -312,8 +330,12 @@ def save_file(png: bytes, path: str) -> str:
 
 # ─── Post-capture: clipboard + optional save dialog ──────────────────────────
 
-def finish(png: bytes, conf: dict):
-    """Copy to clipboard, notify, optionally save."""
+def finish(png: bytes, conf: dict, region=None):
+    """Copy to clipboard, notify, optionally save.
+
+    region (ax, ay, aw, ah) in absolute logical coords, if given, restricts
+    the capture-effect flash to that rectangle instead of the whole screen.
+    """
     log.info('finish: %d bytes, auto_save=%s, ask=%s',
              len(png),
              conf.get('auto_save', 'false'),
@@ -321,7 +343,7 @@ def finish(png: bytes, conf: dict):
     copy_to_clipboard(png)
     push_image_to_clipboard_history(png)
     notify('Screenshot copied')
-    play_capture_effect()
+    play_capture_effect(region)
 
     auto = conf.get('auto_save', 'false').lower() == 'true'
     ask  = conf.get('ask_before_save', 'true').lower() == 'true'
@@ -993,7 +1015,7 @@ class CaptureReviewOverlay:
             log.error('crop failed: %s', e)
             show_error(str(e))
             return
-        finish(png, self._conf)
+        finish(png, self._conf, region=region)
 
     def _on_cancel(self):
         if self._done: return
