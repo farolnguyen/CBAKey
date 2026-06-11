@@ -283,14 +283,17 @@ def _make_flash_window() -> Gtk.Window:
     return w
 
 def _show_flash(w: Gtk.Window):
-    """Show w and apply _FLASH_OPACITY.
+    """Show w, apply _FLASH_OPACITY, and raise it above other windows.
 
     Gtk.Widget.set_opacity() is a no-op for toplevel X11 windows in this GTK
     version — _NET_WM_WINDOW_OPACITY must be set via Gdk.Window.set_opacity()
-    on the realized window, i.e. after show_all().
+    on the realized window, i.e. after show_all(). raise_() ensures the flash
+    is visible even if farolkey-settings (also keep_above) is open on top.
     """
     w.show_all()
-    w.get_window().set_opacity(_FLASH_OPACITY)
+    gdkwin = w.get_window()
+    gdkwin.set_opacity(_FLASH_OPACITY)
+    gdkwin.raise_()
 
 def _flash_screen(region=None):
     """Briefly flash white, like a camera shutter.
@@ -613,6 +616,9 @@ class MonitorOverlay(Gtk.Window):
         self.show_all()
         self._size_lbl.hide()
         self._hint_lbl.hide()
+        # Raise above other keep_above windows (e.g. farolkey-settings, which
+        # may already be open and on top) so region selection stays usable.
+        self.get_window().raise_()
         GLib.idle_add(self._position_toolbar)
         GLib.idle_add(self._position_hint)
 
