@@ -227,6 +227,19 @@ def crop_pixbuf(pixbuf: GdkPixbuf.Pixbuf, x: int, y: int, w: int, h: int) -> byt
         raise CaptureError('Failed to encode cropped PNG')
     return bytes(data)
 
+
+def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h: int,
+                points=None) -> bytes:
+    """Crop pixbuf to the bounding box of the selection and, for non-rect
+    shapes, apply an alpha mask outside the shape (PNG with transparency).
+
+    'rect' is identical to crop_pixbuf() — no alpha mask. Other shapes
+    (ellipse/triangle/freeform) are implemented in M23.2-M23.4.
+    """
+    if shape == 'rect':
+        return crop_pixbuf(pixbuf, x, y, w, h)
+    raise NotImplementedError(f'crop_shaped: shape={shape!r} not yet implemented')
+
 # ─── Clipboard + notifications ────────────────────────────────────────────────
 
 def copy_to_clipboard(png: bytes):
@@ -489,6 +502,8 @@ button.tb {
 button.tb:hover { background-color: rgba(255,255,255,0.15); }
 button.tb.ok     { color: #69db7c; }
 button.tb.cancel { color: #ff6b6b; }
+button.tb.active { background-color: rgba(60,140,255,0.35); }
+button.tb:disabled { color: rgba(255,255,255,0.30); }
 box.sel-box {
     border: 2px solid rgba(60, 140, 255, 0.95);
     background-color: rgba(60, 140, 255, 0.12);
@@ -510,15 +525,26 @@ label.hint-lbl {
 }
 """
 
+# (id, label, enabled) — shown in the shape-picker toolbar in this order.
+# Only 'rect' is enabled until M23.2-M23.4 implement the other shapes.
+_SHAPES = [
+    ('rect',     '▭  Rectangle', True),
+    ('ellipse',  '○  Ellipse',   False),
+    ('triangle', '△  Triangle',  False),
+    ('freeform', '✏  Freeform',  False),
+]
+
 
 class _SelState:
     """Selection state shared across all MonitorOverlay windows (absolute logical coords)."""
-    __slots__ = ('mode', 'dragging', 'sx', 'sy', 'ex', 'ey')
+    __slots__ = ('mode', 'dragging', 'sx', 'sy', 'ex', 'ey', 'shape', 'points')
 
     def __init__(self):
-        self.mode     = 'toolbar'   # 'toolbar' | 'selecting'
+        self.mode     = 'toolbar'   # 'toolbar' | 'selecting' | 'review'
         self.dragging = False
         self.sx = self.sy = self.ex = self.ey = 0
+        self.shape  = 'rect'        # 'rect' | 'ellipse' | 'triangle' | 'freeform'
+        self.points = []            # freeform path, absolute logical coords (M23.4)
 
     def rect(self):
         """Return (x, y, w, h) in absolute logical coords, normalised."""
@@ -586,9 +612,13 @@ class MonitorOverlay(Gtk.Window):
         self._fixed.put(self._sel_box, 0, 0)
 
         self._toolbar_box = None
+        self._shape_toolbar = None
+        self._shape_btns    = {}
         if has_toolbar:
             self._toolbar_box = self._build_toolbar()
             self._fixed.put(self._toolbar_box, 0, 0)
+            self._shape_toolbar = self._build_shape_toolbar()
+            self._fixed.put(self._shape_toolbar, 0, 0)
 
         self._size_lbl = Gtk.Label()
         self._size_lbl.get_style_context().add_class('size-lbl')
@@ -634,10 +664,36 @@ class MonitorOverlay(Gtk.Window):
             box.pack_start(btn, False, False, 0)
         return box
 
+    def _build_shape_toolbar(self) -> Gtk.Box:
+        """Replaces the main toolbar while in region-select mode — lets the
+        user pick the selection shape (rectangle/ellipse/triangle/freeform).
+        """
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        box.get_style_context().add_class('toolbar-box')
+        box.set_margin_top(6); box.set_margin_bottom(6)
+        box.set_margin_start(8); box.set_margin_end(8)
+        self._shape_btns = {}
+        for shape, lbl, enabled in _SHAPES:
+            btn = Gtk.Button(label=lbl)
+            btn.get_style_context().add_class('tb')
+            btn.set_sensitive(enabled)
+            if not enabled:
+                btn.set_tooltip_text('Coming soon')
+            btn.connect('clicked', lambda _b, s=shape: self._act_pick_shape(s))
+            box.pack_start(btn, False, False, 0)
+            self._shape_btns[shape] = btn
+        back_btn = Gtk.Button(label='←  Back')
+        back_btn.get_style_context().add_class('tb')
+        back_btn.connect('clicked', lambda _b: self._act_back_to_main())
+        box.pack_start(back_btn, False, False, 0)
+        return box
+
     def _on_realize(self, *_):
         self.show_all()
         self._size_lbl.hide()
         self._hint_lbl.hide()
+        if self._shape_toolbar:
+            self._shape_toolbar.hide()
         # Raise above other keep_above windows (e.g. farolkey-settings, which
         # may already be open and on top) so region selection stays usable.
         # NOTE: present() was tried here too but it interferes with the
@@ -651,9 +707,10 @@ class MonitorOverlay(Gtk.Window):
         GLib.idle_add(self._position_hint)
 
     def _position_toolbar(self):
-        if self._toolbar_box:
-            w = self._toolbar_box.get_preferred_size()[1].width
-            self._fixed.move(self._toolbar_box, (self._geo.width - w) // 2, 24)
+        for box in (self._toolbar_box, self._shape_toolbar):
+            if box is not None:
+                w = box.get_preferred_size()[1].width
+                self._fixed.move(box, (self._geo.width - w) // 2, 24)
         return False
 
     def _position_hint(self):
@@ -673,12 +730,48 @@ class MonitorOverlay(Gtk.Window):
         subprocess.Popen([tool, '--tab=screenshot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _act_start_region(self):
-        self._sel.mode = 'selecting'
+        self._sel.mode  = 'selecting'
+        self._sel.shape = 'rect'
         for ov in self._overlays:
             if ov._toolbar_box:
                 ov._toolbar_box.hide()
+            if ov._shape_toolbar:
+                ov._set_active_shape_btn('rect')
+                ov._shape_toolbar.show()
+                GLib.idle_add(ov._position_toolbar)
             ov._hint_lbl.show()
             ov._set_cursor(Gdk.CursorType.CROSSHAIR)
+
+    def _act_pick_shape(self, shape: str):
+        if shape == self._sel.shape:
+            return
+        self._sel.shape = shape
+        for ov in self._overlays:
+            ov._set_active_shape_btn(shape)
+
+    def _set_active_shape_btn(self, shape: str):
+        for s, btn in self._shape_btns.items():
+            ctx = btn.get_style_context()
+            if s == shape:
+                ctx.add_class('active')
+            else:
+                ctx.remove_class('active')
+
+    def _act_back_to_main(self):
+        """Fully exit region-select mode, back to the main toolbar."""
+        self._sel.mode     = 'toolbar'
+        self._sel.dragging = False
+        for ov in self._overlays:
+            if ov._toolbar_box:
+                ov._toolbar_box.show()
+            if ov._shape_toolbar:
+                ov._shape_toolbar.hide()
+            ov._hint_lbl.hide()
+            ov._size_lbl.hide()
+            ov._sel_box.hide()
+            ov._sel_img_box.hide()
+            ov._set_cursor(Gdk.CursorType.ARROW)
+            ov._rev_drag = None
 
     def _act_use_full(self):
         if self._done: return
@@ -861,17 +954,7 @@ class MonitorOverlay(Gtk.Window):
         k = event.keyval
         if k == Gdk.KEY_Escape:
             if self._sel.mode == 'selecting' and not self._done:
-                self._sel.mode     = 'toolbar'
-                self._sel.dragging = False
-                for ov in self._overlays:
-                    if ov._toolbar_box:
-                        ov._toolbar_box.show()
-                    ov._hint_lbl.hide()
-                    ov._size_lbl.hide()
-                    ov._sel_box.hide()
-                    ov._sel_img_box.hide()
-                    ov._set_cursor(Gdk.CursorType.ARROW)
-                    ov._rev_drag = None
+                self._act_back_to_main()
             elif self._sel.mode == 'review' and not self._done:
                 # Return to selecting mode — clear selection, allow a new drag
                 self._sel.mode     = 'selecting'
@@ -900,7 +983,7 @@ class MonitorOverlay(Gtk.Window):
     def _deliver_region(self, ax, ay, aw, ah):
         for ov in self._overlays:
             ov.hide()
-        self._on_confirm((ax, ay, aw, ah))
+        self._on_confirm((ax, ay, aw, ah, self._sel.shape))
         return False
 
     # ── Selection visuals ─────────────────────────────────────────────────────
@@ -1051,17 +1134,18 @@ class CaptureReviewOverlay:
             log.info('full image used: %d bytes', len(self._full))
             finish(self._full, self._conf)
             return
-        ax, ay, aw, ah = region
+        ax, ay, aw, ah, shape = region
         px = ax - self._pb_ox
         py = ay - self._pb_oy
-        log.info('region selected: %dx%d abs=(%d,%d) pb=(%d,%d)', aw, ah, ax, ay, px, py)
+        log.info('region selected: %dx%d shape=%s abs=(%d,%d) pb=(%d,%d)',
+                 aw, ah, shape, ax, ay, px, py)
         try:
-            png = crop_pixbuf(self._pb, px, py, aw, ah)
+            png = crop_shaped(self._pb, shape, px, py, aw, ah)
         except Exception as e:
             log.error('crop failed: %s', e)
             show_error(str(e))
             return
-        finish(png, self._conf, region=region)
+        finish(png, self._conf, region=(ax, ay, aw, ah))
 
     def _on_cancel(self):
         if self._done: return
