@@ -238,8 +238,8 @@ def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h:
     """Crop pixbuf to the bounding box of the selection and, for non-rect
     shapes, apply an alpha mask outside the shape (PNG with transparency).
 
-    'rect' is identical to crop_pixbuf() — no alpha mask. Other shapes
-    (triangle/freeform) are implemented in M23.3/M23.4.
+    'rect' is identical to crop_pixbuf() — no alpha mask. 'freeform' is
+    implemented in M23.4.
     """
     if shape == 'rect':
         return crop_pixbuf(pixbuf, x, y, w, h)
@@ -259,6 +259,12 @@ def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h:
         cr.scale(w / 2, h / 2)
         cr.arc(0, 0, 1, 0, 2 * math.pi)
         cr.restore()
+        cr.clip()
+    elif shape == 'triangle':
+        cr.move_to(w / 2, 0)
+        cr.line_to(0, h)
+        cr.line_to(w, h)
+        cr.close_path()
         cr.clip()
     else:
         raise NotImplementedError(f'crop_shaped: shape={shape!r} not yet implemented')
@@ -595,11 +601,11 @@ label.hint-lbl {
 """
 
 # (id, label, enabled) — shown in the shape-picker toolbar in this order.
-# 'triangle'/'freeform' stay disabled until M23.3/M23.4 implement them.
+# 'freeform' stays disabled until M23.4 implements it.
 _SHAPES = [
     ('rect',     '▭  Rectangle', True),
     ('ellipse',  '○  Ellipse',   True),
-    ('triangle', '△  Triangle',  False),
+    ('triangle', '△  Triangle',  True),
     ('freeform', '✏  Freeform',  False),
 ]
 
@@ -1112,8 +1118,12 @@ class MonitorOverlay(Gtk.Window):
                 self._sel_img_box.hide()
                 self._sel_box.hide()
                 self._shape_sub = self._pb.new_subpixbuf(cx1, cy1, cw, ch)
-                # Ellipse centre/radii in _shape_draw-local coords (origin = cx1,cy1)
-                self._shape_geom = (lx + sw / 2 - cx1, ly + sh / 2 - cy1, sw / 2, sh / 2)
+                if self._sel.shape == 'ellipse':
+                    # Ellipse centre/radii in _shape_draw-local coords (origin = cx1,cy1)
+                    self._shape_geom = (lx + sw / 2 - cx1, ly + sh / 2 - cy1, sw / 2, sh / 2)
+                else:
+                    # Triangle bbox top-left + size in _shape_draw-local coords (origin = cx1,cy1)
+                    self._shape_geom = (lx - cx1, ly - cy1, sw, sh)
                 self._fixed.move(self._shape_draw, cx1, cy1)
                 self._shape_draw.set_size_request(cw, ch)
                 self._shape_draw.show()
@@ -1124,21 +1134,34 @@ class MonitorOverlay(Gtk.Window):
             self._shape_draw.hide()
 
     def _on_shape_draw(self, _widget, cr):
-        if self._sel.shape != 'ellipse' or self._shape_sub is None or self._shape_geom is None:
-            return False
-        cx, cy, rx, ry = self._shape_geom
-        if rx <= 0 or ry <= 0:
+        if self._sel.shape not in ('ellipse', 'triangle') or self._shape_sub is None \
+                or self._shape_geom is None:
             return False
 
-        def _ellipse_path():
-            cr.save()
-            cr.translate(cx, cy)
-            cr.scale(rx, ry)
-            cr.arc(0, 0, 1, 0, 2 * math.pi)
-            cr.restore()
+        if self._sel.shape == 'ellipse':
+            cx, cy, rx, ry = self._shape_geom
+            if rx <= 0 or ry <= 0:
+                return False
 
-        # Bright pixbuf masked to the ellipse, with the same blue tint as .sel-box
-        _ellipse_path()
+            def _path():
+                cr.save()
+                cr.translate(cx, cy)
+                cr.scale(rx, ry)
+                cr.arc(0, 0, 1, 0, 2 * math.pi)
+                cr.restore()
+        else:
+            bx, by, bw, bh = self._shape_geom
+            if bw <= 0 or bh <= 0:
+                return False
+
+            def _path():
+                cr.move_to(bx + bw / 2, by)
+                cr.line_to(bx, by + bh)
+                cr.line_to(bx + bw, by + bh)
+                cr.close_path()
+
+        # Bright pixbuf masked to the shape, with the same blue tint as .sel-box
+        _path()
         cr.clip()
         Gdk.cairo_set_source_pixbuf(cr, self._shape_sub, 0, 0)
         cr.paint()
@@ -1147,7 +1170,7 @@ class MonitorOverlay(Gtk.Window):
         cr.reset_clip()
 
         # Outline
-        _ellipse_path()
+        _path()
         cr.set_source_rgba(60 / 255, 140 / 255, 255 / 255, 0.95)
         cr.set_line_width(2)
         cr.stroke()
