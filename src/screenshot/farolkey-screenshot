@@ -278,9 +278,18 @@ def _make_flash_window() -> Gtk.Window:
     w.set_decorated(False)
     w.set_keep_above(True)
     w.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
-    w.set_opacity(_FLASH_OPACITY)
     w.get_style_context().add_class('flash-win')
     return w
+
+def _show_flash(w: Gtk.Window):
+    """Show w and apply _FLASH_OPACITY.
+
+    Gtk.Widget.set_opacity() is a no-op for toplevel X11 windows in this GTK
+    version — _NET_WM_WINDOW_OPACITY must be set via Gdk.Window.set_opacity()
+    on the realized window, i.e. after show_all().
+    """
+    w.show_all()
+    w.get_window().set_opacity(_FLASH_OPACITY)
 
 def _flash_screen(region=None):
     """Briefly flash white, like a camera shutter.
@@ -301,13 +310,13 @@ def _flash_screen(region=None):
         w = _make_flash_window()
         w.set_default_size(aw, ah)
         w.move(ax, ay)
-        w.show_all()
+        _show_flash(w)
         wins.append(w)
     else:
         for i in range(max(1, display.get_n_monitors())):
             w = _make_flash_window()
             w.fullscreen_on_monitor(screen, i)
-            w.show_all()
+            _show_flash(w)
             wins.append(w)
 
     def _close():
