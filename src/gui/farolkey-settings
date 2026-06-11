@@ -1210,6 +1210,10 @@ class SettingsWindow(Gtk.Window):
         super().__init__(title=f'FarolKey Settings — v{FAROLKEY_VERSION}')
         self.set_default_size(740, 580)
         self.set_border_width(0)
+        # Screenshot review overlay & clipboard popup are both keep_above —
+        # without this, Settings opens behind them and is invisible until
+        # the overlay/popup is closed.
+        self.set_keep_above(True)
         self.connect('destroy', Gtk.main_quit)
 
         provider = Gtk.CssProvider()
@@ -2710,6 +2714,7 @@ def main():
     win = SettingsWindow(initial_tab=tab_arg)
     _start_ipc_listener(win)
     win.show_all()
+    win.present()
     Gtk.main()
 
 

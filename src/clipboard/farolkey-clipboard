@@ -927,6 +927,15 @@ def _fmt_time(ts: float) -> str:
     if diff < 86400: return time.strftime('%H:%M', time.localtime(ts))
     return time.strftime('%d/%m', time.localtime(ts))
 
+def _recvall(conn: 'socket.socket', n: int) -> Optional[bytes]:
+    buf = b''
+    while len(buf) < n:
+        chunk = conn.recv(n - len(buf))
+        if not chunk:
+            return None
+        buf += chunk
+    return buf
+
 # ---------------------------------------------------------------------------
 # IPC server (shared by daemon and show-mode singleton)
 # ---------------------------------------------------------------------------
@@ -966,12 +975,23 @@ class PopupServer:
         while True:
             try:
                 conn, _ = self._sock.accept()
-                data = conn.recv(64).strip()
-                conn.close()
-                if data == b'SHOW':
-                    GLib.idle_add(self.show_popup)
             except Exception:
                 break
+            try:
+                header = _recvall(conn, 4)
+                if header == b'SHOW':
+                    GLib.idle_add(self.show_popup)
+                elif header == b'IMG ':
+                    size_b = _recvall(conn, 4)
+                    if size_b:
+                        size = int.from_bytes(size_b, 'big')
+                        png = _recvall(conn, size)
+                        if png:
+                            GLib.idle_add(self._add_image_bytes, png)
+            except Exception:
+                pass
+            finally:
+                conn.close()
 
     def show_popup(self) -> bool:
         """Raise existing popup or create a new one (called from GTK main loop)."""
@@ -1016,6 +1036,29 @@ class PopupServer:
                 self._popup_ref._rebuild()
             except Exception:
                 pass
+
+    def _add_image_bytes(self, png: bytes) -> bool:
+        """Add a PNG pushed directly by farolkey-screenshot to the history.
+
+        Bypasses Gtk.Clipboard.wait_for_image() (X11 INCR transfers of
+        large selections can fail there) — _history.add_image() dedups by
+        hash so this is safe even if owner-change capture also fires.
+        """
+        try:
+            loader = GdkPixbuf.PixbufLoader()
+            loader.write(png)
+            loader.close()
+            pixbuf = loader.get_pixbuf()
+        except Exception:
+            return False
+        if pixbuf is None:
+            return False
+        if self._history.add_image(pixbuf):
+            log.debug('clipboard captured: image (push)')
+            if _active_monitor:
+                _active_monitor._last_hash = _pixbuf_hash(pixbuf)
+            self._refresh_popup()
+        return False
 
     def _on_popup_closed(self):
         log.debug('popup closed')
