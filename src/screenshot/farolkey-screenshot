@@ -254,16 +254,29 @@ def crop_shaped(pixbuf: GdkPixbuf.Pixbuf, shape: str, x: int, y: int, w: int, h:
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
     cr = cairo.Context(surface)
     if shape == 'ellipse':
-        cr.save()
-        cr.translate(w / 2, h / 2)
-        cr.scale(w / 2, h / 2)
-        cr.arc(0, 0, 1, 0, 2 * math.pi)
-        cr.restore()
+        def _ellipse_path():
+            cr.save()
+            cr.translate(w / 2, h / 2)
+            cr.scale(w / 2, h / 2)
+            cr.arc(0, 0, 1, 0, 2 * math.pi)
+            cr.restore()
+
+        _ellipse_path()
         cr.clip()
+        Gdk.cairo_set_source_pixbuf(cr, sub, 0, 0)
+        cr.paint()
+        cr.reset_clip()
+
+        # Bake a white ring around the ellipse boundary so the crop reads as
+        # an intentional circle/oval — without it, apps that ignore the PNG
+        # alpha channel show the transparent corners as plain black, making
+        # the result look like a rectangular screenshot with a hole cut out.
+        _ellipse_path()
+        cr.set_source_rgba(1, 1, 1, 0.9)
+        cr.set_line_width(4)
+        cr.stroke()
     else:
         raise NotImplementedError(f'crop_shaped: shape={shape!r} not yet implemented')
-    Gdk.cairo_set_source_pixbuf(cr, sub, 0, 0)
-    cr.paint()
     surface.flush()
 
     buf = io.BytesIO()
@@ -334,16 +347,44 @@ def _play_shutter_sound():
         subprocess.Popen([_PAPLAY, _SHUTTER_SOUND],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def _make_flash_window() -> Gtk.Window:
+def _on_flash_ellipse_draw(widget, cr):
+    """Paint widget's own background fully transparent, then fill an
+    ellipse inscribed in its allocation at _FLASH_OPACITY — gives the
+    capture-effect flash the same shape as an ellipse selection.
+    """
+    alloc = widget.get_allocation()
+    cr.save()
+    cr.set_operator(cairo.OPERATOR_SOURCE)
+    cr.set_source_rgba(0, 0, 0, 0)
+    cr.paint()
+    cr.restore()
+    cr.save()
+    cr.translate(alloc.width / 2, alloc.height / 2)
+    cr.scale(alloc.width / 2, alloc.height / 2)
+    cr.arc(0, 0, 1, 0, 2 * math.pi)
+    cr.restore()
+    cr.set_source_rgba(1, 1, 1, _FLASH_OPACITY)
+    cr.fill()
+    return False
+
+def _make_flash_window(shape: str = 'rect') -> Gtk.Window:
     w = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
     w.set_decorated(False)
     w.set_keep_above(True)
     w.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
     w.set_accept_focus(False)
+    if shape == 'ellipse':
+        visual = w.get_screen().get_rgba_visual()
+        if visual is not None:
+            w.set_visual(visual)
+            w.set_app_paintable(True)
+            w.connect('draw', _on_flash_ellipse_draw)
+            return w
+        # No RGBA visual available — fall back to the rectangular flash.
     w.get_style_context().add_class('flash-win')
     return w
 
-def _show_flash(w: Gtk.Window):
+def _show_flash(w: Gtk.Window, shape: str = 'rect'):
     """Show w, apply _FLASH_OPACITY, and raise it above other windows.
 
     Gtk.Widget.set_opacity() is a no-op for toplevel X11 windows in this GTK
@@ -353,18 +394,25 @@ def _show_flash(w: Gtk.Window):
     above an already-present()'d window (e.g. farolkey-settings) — only
     present()+raise_() together do. set_accept_focus(False) keeps present()
     from stealing keyboard focus from whatever app the user is using.
+
+    For shape == 'ellipse', the per-pixel alpha is already baked into the
+    'draw' handler (_on_flash_ellipse_draw), so the window itself stays
+    fully opaque — applying _FLASH_OPACITY again via set_opacity() would
+    double-dim it.
     """
     w.show_all()
     w.present()
     gdkwin = w.get_window()
-    gdkwin.set_opacity(_FLASH_OPACITY)
+    if shape != 'ellipse':
+        gdkwin.set_opacity(_FLASH_OPACITY)
     gdkwin.raise_()
 
-def _flash_screen(region=None):
+def _flash_screen(region=None, shape: str = 'rect'):
     """Briefly flash white, like a camera shutter.
 
     If region (ax, ay, aw, ah) in absolute logical coords is given, flash
-    only that rectangle; otherwise flash every monitor fullscreen.
+    only that rectangle (in the given shape); otherwise flash every monitor
+    fullscreen as a rectangle.
     """
     css = Gtk.CssProvider()
     css.load_from_data(_FLASH_CSS)
@@ -376,16 +424,16 @@ def _flash_screen(region=None):
     wins = []
     if region is not None:
         ax, ay, aw, ah = region
-        w = _make_flash_window()
+        w = _make_flash_window(shape)
         w.set_default_size(aw, ah)
         w.move(ax, ay)
-        _show_flash(w)
+        _show_flash(w, shape)
         wins.append(w)
     else:
         for i in range(max(1, display.get_n_monitors())):
-            w = _make_flash_window()
+            w = _make_flash_window('rect')
             w.fullscreen_on_monitor(screen, i)
-            _show_flash(w)
+            _show_flash(w, 'rect')
             wins.append(w)
 
     def _close():
@@ -394,8 +442,8 @@ def _flash_screen(region=None):
         return False
     GLib.timeout_add(120, _close)
 
-def play_capture_effect(region=None):
-    _flash_screen(region)
+def play_capture_effect(region=None, shape: str = 'rect'):
+    _flash_screen(region, shape)
     _play_shutter_sound()
 
 def save_file(png: bytes, path: str) -> str:
@@ -408,11 +456,12 @@ def save_file(png: bytes, path: str) -> str:
 
 # ─── Post-capture: clipboard + optional save dialog ──────────────────────────
 
-def finish(png: bytes, conf: dict, region=None):
+def finish(png: bytes, conf: dict, region=None, shape: str = 'rect'):
     """Copy to clipboard, notify, optionally save.
 
     region (ax, ay, aw, ah) in absolute logical coords, if given, restricts
-    the capture-effect flash to that rectangle instead of the whole screen.
+    the capture-effect flash to that rectangle (in the given shape) instead
+    of the whole screen.
     """
     log.info('finish: %d bytes, auto_save=%s, ask=%s',
              len(png),
@@ -422,7 +471,7 @@ def finish(png: bytes, conf: dict, region=None):
     push_image_to_clipboard_history(png)
     if conf.get('show_notification', 'true').lower() == 'true':
         notify('Screenshot copied')
-    play_capture_effect(region)
+    play_capture_effect(region, shape)
 
     auto = conf.get('auto_save', 'false').lower() == 'true'
     ask  = conf.get('ask_before_save', 'true').lower() == 'true'
@@ -1257,7 +1306,7 @@ class CaptureReviewOverlay:
             log.error('crop failed: %s', e)
             show_error(str(e))
             return
-        finish(png, self._conf, region=(ax, ay, aw, ah))
+        finish(png, self._conf, region=(ax, ay, aw, ah), shape=shape)
 
     def _on_cancel(self):
         if self._done: return
