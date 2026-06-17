@@ -33,6 +33,9 @@ struct RuntimeConfig {
     bool fcitx5ClickAwayDropOnFail = false;
     /// M15: enable Smart Templates (parametric macro) via farolkey-template subprocess.
     bool enableSmartTemplates = true;
+    /// M24: fcitx5-adapter-only flags — not used by core engine.
+    bool enableScreenshot = true;
+    bool enableClipboard  = true;
     /// M14.12: Free Layout user-defined shortcut + tone config.
     farolkey::core::FreeLayoutConfig freeLayout;
 };

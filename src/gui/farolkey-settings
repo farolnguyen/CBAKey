@@ -182,6 +182,8 @@ _GENERAL_DEFAULTS = {
     'PreeditMode':          'Auto',
     'CommittedRewrite':     'True',
     'OutputCharset':        'Unicode',
+    'enable_screenshot':    'true',
+    'enable_clipboard':     'true',
 }
 
 def load_general_conf() -> dict:
@@ -1745,13 +1747,33 @@ class SettingsWindow(Gtk.Window):
     # ── Tab 3: Clipboard History ───────────────────────────────────────────────
 
     def _build_clipboard_tab(self):
-        conf   = load_clipboard_conf()
+        conf         = load_clipboard_conf()
+        general_conf = load_general_conf()
+        cb_enabled   = general_conf.get('enable_clipboard', 'true').lower() == 'true'
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         vbox.set_margin_top(16); vbox.set_margin_bottom(16)
         vbox.set_margin_start(24); vbox.set_margin_end(24)
         scroll.add(vbox)
+
+        # Enable toggle row (always sensitive)
+        en_row = Gtk.Box(spacing=12)
+        en_lbl = Gtk.Label(label=_('Enable Clipboard History'), xalign=0)
+        self._cb_enable_switch = Gtk.Switch()
+        self._cb_enable_switch.set_active(cb_enabled)
+        self._cb_enable_switch.set_valign(Gtk.Align.CENTER)
+        self._cb_enable_switch.connect('state-set', self._on_cb_enable_toggled)
+        en_row.pack_start(en_lbl, True, True, 0)
+        en_row.pack_start(self._cb_enable_switch, False, False, 0)
+        vbox.pack_start(en_row, False, False, 0)
+        vbox.pack_start(Gtk.Separator(), False, False, 8)
+
+        # Content box — greyed out when disabled
+        self._cb_content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._cb_content_box.set_sensitive(cb_enabled)
+        vbox.pack_start(self._cb_content_box, True, True, 0)
+        _c = self._cb_content_box
 
         def section(text):
             lbl = Gtk.Label(label=text, xalign=0)
@@ -1765,7 +1787,7 @@ class SettingsWindow(Gtk.Window):
             lbl.set_margin_start(4)
             return lbl
 
-        vbox.pack_start(section(_('Popup display')), False, False, 0)
+        _c.pack_start(section(_('Popup display')), False, False, 0)
         self._cb_radio_mouse  = Gtk.RadioButton.new_with_label(None, _('🖱  Near cursor (default)'))
         self._cb_radio_corner = Gtk.RadioButton.new_with_label_from_widget(
             self._cb_radio_mouse, _('📐  Bottom-right corner of screen'))
@@ -1773,10 +1795,10 @@ class SettingsWindow(Gtk.Window):
             self._cb_radio_corner.set_active(True)
         else:
             self._cb_radio_mouse.set_active(True)
-        vbox.pack_start(self._cb_radio_mouse,  False, False, 4)
-        vbox.pack_start(self._cb_radio_corner, False, False, 4)
+        _c.pack_start(self._cb_radio_mouse,  False, False, 4)
+        _c.pack_start(self._cb_radio_corner, False, False, 4)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 8)
+        _c.pack_start(Gtk.Separator(), False, False, 8)
         close_row = Gtk.Box(spacing=12)
         close_lbl = Gtk.Label(label=_('Close popup on click outside'), xalign=0)
         self._cb_close_switch = Gtk.Switch()
@@ -1784,10 +1806,10 @@ class SettingsWindow(Gtk.Window):
         self._cb_close_switch.set_valign(Gtk.Align.CENTER)
         close_row.pack_start(close_lbl, True, True, 0)
         close_row.pack_start(self._cb_close_switch, False, False, 0)
-        vbox.pack_start(close_row, False, False, 6)
+        _c.pack_start(close_row, False, False, 6)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section(_('System tools')), False, False, 0)
+        _c.pack_start(Gtk.Separator(), False, False, 8)
+        _c.pack_start(section(_('System tools')), False, False, 0)
         tools = [
             (shutil.which('wl-copy'),  'wl-copy',  _('Clipboard write (Wayland)')),
             (shutil.which('xclip'),    'xclip',    _('Clipboard write (X11)')),
@@ -1806,19 +1828,19 @@ class SettingsWindow(Gtk.Window):
             col.pack_start(name_lbl, False, False, 0)
             col.pack_start(desc_lbl, False, False, 0)
             tools_box.pack_start(col, False, False, 0)
-        vbox.pack_start(tools_box, False, False, 0)
+        _c.pack_start(tools_box, False, False, 0)
         missing = [n for f, n, _ in tools if not f]
         if missing:
-            vbox.pack_start(hint(f'Missing: {", ".join(missing)} — run: sudo apt install {" ".join(missing)}'), False, False, 4)
+            _c.pack_start(hint(f'Missing: {", ".join(missing)} — run: sudo apt install {" ".join(missing)}'), False, False, 4)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 16)
+        _c.pack_start(Gtk.Separator(), False, False, 16)
         btn_row = Gtk.Box(spacing=8)
         btn_row.set_halign(Gtk.Align.END)
         save_btn = Gtk.Button(label=_('Save & Apply'))
         save_btn.get_style_context().add_class('suggested-action')
         save_btn.connect('clicked', self._on_clipboard_save)
         btn_row.pack_start(save_btn, False, False, 0)
-        vbox.pack_start(btn_row, False, False, 0)
+        _c.pack_start(btn_row, False, False, 0)
         return scroll
 
     def _on_clipboard_save(self, _btn):
@@ -1828,16 +1850,82 @@ class SettingsWindow(Gtk.Window):
         save_clipboard_conf(conf)
         self._show_info(_('Clipboard History settings saved.\nChanges will take effect on next popup open.'))
 
+    def _on_cb_enable_toggled(self, switch, state):
+        if not state:
+            dlg = Gtk.MessageDialog(
+                transient_for=self, modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.NONE,
+                text=_('Disable Clipboard History?'))
+            dlg.format_secondary_text(
+                _('Disabling will stop the daemon. Continue?'))
+            dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
+            dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
+            resp = dlg.run(); dlg.destroy()
+            if resp != Gtk.ResponseType.OK:
+                return True
+            dlg2 = Gtk.MessageDialog(
+                transient_for=self, modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.NONE,
+                text=_('Clear clipboard history?'))
+            dlg2.format_secondary_text(
+                _('Do you want to clear all clipboard history?'))
+            dlg2.add_button(_('Keep'), Gtk.ResponseType.NO)
+            dlg2.add_button(_('Clear'), Gtk.ResponseType.YES)
+            resp2 = dlg2.run(); dlg2.destroy()
+            if resp2 == Gtk.ResponseType.YES:
+                self._clear_clipboard_history()
+            subprocess.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
+        else:
+            daemon = shutil.which('farolkey-clipboard')
+            if daemon:
+                subprocess.Popen([daemon, '--daemon'], start_new_session=True)
+        save_general_conf({'enable_clipboard': 'true' if state else 'false'})
+        try:
+            subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
+        except Exception:
+            pass
+        self._cb_content_box.set_sensitive(state)
+        return False
+
+    def _clear_clipboard_history(self):
+        history_file = Path.home() / '.local/share/farolkey/clipboard_history.json'
+        images_dir   = Path.home() / '.local/share/farolkey/clipboard_images'
+        history_file.unlink(missing_ok=True)
+        if images_dir.exists():
+            shutil.rmtree(images_dir)
+
     # ── Tab 4: Screenshot ─────────────────────────────────────────────────────
 
     def _build_screenshot_tab(self):
-        conf   = load_screenshot_conf()
+        conf         = load_screenshot_conf()
+        general_conf = load_general_conf()
+        ss_enabled   = general_conf.get('enable_screenshot', 'true').lower() == 'true'
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         vbox.set_margin_top(16); vbox.set_margin_bottom(16)
         vbox.set_margin_start(24); vbox.set_margin_end(24)
         scroll.add(vbox)
+
+        # Enable toggle row (always sensitive)
+        en_row = Gtk.Box(spacing=12)
+        en_lbl = Gtk.Label(label=_('Enable Screenshot'), xalign=0)
+        self._ss_enable_switch = Gtk.Switch()
+        self._ss_enable_switch.set_active(ss_enabled)
+        self._ss_enable_switch.set_valign(Gtk.Align.CENTER)
+        self._ss_enable_switch.connect('state-set', self._on_ss_enable_toggled)
+        en_row.pack_start(en_lbl, True, True, 0)
+        en_row.pack_start(self._ss_enable_switch, False, False, 0)
+        vbox.pack_start(en_row, False, False, 0)
+        vbox.pack_start(Gtk.Separator(), False, False, 8)
+
+        # Content box — greyed out when disabled
+        self._ss_content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._ss_content_box.set_sensitive(ss_enabled)
+        vbox.pack_start(self._ss_content_box, True, True, 0)
+        _c = self._ss_content_box
 
         def section(text):
             lbl = Gtk.Label(label=text, xalign=0)
@@ -1859,24 +1947,24 @@ class SettingsWindow(Gtk.Window):
             box.pack_start(widget, True, True, 0)
             return box
 
-        vbox.pack_start(section(_('Hotkeys')), False, False, 0)
+        _c.pack_start(section(_('Hotkeys')), False, False, 0)
         self._ss_hotkey_entry = Gtk.Entry()
         self._ss_hotkey_entry.set_text(conf.get('hotkey', 'super+shift+s'))
         self._ss_hotkey_entry.set_tooltip_text('e.g. super+shift+s, ctrl+shift+p')
-        vbox.pack_start(row(_('Screenshot hotkey'), self._ss_hotkey_entry), False, False, 6)
-        vbox.pack_start(hint(_('Use + to combine keys. Valid modifiers: super, ctrl, alt, shift')), False, False, 0)
-        vbox.pack_start(hint(_('💡 super = Windows key (⊞)')), False, False, 0)
+        _c.pack_start(row(_('Screenshot hotkey'), self._ss_hotkey_entry), False, False, 6)
+        _c.pack_start(hint(_('Use + to combine keys. Valid modifiers: super, ctrl, alt, shift')), False, False, 0)
+        _c.pack_start(hint(_('💡 super = Windows key (⊞)')), False, False, 0)
 
         self._ss_action_combo = Gtk.ComboBoxText()
         self._ss_action_combo.append('menu',       _('Show capture menu (default)'))
         self._ss_action_combo.append('fullscreen', _('Capture full screen'))
         self._ss_action_combo.append('region',     _('Select a region'))
         self._ss_action_combo.set_active_id(conf.get('hotkey_action', 'menu'))
-        vbox.pack_start(row(_('When hotkey is pressed'), self._ss_action_combo), False, False, 6)
-        vbox.pack_start(hint(_('Choose what happens when you press the screenshot hotkey')), False, False, 0)
+        _c.pack_start(row(_('When hotkey is pressed'), self._ss_action_combo), False, False, 6)
+        _c.pack_start(hint(_('Choose what happens when you press the screenshot hotkey')), False, False, 0)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section(_('Capture')), False, False, 0)
+        _c.pack_start(Gtk.Separator(), False, False, 8)
+        _c.pack_start(section(_('Capture')), False, False, 0)
         self._ss_cap_all_radio    = Gtk.RadioButton.new_with_label(None, _('All screens (default)'))
         self._ss_cap_cursor_radio = Gtk.RadioButton.new_with_label_from_widget(
             self._ss_cap_all_radio, _('Screen containing cursor'))
@@ -1884,11 +1972,11 @@ class SettingsWindow(Gtk.Window):
             self._ss_cap_cursor_radio.set_active(True)
         else:
             self._ss_cap_all_radio.set_active(True)
-        vbox.pack_start(self._ss_cap_all_radio,    False, False, 4)
-        vbox.pack_start(self._ss_cap_cursor_radio, False, False, 4)
-        vbox.pack_start(hint(_('All screens: drag to select any region across all monitors')), False, False, 0)
+        _c.pack_start(self._ss_cap_all_radio,    False, False, 4)
+        _c.pack_start(self._ss_cap_cursor_radio, False, False, 4)
+        _c.pack_start(hint(_('All screens: drag to select any region across all monitors')), False, False, 0)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 6)
+        _c.pack_start(Gtk.Separator(), False, False, 6)
         instant_row = Gtk.Box(spacing=12)
         instant_lbl = Gtk.Label(label=_('Capture immediately on mouse release'), xalign=0)
         self._ss_instant_switch = Gtk.Switch()
@@ -1896,8 +1984,8 @@ class SettingsWindow(Gtk.Window):
         self._ss_instant_switch.set_valign(Gtk.Align.CENTER)
         instant_row.pack_start(instant_lbl, True, True, 0)
         instant_row.pack_start(self._ss_instant_switch, False, False, 0)
-        vbox.pack_start(instant_row, False, False, 6)
-        vbox.pack_start(hint(_('If enabled: screenshot taken immediately on mouse release — no preview / region adjustment')), False, False, 0)
+        _c.pack_start(instant_row, False, False, 6)
+        _c.pack_start(hint(_('If enabled: screenshot taken immediately on mouse release — no preview / region adjustment')), False, False, 0)
 
         notify_row = Gtk.Box(spacing=12)
         notify_lbl = Gtk.Label(label=_('Show notification after capture'), xalign=0)
@@ -1906,10 +1994,10 @@ class SettingsWindow(Gtk.Window):
         self._ss_notify_switch.set_valign(Gtk.Align.CENTER)
         notify_row.pack_start(notify_lbl, True, True, 0)
         notify_row.pack_start(self._ss_notify_switch, False, False, 0)
-        vbox.pack_start(notify_row, False, False, 6)
+        _c.pack_start(notify_row, False, False, 6)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section(_('Storage')), False, False, 0)
+        _c.pack_start(Gtk.Separator(), False, False, 8)
+        _c.pack_start(section(_('Storage')), False, False, 0)
         path_row = Gtk.Box(spacing=8)
         path_lbl = Gtk.Label(label=_('Save folder'), xalign=0)
         path_lbl.set_size_request(220, -1)
@@ -1921,7 +2009,7 @@ class SettingsWindow(Gtk.Window):
         path_row.pack_start(path_lbl, False, False, 0)
         path_row.pack_start(self._ss_path_entry, True, True, 0)
         path_row.pack_start(browse_btn, False, False, 0)
-        vbox.pack_start(path_row, False, False, 6)
+        _c.pack_start(path_row, False, False, 6)
 
         ask_row = Gtk.Box(spacing=12)
         self._ss_ask_switch = Gtk.Switch()
@@ -1929,7 +2017,7 @@ class SettingsWindow(Gtk.Window):
         self._ss_ask_switch.set_valign(Gtk.Align.CENTER)
         ask_row.pack_start(Gtk.Label(label=_('Ask before saving'), xalign=0), True, True, 0)
         ask_row.pack_start(self._ss_ask_switch, False, False, 0)
-        vbox.pack_start(ask_row, False, False, 6)
+        _c.pack_start(ask_row, False, False, 6)
 
         auto_row = Gtk.Box(spacing=12)
         self._ss_auto_switch = Gtk.Switch()
@@ -1937,11 +2025,11 @@ class SettingsWindow(Gtk.Window):
         self._ss_auto_switch.set_valign(Gtk.Align.CENTER)
         auto_row.pack_start(Gtk.Label(label=_('Auto-save (no prompt)'), xalign=0), True, True, 0)
         auto_row.pack_start(self._ss_auto_switch, False, False, 0)
-        vbox.pack_start(auto_row, False, False, 6)
-        vbox.pack_start(hint(_('Auto-save skips the dialog and saves directly to the folder above')), False, False, 0)
+        _c.pack_start(auto_row, False, False, 6)
+        _c.pack_start(hint(_('Auto-save skips the dialog and saves directly to the folder above')), False, False, 0)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 8)
-        vbox.pack_start(section(_('System tools')), False, False, 0)
+        _c.pack_start(Gtk.Separator(), False, False, 8)
+        _c.pack_start(section(_('System tools')), False, False, 0)
         ss_tools = [('grim', _('Capture Wayland')), ('slurp', _('Region Wayland')),
                     ('maim', _('Capture X11')), ('wl-copy', _('Clipboard Wayland')),
                     ('xclip', _('Clipboard X11')), ('notify-send', _('Notification')),
@@ -1958,9 +2046,9 @@ class SettingsWindow(Gtk.Window):
             col.pack_start(name_lbl, False, False, 0)
             col.pack_start(desc_lbl, False, False, 0)
             tools_box.pack_start(col, False, False, 0)
-        vbox.pack_start(tools_box, False, False, 0)
+        _c.pack_start(tools_box, False, False, 0)
 
-        vbox.pack_start(Gtk.Separator(), False, False, 16)
+        _c.pack_start(Gtk.Separator(), False, False, 16)
         btn_row = Gtk.Box(spacing=8)
         btn_row.set_halign(Gtk.Align.END)
         test_btn = Gtk.Button(label=_('Test capture'))
@@ -1970,7 +2058,7 @@ class SettingsWindow(Gtk.Window):
         save_btn.get_style_context().add_class('suggested-action')
         save_btn.connect('clicked', self._on_screenshot_save)
         btn_row.pack_start(save_btn, False, False, 0)
-        vbox.pack_start(btn_row, False, False, 0)
+        _c.pack_start(btn_row, False, False, 0)
         return scroll
 
     def _on_ss_browse(self, _btn):
@@ -2004,6 +2092,28 @@ class SettingsWindow(Gtk.Window):
                 except Exception:
                     pass
         self._show_info(_('Screenshot settings saved.'))
+
+    def _on_ss_enable_toggled(self, switch, state):
+        if not state:
+            dlg = Gtk.MessageDialog(
+                transient_for=self, modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.NONE,
+                text=_('Disable Screenshot?'))
+            dlg.format_secondary_text(
+                _('Disabling will deactivate the hotkey and stop the feature. Continue?'))
+            dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
+            dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
+            resp = dlg.run(); dlg.destroy()
+            if resp != Gtk.ResponseType.OK:
+                return True
+        save_general_conf({'enable_screenshot': 'true' if state else 'false'})
+        try:
+            subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
+        except Exception:
+            pass
+        self._ss_content_box.set_sensitive(state)
+        return False
 
     def _on_ss_test(self, _btn):
         tool = shutil.which('farolkey-screenshot')

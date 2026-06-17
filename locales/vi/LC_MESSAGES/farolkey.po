@@ -250,6 +250,30 @@ msgid "Select"
 msgstr "Chọn"
 
 # ── Clipboard tab ──────────────────────────────────────────────────────────────
+msgid "Enable Clipboard History"
+msgstr "Bật Clipboard History"
+
+msgid "Disable Clipboard History?"
+msgstr "Tắt Clipboard History?"
+
+msgid "Disabling will stop the daemon. Continue?"
+msgstr "Tắt sẽ dừng daemon. Tiếp tục?"
+
+msgid "Clear clipboard history?"
+msgstr "Xoá clipboard history?"
+
+msgid "Do you want to clear all clipboard history?"
+msgstr "Bạn có muốn xoá toàn bộ clipboard history không?"
+
+msgid "Keep"
+msgstr "Giữ lại"
+
+msgid "Clear"
+msgstr "Xoá"
+
+msgid "Disable"
+msgstr "Tắt"
+
 msgid "Popup display"
 msgstr "Hiển thị popup"
 
@@ -281,6 +305,18 @@ msgid "Clipboard History settings saved.\nChanges will take effect on next popup
 msgstr "Đã lưu cài đặt Lịch sử Clipboard.\nThay đổi sẽ có hiệu lực khi mở popup tiếp theo."
 
 # ── Screenshot tab ─────────────────────────────────────────────────────────────
+msgid "Enable Screenshot"
+msgstr "Bật Screenshot"
+
+msgid "Disable Screenshot?"
+msgstr "Tắt Screenshot?"
+
+msgid "Disabling will deactivate the hotkey and stop the feature. Continue?"
+msgstr "Tắt sẽ vô hiệu hoá phím tắt và dừng tính năng. Tiếp tục?"
+
+msgid "Screenshot is disabled. Enable it in FarolKey Settings."
+msgstr "Screenshot đã bị tắt. Vào FarolKey Settings để bật lại."
+
 msgid "Hotkeys"
 msgstr "Phím tắt"
 

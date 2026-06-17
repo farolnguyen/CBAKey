@@ -76,6 +76,10 @@ RuntimeConfig loadConfigFile(const std::string& path) {
             config.fcitx5ClickAwayDropOnFail = parseBool(value, config.fcitx5ClickAwayDropOnFail);
         } else if (key == "enable_smart_templates") {
             config.enableSmartTemplates = parseBool(value, config.enableSmartTemplates);
+        } else if (key == "enable_screenshot") {
+            config.enableScreenshot = parseBool(value, config.enableScreenshot);
+        } else if (key == "enable_clipboard") {
+            config.enableClipboard  = parseBool(value, config.enableClipboard);
         }
     }
 

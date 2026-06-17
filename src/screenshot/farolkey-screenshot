@@ -63,7 +63,19 @@ def _data_dir() -> Path:
     return d
 
 SCREENSHOT_CONF = _config_dir() / 'screenshot.conf'
+GENERAL_CONF    = _config_dir() / 'farolkey.conf'
 SOCKET_PATH     = _data_dir() / 'clipboard.sock'
+
+def _load_general_conf() -> dict:
+    conf = {}
+    if GENERAL_CONF.exists():
+        for line in GENERAL_CONF.read_text().splitlines():
+            line = line.strip()
+            if line.startswith('#') or '=' not in line:
+                continue
+            k, _, v = line.partition('=')
+            conf[k.strip()] = v.strip()
+    return conf
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -1437,6 +1449,10 @@ def main():
         sys.exit(0)
 
     conf = load_conf()
+
+    if _load_general_conf().get('enable_screenshot', 'true').lower() != 'true':
+        notify(_('Screenshot is disabled. Enable it in FarolKey Settings.'))
+        sys.exit(0)
 
     hotkey_action = conf.get('hotkey_action', 'menu')
     skip_review   = '--fullscreen' in sys.argv or hotkey_action == 'fullscreen'

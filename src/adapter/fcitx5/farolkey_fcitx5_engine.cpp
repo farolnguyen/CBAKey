@@ -64,8 +64,10 @@ struct UIStrings {
     const char* methodTocKy;          // "Input Method: Tốc ký (VNI)"
     const char* methodFreeLayout;      // "Input Method: Free Layout"
     const char* methodFreeLayoutShort; // "Free Layout" / "Tuỳ biến"
-    const char* screenshotPrefix;   // "Screenshot" / "Chụp màn hình"
+    const char* screenshotPrefix;      // "Screenshot" / "Chụp màn hình"
     const char* screenshotLong;
+    const char* screenshotDisabled;    // "Screenshot (disabled)" label
+    const char* clipboardDisabled;     // "Clipboard History (disabled)" label
 };
 
 static constexpr UIStrings kStringsEn {
@@ -79,6 +81,7 @@ static constexpr UIStrings kStringsEn {
     "Input Method: Simple Telex", "Input Method: Simple Telex 2", "Input Method: Microsoft Vietnamese",
     "Input Method: Tốc ký (VNI)", "Input Method: Free Layout", "Free Layout",
     "Screenshot", "Take a screenshot with FarolKey",
+    "Screenshot (disabled)", "Clipboard History (disabled)",
 };
 
 static constexpr UIStrings kStringsVi {
@@ -92,6 +95,7 @@ static constexpr UIStrings kStringsVi {
     "Phương thức: Simple Telex", "Phương thức: Simple Telex 2", "Phương thức: Microsoft Vietnamese",
     "Phương thức: Tốc ký (VNI)", "Phương thức: Tuỳ biến", "Tuỳ biến",
     "Chụp màn hình", "Chụp màn hình với FarolKey",
+    "Chụp màn hình (đã tắt)", "Lịch sử Clipboard (đã tắt)",
 };
 
 // Read language= from farolkey.conf. Returns "en" as fallback.
@@ -959,6 +963,8 @@ private:
         const auto legacyCfg   = farolkey::config::loadConfigFile(defaultConfigPath());
         enableUserDict_        = legacyCfg.enableUserDictionary;
         enableSmartTemplates_  = legacyCfg.enableSmartTemplates;
+        enableScreenshot_      = legacyCfg.enableScreenshot;
+        enableClipboard_       = legacyCfg.enableClipboard;
         try { lastConfigMtime_      = std::filesystem::last_write_time(defaultConfigPath()); } catch (...) {}
         try { lastDictMtime_        = std::filesystem::last_write_time(defaultDictPath());   } catch (...) {}
         try { lastFreeLayoutMtime_  = std::filesystem::last_write_time(farolkey::core::freeLayoutConfigPath()); } catch (...) {}
@@ -997,6 +1003,8 @@ private:
         std::ofstream f(defaultConfigPath(), std::ios::app);
         f << "enable_user_dictionary="  << (enableUserDict_       ? "true" : "false") << "\n";
         f << "enable_smart_templates="  << (enableSmartTemplates_ ? "true" : "false") << "\n";
+        f << "enable_screenshot="       << (enableScreenshot_     ? "true" : "false") << "\n";
+        f << "enable_clipboard="        << (enableClipboard_      ? "true" : "false") << "\n";
     }
 
     // Show active method in the parent menu label: "Input Method: Telex" or "Input Method: VNI".
@@ -1058,7 +1066,17 @@ private:
         freelayoutAction_.setChecked(m == M::FreeLayout);
         underlineAction_.setChecked(config_.showPreeditUnderline.value());
         refreshMethodMenuLabel();
-        refreshScreenshotLabel();   // pick up hotkey changes from screenshot.conf
+        if (enableScreenshot_) {
+            refreshScreenshotLabel();
+        } else {
+            screenshotAction_.setShortText(uiStrings_.screenshotDisabled);
+            screenshotAction_.setLongText(uiStrings_.screenshotLong);
+        }
+        if (enableClipboard_) {
+            clipboardAction_.setShortText(uiStrings_.clipboardShort);
+        } else {
+            clipboardAction_.setShortText(uiStrings_.clipboardDisabled);
+        }
     }
 
     void applyConfigToAllBridges() {
@@ -1212,6 +1230,8 @@ private:
     // Managed by Dictionary Manager (not configtool); read from farolkey.conf.
     bool enableUserDict_       = true;
     bool enableSmartTemplates_ = true;
+    bool enableScreenshot_     = true;
+    bool enableClipboard_      = true;
     std::filesystem::file_time_type lastConfigMtime_{};
     std::filesystem::file_time_type lastDictMtime_{};
     std::filesystem::file_time_type lastFreeLayoutMtime_{};
