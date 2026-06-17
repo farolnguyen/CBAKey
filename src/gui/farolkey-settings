@@ -1852,12 +1852,39 @@ class SettingsWindow(Gtk.Window):
         _c.pack_start(Gtk.Separator(), False, False, 16)
         btn_row = Gtk.Box(spacing=8)
         btn_row.set_halign(Gtk.Align.END)
+        restore_btn = Gtk.Button(label=_('Restore defaults'))
+        restore_btn.connect('clicked', self._on_clipboard_restore_defaults)
+        btn_row.pack_start(restore_btn, False, False, 0)
         save_btn = Gtk.Button(label=_('Save & Apply'))
         save_btn.get_style_context().add_class('suggested-action')
         save_btn.connect('clicked', self._on_clipboard_save)
         btn_row.pack_start(save_btn, False, False, 0)
         _c.pack_start(btn_row, False, False, 0)
         return scroll
+
+    def _on_clipboard_restore_defaults(self, _btn):
+        dlg = Gtk.MessageDialog(transient_for=self, modal=True,
+            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
+            text=_('Restore defaults?'))
+        dlg.format_secondary_text(
+            _('The following settings will be reset to their defaults:') +
+            f'\n• {_("Clipboard hotkey")}: {_CB_DEFAULTS["clipboard_hotkey"]}'
+            f'\n• {_("Popup display")}: {_CB_DEFAULTS["popup_position"]}'
+            f'\n• {_("Close popup on click outside")}: {_CB_DEFAULTS["close_on_click_outside"]}')
+        dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
+        restore = dlg.add_button(_('Restore'), Gtk.ResponseType.OK)
+        restore.get_style_context().add_class('destructive-action')
+        resp = dlg.run(); dlg.destroy()
+        if resp != Gtk.ResponseType.OK:
+            return
+        conf = load_clipboard_conf()
+        conf.update(_CB_DEFAULTS)
+        save_clipboard_conf(conf)
+        self._cb_hotkey_entry.set_text(_CB_DEFAULTS['clipboard_hotkey'])
+        self._cb_radio_mouse.set_active(_CB_DEFAULTS['popup_position'] == 'mouse')
+        self._cb_radio_corner.set_active(_CB_DEFAULTS['popup_position'] == 'corner')
+        self._cb_close_switch.set_active(_CB_DEFAULTS['close_on_click_outside'] == 'true')
+        self._restart_clipboard_daemon_for_hotkey()
 
     def _on_clipboard_save(self, _btn):
         conf = load_clipboard_conf()
@@ -2121,6 +2148,9 @@ class SettingsWindow(Gtk.Window):
         _c.pack_start(Gtk.Separator(), False, False, 16)
         btn_row = Gtk.Box(spacing=8)
         btn_row.set_halign(Gtk.Align.END)
+        restore_btn = Gtk.Button(label=_('Restore defaults'))
+        restore_btn.connect('clicked', self._on_ss_restore_defaults)
+        btn_row.pack_start(restore_btn, False, False, 0)
         test_btn = Gtk.Button(label=_('Test capture'))
         test_btn.connect('clicked', self._on_ss_test)
         btn_row.pack_start(test_btn, False, False, 0)
@@ -2130,6 +2160,50 @@ class SettingsWindow(Gtk.Window):
         btn_row.pack_start(save_btn, False, False, 0)
         _c.pack_start(btn_row, False, False, 0)
         return scroll
+
+    def _on_ss_restore_defaults(self, _btn):
+        d = _SS_DEFAULTS
+        dlg = Gtk.MessageDialog(transient_for=self, modal=True,
+            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
+            text=_('Restore defaults?'))
+        dlg.format_secondary_text(
+            _('The following settings will be reset to their defaults:') +
+            f'\n• {_("Screenshot hotkey")}: {d["hotkey"]}'
+            f'\n• {_("When hotkey is pressed")}: {d["hotkey_action"]}'
+            f'\n• {_("Capture")}: {d["capture_mode"]}'
+            f'\n• {_("Capture immediately on mouse release")}: {d["instant_capture"]}'
+            f'\n• {_("Show notification after capture")}: {d["show_notification"]}'
+            f'\n• {_("Save folder")}: {d["save_path"]}'
+            f'\n• {_("Ask before saving")}: {d["ask_before_save"]}'
+            f'\n• {_("Auto-save (no prompt)")}: {d["auto_save"]}')
+        dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
+        restore = dlg.add_button(_('Restore'), Gtk.ResponseType.OK)
+        restore.get_style_context().add_class('destructive-action')
+        resp = dlg.run(); dlg.destroy()
+        if resp != Gtk.ResponseType.OK:
+            return
+        conf = load_screenshot_conf()
+        conf.update(d)
+        save_screenshot_conf(conf)
+        self._ss_hotkey_entry.set_text(d['hotkey'])
+        self._ss_action_combo.set_active_id(d['hotkey_action'])
+        self._ss_cap_all_radio.set_active(d['capture_mode'] == 'all')
+        self._ss_cap_cursor_radio.set_active(d['capture_mode'] == 'cursor')
+        self._ss_instant_switch.set_active(d['instant_capture'] == 'true')
+        self._ss_notify_switch.set_active(d['show_notification'] == 'true')
+        self._ss_path_entry.set_text(d['save_path'])
+        self._ss_ask_switch.set_active(d['ask_before_save'] == 'true')
+        self._ss_auto_switch.set_active(d['auto_save'] == 'true')
+        daemon = shutil.which('farolkey-screenshot-daemon')
+        if daemon:
+            try:
+                subprocess.run([daemon, '--setup'], capture_output=True, timeout=5)
+            except Exception:
+                pass
+        try:
+            subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
+        except Exception:
+            pass
 
     def _on_ss_browse(self, _btn):
         dlg = Gtk.FileChooserDialog(title=_('Select screenshot folder'), transient_for=self,

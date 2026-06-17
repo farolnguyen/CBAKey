@@ -380,6 +380,24 @@ def _play_shutter_sound():
         subprocess.Popen([_PAPLAY, _SHUTTER_SOUND],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+def _on_flash_freeform_draw(widget, cr, points):
+    """Flash only the freeform polygon (same technique as ellipse: RGBA window,
+    clear to transparent, fill only the polygon path)."""
+    cr.save()
+    cr.set_operator(cairo.OPERATOR_SOURCE)
+    cr.set_source_rgba(0, 0, 0, 0)
+    cr.paint()
+    cr.restore()
+    if not points or len(points) < 3:
+        return False
+    cr.move_to(*points[0])
+    for pt in points[1:]:
+        cr.line_to(*pt)
+    cr.close_path()
+    cr.set_source_rgba(1, 1, 1, _FLASH_OPACITY)
+    cr.fill()
+    return False
+
 def _on_flash_ellipse_draw(widget, cr):
     """Paint widget's own background fully transparent, then fill an
     ellipse inscribed in its allocation at _FLASH_OPACITY — gives the
@@ -400,18 +418,22 @@ def _on_flash_ellipse_draw(widget, cr):
     cr.fill()
     return False
 
-def _make_flash_window(shape: str = 'rect') -> Gtk.Window:
+def _make_flash_window(shape: str = 'rect', points=None) -> Gtk.Window:
     w = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
     w.set_decorated(False)
     w.set_keep_above(True)
     w.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
     w.set_accept_focus(False)
-    if shape == 'ellipse':
+    if shape in ('ellipse', 'freeform'):
         visual = w.get_screen().get_rgba_visual()
         if visual is not None:
             w.set_visual(visual)
             w.set_app_paintable(True)
-            w.connect('draw', _on_flash_ellipse_draw)
+            if shape == 'ellipse':
+                w.connect('draw', _on_flash_ellipse_draw)
+            else:
+                pts = list(points) if points else []
+                w.connect('draw', lambda wid, cr: _on_flash_freeform_draw(wid, cr, pts))
             return w
         # No RGBA visual available — fall back to the rectangular flash.
     w.get_style_context().add_class('flash-win')
@@ -436,11 +458,11 @@ def _show_flash(w: Gtk.Window, shape: str = 'rect'):
     w.show_all()
     w.present()
     gdkwin = w.get_window()
-    if shape != 'ellipse':
+    if shape not in ('ellipse', 'freeform'):
         gdkwin.set_opacity(_FLASH_OPACITY)
     gdkwin.raise_()
 
-def _flash_screen(region=None, shape: str = 'rect'):
+def _flash_screen(region=None, shape: str = 'rect', points=None):
     """Briefly flash white, like a camera shutter.
 
     If region (ax, ay, aw, ah) in absolute logical coords is given, flash
@@ -457,7 +479,7 @@ def _flash_screen(region=None, shape: str = 'rect'):
     wins = []
     if region is not None:
         ax, ay, aw, ah = region
-        w = _make_flash_window(shape)
+        w = _make_flash_window(shape, points=points)
         w.set_default_size(aw, ah)
         w.move(ax, ay)
         _show_flash(w, shape)
@@ -475,8 +497,8 @@ def _flash_screen(region=None, shape: str = 'rect'):
         return False
     GLib.timeout_add(120, _close)
 
-def play_capture_effect(region=None, shape: str = 'rect'):
-    _flash_screen(region, shape)
+def play_capture_effect(region=None, shape: str = 'rect', points=None):
+    _flash_screen(region, shape, points=points)
     _play_shutter_sound()
 
 def save_file(png: bytes, path: str) -> str:
@@ -489,7 +511,7 @@ def save_file(png: bytes, path: str) -> str:
 
 # ─── Post-capture: clipboard + optional save dialog ──────────────────────────
 
-def finish(png: bytes, conf: dict, region=None, shape: str = 'rect'):
+def finish(png: bytes, conf: dict, region=None, shape: str = 'rect', points=None):
     """Copy to clipboard, notify, optionally save.
 
     region (ax, ay, aw, ah) in absolute logical coords, if given, restricts
@@ -504,7 +526,7 @@ def finish(png: bytes, conf: dict, region=None, shape: str = 'rect'):
     push_image_to_clipboard_history(png)
     if conf.get('show_notification', 'true').lower() == 'true':
         notify(_('Screenshot copied'))
-    play_capture_effect(region, shape)
+    play_capture_effect(region, shape, points=points)
 
     auto = conf.get('auto_save', 'false').lower() == 'true'
     ask  = conf.get('ask_before_save', 'true').lower() == 'true'
@@ -1411,7 +1433,7 @@ class CaptureReviewOverlay:
             log.error('crop failed: %s', e)
             show_error(str(e))
             return
-        finish(png, self._conf, region=(ax, ay, aw, ah), shape=shape)
+        finish(png, self._conf, region=(ax, ay, aw, ah), shape=shape, points=points)
 
     def _on_cancel(self):
         if self._done: return
