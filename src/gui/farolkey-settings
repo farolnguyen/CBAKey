@@ -1885,12 +1885,20 @@ class SettingsWindow(Gtk.Window):
             _sp.Popen([daemon, '--register-hotkey'],
                       start_new_session=True,
                       stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+            GLib.timeout_add(500, lambda: [
+                _sp.run(['farolkey-reload'], capture_output=True),
+                False,
+            ][-1])
         else:
             # X11 (any DE) or non-GNOME Wayland: daemon holds XGrab/pynput listener,
             # must restart so it picks up the new hotkey from clipboard.conf.
             _sp.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
             GLib.timeout_add(300, lambda: [
                 _sp.Popen([daemon, '--daemon'], start_new_session=True),
+                False,
+            ][-1])
+            GLib.timeout_add(800, lambda: [
+                _sp.run(['farolkey-reload'], capture_output=True),
                 False,
             ][-1])
 
@@ -2153,6 +2161,10 @@ class SettingsWindow(Gtk.Window):
                     subprocess.run([daemon, '--setup'], capture_output=True, timeout=5)
                 except Exception:
                     pass
+            try:
+                subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
+            except Exception:
+                pass
         self._show_info(_('Screenshot settings saved.'))
 
     def _on_ss_enable_toggled(self, switch, state):

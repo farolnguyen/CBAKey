@@ -1162,9 +1162,13 @@ def _gnome_unregister_clipboard_hotkey():
         raw = _get(_CB_GNOME_SCHEMA, _CB_GNOME_LIST_KEY)
         if _CB_GNOME_PATH not in raw:
             return
-        new_list = re.sub(rf",?\s*'{re.escape(_CB_GNOME_PATH)}'", '', raw)
-        new_list = re.sub(rf"'{re.escape(_CB_GNOME_PATH)}',?\s*", '', new_list)
-        new_list = re.sub(r',\s*,', ',', new_list).strip()
+        # Remove the entry whether it's first, last, or in the middle
+        escaped = re.escape(_CB_GNOME_PATH)
+        new_list = re.sub(rf"',?\s*'{escaped}'", "'", raw)   # middle/last: ...','/path/'  → ...'
+        new_list = re.sub(rf"'{escaped}',?\s*", '', new_list) # first: '/path/', ...  → ...
+        new_list = re.sub(r'\[\s*,', '[', new_list)           # leftover leading comma
+        new_list = re.sub(r',\s*\]', ']', new_list)           # leftover trailing comma
+        new_list = new_list.strip()
         if new_list in ('[]', '[,]', ''):
             new_list = '@as []'
         _sp.run(['gsettings', 'set', _CB_GNOME_SCHEMA, _CB_GNOME_LIST_KEY, new_list],
@@ -1286,6 +1290,9 @@ def run_daemon():
         # X11 (GNOME or not): use XGrabKey directly.
         # On GNOME X11, gsettings custom keybindings cannot override GNOME Shell's
         # Super key handling — XGrabKey is more reliable for all modifier combos.
+        # Clean up any stale gsettings binding to avoid a double-hotkey situation.
+        if _IS_GNOME:
+            _gnome_unregister_clipboard_hotkey()
         _start_x11_hotkey(server.show_popup, hotkey_str)
 
     def _init():
