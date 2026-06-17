@@ -140,7 +140,7 @@ def _send_tab_request(tab: str):
 
 # ── Version ────────────────────────────────────────────────────────────────────
 
-_SCRIPT_VERSION = '0.1.6'  # keep in sync with CMakeLists.txt project(VERSION ...)
+_SCRIPT_VERSION = '0.1.7'  # keep in sync with CMakeLists.txt project(VERSION ...)
 
 def _read_version() -> str:
     try:
