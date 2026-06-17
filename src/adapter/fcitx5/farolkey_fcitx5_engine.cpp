@@ -208,6 +208,22 @@ std::string defaultDictPath() {
     return base + "/farolkey/user_dict.json";
 }
 
+std::string clipboardConfPath() {
+    const char* xdg  = std::getenv("XDG_CONFIG_HOME");
+    const char* home = std::getenv("HOME");
+    const std::string base = (xdg && xdg[0]) ? std::string(xdg)
+                                              : std::string(home ? home : ".") + "/.config";
+    return base + "/farolkey/clipboard.conf";
+}
+
+std::string screenshotConfPath() {
+    const char* xdg  = std::getenv("XDG_CONFIG_HOME");
+    const char* home = std::getenv("HOME");
+    const std::string base = (xdg && xdg[0]) ? std::string(xdg)
+                                              : std::string(home ? home : ".") + "/.config";
+    return base + "/farolkey/screenshot.conf";
+}
+
 farolkey::config::RuntimeConfig toRuntimeConfig(
     const farolkey::adapter::fcitx5::FarolKeyConfig& cfg, bool enableUserDict) {
     farolkey::config::RuntimeConfig rc = farolkey::config::defaultConfig();
@@ -880,8 +896,7 @@ private:
         ui.registerAction("farolkey-dict", &dictAction_);
 
         // Clipboard History — launches farolkey-clipboard --show as a detached process.
-        clipboardAction_.setShortText(uiStrings_.clipboardShort);
-        clipboardAction_.setLongText(uiStrings_.clipboardLong);
+        refreshClipboardLabel();
         clipboardAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
             if (!enableClipboard_) return;
@@ -967,9 +982,11 @@ private:
         enableSmartTemplates_  = legacyCfg.enableSmartTemplates;
         enableScreenshot_      = legacyCfg.enableScreenshot;
         enableClipboard_       = legacyCfg.enableClipboard;
-        try { lastConfigMtime_      = std::filesystem::last_write_time(defaultConfigPath()); } catch (...) {}
-        try { lastDictMtime_        = std::filesystem::last_write_time(defaultDictPath());   } catch (...) {}
-        try { lastFreeLayoutMtime_  = std::filesystem::last_write_time(farolkey::core::freeLayoutConfigPath()); } catch (...) {}
+        try { lastConfigMtime_         = std::filesystem::last_write_time(defaultConfigPath()); } catch (...) {}
+        try { lastDictMtime_           = std::filesystem::last_write_time(defaultDictPath());   } catch (...) {}
+        try { lastFreeLayoutMtime_     = std::filesystem::last_write_time(farolkey::core::freeLayoutConfigPath()); } catch (...) {}
+        try { lastClipboardConfMtime_  = std::filesystem::last_write_time(clipboardConfPath());  } catch (...) {}
+        try { lastScreenshotConfMtime_ = std::filesystem::last_write_time(screenshotConfPath()); } catch (...) {}
     }
 
     // Called at the start of every keyEvent. Detects external writes to the
@@ -991,11 +1008,25 @@ private:
             const auto m = std::filesystem::last_write_time(farolkey::core::freeLayoutConfigPath());
             if (m != lastFreeLayoutMtime_) { lastFreeLayoutMtime_ = m; freeLayoutChanged = true; }
         } catch (...) {}
+        bool clipboardConfChanged = false;
+        try {
+            const auto m = std::filesystem::last_write_time(clipboardConfPath());
+            if (m != lastClipboardConfMtime_) { lastClipboardConfMtime_ = m; clipboardConfChanged = true; }
+        } catch (...) {}
+        bool screenshotConfChanged = false;
+        try {
+            const auto m = std::filesystem::last_write_time(screenshotConfPath());
+            if (m != lastScreenshotConfMtime_) { lastScreenshotConfMtime_ = m; screenshotConfChanged = true; }
+        } catch (...) {}
 
-        if (!configChanged && !dictChanged && !freeLayoutChanged) return;
+        if (!configChanged && !dictChanged && !freeLayoutChanged
+            && !clipboardConfChanged && !screenshotConfChanged) return;
         if (configChanged) loadConfig();
         applyConfigToAllBridges();   // reloads user dict + free layout inside Bridge/Engine
-        if (configChanged) { refreshActionStates(); refreshAllStatusAreas(); }
+        if (configChanged) { refreshActionStates(); refreshAllStatusAreas(); return; }
+        // clipboard.conf or screenshot.conf changed — refresh only the affected label.
+        if (clipboardConfChanged  && enableClipboard_)  { refreshClipboardLabel();  refreshAllStatusAreas(); }
+        if (screenshotConfChanged && enableScreenshot_) { refreshScreenshotLabel(); refreshAllStatusAreas(); }
     }
 
     void saveConfig() {
@@ -1265,6 +1296,8 @@ private:
     std::filesystem::file_time_type lastConfigMtime_{};
     std::filesystem::file_time_type lastDictMtime_{};
     std::filesystem::file_time_type lastFreeLayoutMtime_{};
+    std::filesystem::file_time_type lastClipboardConfMtime_{};
+    std::filesystem::file_time_type lastScreenshotConfMtime_{};
 
     std::unordered_map<fcitx::InputContext*, farolkey::adapter::fcitx5::Bridge>       bridges_;
     std::unordered_map<fcitx::InputContext*, farolkey::adapter::fcitx5::ComposeAnchorSnapshot>
