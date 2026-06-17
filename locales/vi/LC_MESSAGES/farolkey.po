@@ -548,6 +548,30 @@ msgstr "● Đang chạy"
 msgid "✕ Not running"
 msgstr "✕ Không chạy"
 
+msgid "Uninstall"
+msgstr "Gỡ cài đặt"
+
+msgid "Remove all FarolKey program files from this system."
+msgstr "Xóa toàn bộ file chương trình FarolKey khỏi hệ thống."
+
+msgid "🗑 Uninstall FarolKey"
+msgstr "🗑 Gỡ cài đặt FarolKey"
+
+msgid "Uninstall FarolKey?"
+msgstr "Gỡ cài đặt FarolKey?"
+
+msgid "This will permanently delete all FarolKey program files from ~/.local.\nThis cannot be undone."
+msgstr "Hành động này sẽ xóa vĩnh viễn toàn bộ file chương trình FarolKey khỏi ~/.local.\nKhông thể hoàn tác."
+
+msgid "Also delete user data\n(clipboard history, personal dictionary, config, smart templates)"
+msgstr "Xóa luôn dữ liệu người dùng\n(lịch sử clipboard, từ điển cá nhân, cấu hình, smart templates)"
+
+msgid "Uninstall complete"
+msgstr "Gỡ cài đặt hoàn tất"
+
+msgid "FarolKey has been removed successfully.\n\nTo remove fcitx5 completely:\n  sudo apt remove fcitx5"
+msgstr "FarolKey đã được gỡ cài đặt thành công.\n\nĐể gỡ fcitx5 hoàn toàn:\n  sudo apt remove fcitx5"
+
 # ── Free Layout tab ────────────────────────────────────────────────────────────
 msgid "Free Layout"
 msgstr "Kiểu gõ tùy biến"

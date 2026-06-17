@@ -536,3 +536,27 @@ msgstr ""
 
 msgid "✕ Not running"
 msgstr ""
+
+msgid "Uninstall"
+msgstr ""
+
+msgid "Remove all FarolKey program files from this system."
+msgstr ""
+
+msgid "🗑 Uninstall FarolKey"
+msgstr ""
+
+msgid "Uninstall FarolKey?"
+msgstr ""
+
+msgid "This will permanently delete all FarolKey program files from ~/.local.\nThis cannot be undone."
+msgstr ""
+
+msgid "Also delete user data\n(clipboard history, personal dictionary, config, smart templates)"
+msgstr ""
+
+msgid "Uninstall complete"
+msgstr ""
+
+msgid "FarolKey has been removed successfully.\n\nTo remove fcitx5 completely:\n  sudo apt remove fcitx5"
+msgstr ""

@@ -2658,8 +2658,146 @@ class SettingsWindow(Gtk.Window):
         btn_row.pack_start(gh_btn,  False, False, 0)
         vbox.pack_start(btn_row, False, False, 0)
 
+        vbox.pack_start(Gtk.Separator(), False, False, 16)
+        hdr3 = Gtk.Label(label=_('Uninstall'), xalign=0)
+        hdr3.get_style_context().add_class('section-hdr')
+        vbox.pack_start(hdr3, False, False, 0)
+
+        uninstall_hint = Gtk.Label(
+            label=_('Remove all FarolKey program files from this system.'), xalign=0)
+        uninstall_hint.get_style_context().add_class('hint')
+        uninstall_hint.set_margin_top(4)
+        vbox.pack_start(uninstall_hint, False, False, 0)
+
+        uninstall_btn = Gtk.Button(label=_('🗑 Uninstall FarolKey'))
+        uninstall_btn.get_style_context().add_class('destructive-action')
+        uninstall_btn.set_margin_top(8)
+        uninstall_btn.set_halign(Gtk.Align.START)
+        uninstall_btn.connect('clicked', self._on_uninstall)
+        vbox.pack_start(uninstall_btn, False, False, 0)
+
         GLib.idle_add(self._refresh_status)
         return scroll
+
+    def _on_uninstall(self, _btn):
+        dlg = Gtk.Dialog(title=_('Uninstall FarolKey?'), transient_for=self, modal=True)
+        dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
+        ok_btn = dlg.add_button(_('Uninstall'), Gtk.ResponseType.OK)
+        ok_btn.get_style_context().add_class('destructive-action')
+
+        area = dlg.get_content_area()
+        area.set_spacing(8)
+        area.set_margin_start(20); area.set_margin_end(20)
+        area.set_margin_top(16);   area.set_margin_bottom(8)
+
+        warn_box = Gtk.Box(spacing=10)
+        warn_icon = Gtk.Image.new_from_icon_name('dialog-warning', Gtk.IconSize.DIALOG)
+        warn_lbl  = Gtk.Label(xalign=0)
+        warn_lbl.set_markup(
+            '<b>' + _('Uninstall FarolKey?') + '</b>\n' +
+            _('This will permanently delete all FarolKey program files from ~/.local.\n'
+              'This cannot be undone.'))
+        warn_lbl.set_line_wrap(True)
+        warn_box.pack_start(warn_icon, False, False, 0)
+        warn_box.pack_start(warn_lbl,  True,  True,  0)
+        area.add(warn_box)
+
+        data_check = Gtk.CheckButton(
+            label=_('Also delete user data\n'
+                    '(clipboard history, personal dictionary, config, smart templates)'))
+        data_check.set_margin_top(4)
+        area.add(data_check)
+
+        area.show_all()
+        resp = dlg.run()
+        delete_data = data_check.get_active()
+        dlg.destroy()
+
+        if resp != Gtk.ResponseType.OK:
+            return
+
+        self._do_uninstall(delete_data)
+
+    def _do_uninstall(self, delete_data: bool):
+        import glob as _glob, shutil as _shutil
+
+        # 1. Kill daemons and fcitx5
+        for sig in (['pkill', '-f', 'farolkey-clipboard'],
+                    ['pkill', '-f', 'farolkey-screenshot-daemon'],
+                    ['pkill', '-x', 'fcitx5']):
+            subprocess.run(sig, capture_output=True)
+        time.sleep(0.5)
+
+        # 2. Remove binaries / scripts
+        local_bin = Path.home() / '.local' / 'bin'
+        for p in local_bin.glob('farolkey*'):
+            try: p.unlink()
+            except Exception: pass
+
+        # 3. Remove fcitx5 plugin .so files
+        local_fcitx5 = Path.home() / '.local' / 'lib' / 'fcitx5'
+        for p in local_fcitx5.glob('libfarolkey*.so'):
+            try: p.unlink()
+            except Exception: pass
+
+        # 4. Remove fcitx5 addon/inputmethod registration
+        for p in [
+            Path.home() / '.local' / 'share' / 'fcitx5' / 'addon'       / 'farolkey.conf',
+            Path.home() / '.local' / 'share' / 'fcitx5' / 'inputmethod'  / 'farolkey.conf',
+        ]:
+            try: p.unlink()
+            except Exception: pass
+
+        # 5. Remove app data (locales, icons) — always
+        share_dir = Path.home() / '.local' / 'share' / 'farolkey'
+        for sub in ('locales', 'icons'):
+            d = share_dir / sub
+            if d.exists():
+                try: _shutil.rmtree(d)
+                except Exception: pass
+
+        # 6. Optional: delete user data
+        if delete_data:
+            cfg_dir = Path(os.environ.get('XDG_CONFIG_HOME',
+                           str(Path.home() / '.config'))) / 'farolkey'
+            if cfg_dir.exists():
+                try: _shutil.rmtree(cfg_dir)
+                except Exception: pass
+            for name in ('clipboard_history.json', 'clipboard_images', 'clipboard.sock'):
+                p = share_dir / name
+                if p.is_dir():
+                    try: _shutil.rmtree(p)
+                    except Exception: pass
+                elif p.exists():
+                    try: p.unlink()
+                    except Exception: pass
+
+        # 7. Clean up share_dir if empty
+        try:
+            if share_dir.exists() and not any(share_dir.iterdir()):
+                share_dir.rmdir()
+        except Exception:
+            pass
+
+        # 8. Restart fcitx5 (now without FarolKey)
+        try:
+            subprocess.Popen(['fcitx5', '-d'], start_new_session=True)
+        except Exception:
+            pass
+
+        # 9. Success message then close
+        done_dlg = Gtk.MessageDialog(
+            transient_for=None, modal=True,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text=_('Uninstall complete'))
+        done_dlg.format_secondary_text(
+            _('FarolKey has been removed successfully.\n\n'
+              'To remove fcitx5 completely:\n'
+              '  sudo apt remove fcitx5'))
+        done_dlg.run()
+        done_dlg.destroy()
+        Gtk.main_quit()
 
     def _refresh_status(self):
         checks = {
