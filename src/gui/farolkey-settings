@@ -1852,10 +1852,11 @@ class SettingsWindow(Gtk.Window):
 
     def _on_cb_enable_toggled(self, switch, state):
         if not state:
-            # Defer dialog — dlg.run() inside state-set causes GTK deadlock
+            # Allow switch to visually go off immediately; dialog shown async.
+            # If user cancels, we revert the switch inside _ask_cb_disable.
             GLib.idle_add(self._ask_cb_disable)
-            return True   # block state change until dialog confirms
-        self._apply_cb_enable(True)
+        else:
+            self._apply_cb_enable(True)
         return False
 
     def _ask_cb_disable(self):
@@ -1869,6 +1870,10 @@ class SettingsWindow(Gtk.Window):
         dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
         resp = dlg.run(); dlg.destroy()
         if resp != Gtk.ResponseType.OK:
+            # Revert switch without re-triggering handler
+            self._cb_enable_switch.handler_block_by_func(self._on_cb_enable_toggled)
+            self._cb_enable_switch.set_active(True)
+            self._cb_enable_switch.handler_unblock_by_func(self._on_cb_enable_toggled)
             return False
         dlg2 = Gtk.MessageDialog(
             transient_for=self, modal=True,
@@ -1882,9 +1887,6 @@ class SettingsWindow(Gtk.Window):
         if resp2 == Gtk.ResponseType.YES:
             self._clear_clipboard_history()
         self._apply_cb_enable(False)
-        self._cb_enable_switch.handler_block_by_func(self._on_cb_enable_toggled)
-        self._cb_enable_switch.set_active(False)
-        self._cb_enable_switch.handler_unblock_by_func(self._on_cb_enable_toggled)
         return False
 
     def _apply_cb_enable(self, enabled):
@@ -2108,8 +2110,8 @@ class SettingsWindow(Gtk.Window):
     def _on_ss_enable_toggled(self, switch, state):
         if not state:
             GLib.idle_add(self._ask_ss_disable)
-            return True
-        self._apply_ss_enable(True)
+        else:
+            self._apply_ss_enable(True)
         return False
 
     def _ask_ss_disable(self):
@@ -2123,11 +2125,12 @@ class SettingsWindow(Gtk.Window):
         dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
         dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
         resp = dlg.run(); dlg.destroy()
-        if resp == Gtk.ResponseType.OK:
-            self._apply_ss_enable(False)
+        if resp != Gtk.ResponseType.OK:
             self._ss_enable_switch.handler_block_by_func(self._on_ss_enable_toggled)
-            self._ss_enable_switch.set_active(False)
+            self._ss_enable_switch.set_active(True)
             self._ss_enable_switch.handler_unblock_by_func(self._on_ss_enable_toggled)
+            return False
+        self._apply_ss_enable(False)
         return False
 
     def _apply_ss_enable(self, enabled):

@@ -1126,8 +1126,6 @@ def _start_x11_hotkey(on_trigger):
 
 def run_daemon():
     """Persistent background daemon: monitors clipboard + serves SHOW."""
-    if _load_general_conf().get('enable_clipboard', 'true').lower() != 'true':
-        sys.exit(0)
     global _active_monitor
     history = ClipboardHistory()
     _active_monitor = ClipboardMonitor(history)
@@ -1229,6 +1227,8 @@ def run_show():
 
 
 if __name__ == '__main__':
+    if _load_general_conf().get('enable_clipboard', 'true').lower() != 'true':
+        sys.exit(0)
     mode = sys.argv[1] if len(sys.argv) > 1 else '--show'
     if mode == '--daemon':
         run_daemon()
