@@ -1870,11 +1870,13 @@ class SettingsWindow(Gtk.Window):
         dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
         resp = dlg.run(); dlg.destroy()
         if resp != Gtk.ResponseType.OK:
-            # Revert switch without re-triggering handler
             self._cb_enable_switch.handler_block_by_func(self._on_cb_enable_toggled)
             self._cb_enable_switch.set_active(True)
             self._cb_enable_switch.handler_unblock_by_func(self._on_cb_enable_toggled)
             return False
+        # Kill daemon FIRST so it cannot re-write history while we clear it
+        subprocess.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
+        GLib.usleep(200_000)  # 200 ms — let daemon finish writing before we clear
         dlg2 = Gtk.MessageDialog(
             transient_for=self, modal=True,
             message_type=Gtk.MessageType.QUESTION,
@@ -1886,15 +1888,15 @@ class SettingsWindow(Gtk.Window):
         resp2 = dlg2.run(); dlg2.destroy()
         if resp2 == Gtk.ResponseType.YES:
             self._clear_clipboard_history()
-        self._apply_cb_enable(False)
+        self._apply_cb_enable(False, daemon_already_killed=True)
         return False
 
-    def _apply_cb_enable(self, enabled):
+    def _apply_cb_enable(self, enabled, daemon_already_killed=False):
         if enabled:
             daemon = shutil.which('farolkey-clipboard')
             if daemon:
                 subprocess.Popen([daemon, '--daemon'], start_new_session=True)
-        else:
+        elif not daemon_already_killed:
             subprocess.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
         save_general_conf({'enable_clipboard': 'true' if enabled else 'false'})
         try:
@@ -1904,9 +1906,11 @@ class SettingsWindow(Gtk.Window):
         self._cb_content_box.set_sensitive(enabled)
 
     def _clear_clipboard_history(self):
-        history_file = Path.home() / '.local/share/farolkey/clipboard_history.json'
-        images_dir   = Path.home() / '.local/share/farolkey/clipboard_images'
-        history_file.unlink(missing_ok=True)
+        xdg = os.environ.get('XDG_DATA_HOME', '')
+        base = Path(xdg) if xdg else Path.home() / '.local' / 'share'
+        data_dir = base / 'farolkey'
+        (data_dir / 'clipboard_history.json').unlink(missing_ok=True)
+        images_dir = data_dir / 'clipboard_images'
         if images_dir.exists():
             shutil.rmtree(images_dir)
 

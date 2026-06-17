@@ -1228,6 +1228,17 @@ def run_show():
 
 if __name__ == '__main__':
     if _load_general_conf().get('enable_clipboard', 'true').lower() != 'true':
+        mode = sys.argv[1] if len(sys.argv) > 1 else '--show'
+        if mode != '--daemon':
+            try:
+                nb = shutil.which('notify-send')
+                if nb:
+                    subprocess.Popen(
+                        [nb, '-a', 'FarolKey', '-t', '3000',
+                         'FarolKey', 'Clipboard History đã bị tắt. Vào FarolKey Settings để bật lại.'],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
         sys.exit(0)
     mode = sys.argv[1] if len(sys.argv) > 1 else '--show'
     if mode == '--daemon':
