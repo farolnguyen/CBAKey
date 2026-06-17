@@ -66,8 +66,9 @@ POPUP_POSITION_DEFAULT = 'mouse'
 
 def load_clipboard_conf() -> dict:
     conf = {
-        'popup_position':       POPUP_POSITION_DEFAULT,
+        'popup_position':         POPUP_POSITION_DEFAULT,
         'close_on_click_outside': 'true',
+        'clipboard_hotkey':       'ctrl+super+v',
     }
     if CLIPBOARD_CONF.exists():
         for line in CLIPBOARD_CONF.read_text().splitlines():
@@ -1093,19 +1094,111 @@ def _send_show() -> bool:
         return False
 
 # ---------------------------------------------------------------------------
-# X11 global hotkey
+# Global hotkey — X11 / GNOME gsettings / pynput (Wayland non-GNOME)
 # ---------------------------------------------------------------------------
 
-def _start_x11_hotkey(on_trigger):
+_IS_GNOME = 'GNOME' in os.environ.get('XDG_CURRENT_DESKTOP', '').upper()
+
+# GNOME custom-keybinding path for clipboard
+_CB_GNOME_SCHEMA    = 'org.gnome.settings-daemon.plugins.media-keys'
+_CB_GNOME_LIST_KEY  = 'custom-keybindings'
+_CB_GNOME_PATH      = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/farolkey-clipboard/'
+_CB_BIND_SCHEMA     = f'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{_CB_GNOME_PATH}'
+
+def _to_gnome_binding(hotkey: str) -> str:
+    """Convert 'ctrl+super+v' → '<Control><Super>v'"""
+    MODS = {
+        'super': '<Super>', 'meta': '<Super>',
+        'ctrl': '<Control>', 'control': '<Control>',
+        'alt': '<Alt>', 'shift': '<Shift>',
+    }
+    parts = [p.strip().lower() for p in hotkey.split('+')]
+    mods, key = '', ''
+    for p in parts:
+        if p in MODS:
+            mods += MODS[p]
+        else:
+            key = p
+    return mods + key
+
+def _gnome_register_clipboard_hotkey(hotkey: str):
+    """Register/update FarolKey Clipboard hotkey in GNOME via gsettings."""
+    try:
+        import subprocess as _sp
+        binding = _to_gnome_binding(hotkey)
+        tool = shutil.which('farolkey-clipboard') or sys.argv[0]
+
+        def _get(schema, key):
+            r = _sp.run(['gsettings', 'get', schema, key],
+                        capture_output=True, text=True)
+            return r.stdout.strip()
+
+        def _set(schema, key, value):
+            _sp.run(['gsettings', 'set', schema, key, value], check=True)
+
+        raw = _get(_CB_GNOME_SCHEMA, _CB_GNOME_LIST_KEY)
+        if _CB_GNOME_PATH not in raw:
+            if raw in ('@as []', '[]', ''):
+                new_list = f"['{_CB_GNOME_PATH}']"
+            else:
+                new_list = raw.rstrip().rstrip(']').rstrip() + f", '{_CB_GNOME_PATH}']"
+            _set(_CB_GNOME_SCHEMA, _CB_GNOME_LIST_KEY, new_list)
+
+        _set(_CB_BIND_SCHEMA, 'name',    'FarolKey Clipboard')
+        _set(_CB_BIND_SCHEMA, 'command', f'{tool} --show')
+        _set(_CB_BIND_SCHEMA, 'binding', binding)
+        print(f'GNOME clipboard hotkey registered: {binding}', flush=True)
+    except Exception as e:
+        print(f'GNOME clipboard hotkey registration failed: {e}', flush=True)
+
+def _gnome_unregister_clipboard_hotkey():
+    """Remove FarolKey Clipboard hotkey from GNOME gsettings."""
+    try:
+        import re, subprocess as _sp
+        def _get(schema, key):
+            r = _sp.run(['gsettings', 'get', schema, key],
+                        capture_output=True, text=True)
+            return r.stdout.strip()
+        raw = _get(_CB_GNOME_SCHEMA, _CB_GNOME_LIST_KEY)
+        if _CB_GNOME_PATH not in raw:
+            return
+        new_list = re.sub(rf",?\s*'{re.escape(_CB_GNOME_PATH)}'", '', raw)
+        new_list = re.sub(rf"'{re.escape(_CB_GNOME_PATH)}',?\s*", '', new_list)
+        new_list = re.sub(r',\s*,', ',', new_list).strip()
+        if new_list in ('[]', '[,]', ''):
+            new_list = '@as []'
+        _sp.run(['gsettings', 'set', _CB_GNOME_SCHEMA, _CB_GNOME_LIST_KEY, new_list],
+                check=True)
+        for k in ('name', 'command', 'binding'):
+            _sp.run(['gsettings', 'reset', _CB_BIND_SCHEMA, k], capture_output=True)
+    except Exception as e:
+        print(f'GNOME clipboard hotkey removal failed: {e}', flush=True)
+
+def _start_x11_hotkey(on_trigger, hotkey: str = 'ctrl+super+v'):
+    """Grab a global key combo on X11 using python3-xlib."""
     try:
         from Xlib import X
         from Xlib.display import Display
+        XMODS = {
+            'ctrl': X.ControlMask, 'control': X.ControlMask,
+            'super': X.Mod4Mask,   'meta': X.Mod4Mask,
+            'shift': X.ShiftMask,  'alt': X.Mod1Mask,
+        }
+        parts = [p.strip().lower() for p in hotkey.split('+')]
+        mod, key_char = 0, None
+        for p in parts:
+            if p in XMODS:
+                mod |= XMODS[p]
+            else:
+                key_char = p
+        if not key_char:
+            print('X11 hotkey: no key character found in hotkey string', flush=True)
+            return
         disp = Display()
         root = disp.screen().root
-        kc = disp.keysym_to_keycode(ord('v'))
-        MOD = X.ControlMask | X.Mod4Mask
+        kc = disp.keysym_to_keycode(ord(key_char[0]))
         for extra in (0, X.Mod2Mask):
-            root.grab_key(kc, MOD | extra, True, X.GrabModeAsync, X.GrabModeAsync)
+            root.grab_key(kc, mod | extra, True, X.GrabModeAsync, X.GrabModeAsync)
         disp.sync()
         def _loop():
             while True:
@@ -1113,12 +1206,49 @@ def _start_x11_hotkey(on_trigger):
                 if ev.type == X.KeyPress:
                     GLib.idle_add(on_trigger)
         threading.Thread(target=_loop, daemon=True).start()
-        print('X11 hotkey: Ctrl+Super+V active', flush=True)
+        print(f'X11 hotkey: {hotkey} active', flush=True)
     except ImportError:
         print('X11 hotkey unavailable: python3-xlib not installed. '
               'Run: sudo apt install python3-xlib', flush=True)
     except Exception as e:
         print(f'X11 hotkey unavailable: {e}', flush=True)
+
+def _start_pynput_hotkey(on_trigger, hotkey: str = 'ctrl+super+v'):
+    """Listen for a global key combo using pynput (non-GNOME Wayland / fallback)."""
+    try:
+        from pynput.keyboard import Key, KeyCode, Listener
+        KEY_MAP = {
+            'super': Key.cmd, 'meta': Key.cmd,
+            'ctrl': Key.ctrl, 'control': Key.ctrl,
+            'alt': Key.alt,   'shift': Key.shift,
+        }
+        parts = [p.strip().lower() for p in hotkey.split('+')]
+        combo: set = set()
+        for p in parts:
+            if p in KEY_MAP:
+                combo.add(KEY_MAP[p])
+            elif len(p) == 1:
+                combo.add(KeyCode.from_char(p))
+        current: set = set()
+        triggered = [False]
+
+        def on_press(key):
+            current.add(key)
+            if combo and combo.issubset(current) and not triggered[0]:
+                triggered[0] = True
+                GLib.idle_add(on_trigger)
+
+        def on_release(key):
+            current.discard(key)
+            if not combo.issubset(current):
+                triggered[0] = False
+
+        Listener(on_press=on_press, on_release=on_release, daemon=True).start()
+        print(f'pynput hotkey: {hotkey} active', flush=True)
+    except ImportError:
+        print('pynput unavailable: sudo apt install python3-pynput', flush=True)
+    except Exception as e:
+        print(f'pynput hotkey unavailable: {e}', flush=True)
 
 # ---------------------------------------------------------------------------
 # Entry points
@@ -1134,8 +1264,13 @@ def run_daemon():
     server = PopupServer(history)
     server.start()
 
-    if not _is_wayland():
-        _start_x11_hotkey(server.show_popup)
+    hotkey_str = load_clipboard_conf().get('clipboard_hotkey', 'ctrl+super+v')
+    if _IS_GNOME:
+        _gnome_register_clipboard_hotkey(hotkey_str)
+    elif not _is_wayland():
+        _start_x11_hotkey(server.show_popup, hotkey_str)
+    else:
+        _start_pynput_hotkey(server.show_popup, hotkey_str)
 
     def _init():
         # Capture current clipboard once GTK main loop is running
@@ -1243,5 +1378,9 @@ if __name__ == '__main__':
     mode = sys.argv[1] if len(sys.argv) > 1 else '--show'
     if mode == '--daemon':
         run_daemon()
+    elif mode == '--register-hotkey':
+        hotkey_str = load_clipboard_conf().get('clipboard_hotkey', 'ctrl+super+v')
+        if _IS_GNOME:
+            _gnome_register_clipboard_hotkey(hotkey_str)
     else:
         run_show()

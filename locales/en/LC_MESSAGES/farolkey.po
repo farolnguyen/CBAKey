@@ -265,6 +265,9 @@ msgstr ""
 msgid "Disable"
 msgstr ""
 
+msgid "Clipboard hotkey"
+msgstr ""
+
 msgid "Popup display"
 msgstr ""
 

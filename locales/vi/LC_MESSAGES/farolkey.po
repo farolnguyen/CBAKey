@@ -274,6 +274,9 @@ msgstr "Xoá"
 msgid "Disable"
 msgstr "Tắt"
 
+msgid "Clipboard hotkey"
+msgstr "Phím tắt clipboard"
+
 msgid "Popup display"
 msgstr "Hiển thị popup"
 

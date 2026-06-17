@@ -74,7 +74,7 @@ static constexpr UIStrings kStringsEn {
     "VI", "EN",
     "Vietnamese (FarolKey)", "English (FarolKey)",
     "Dictionary Manager", "Open Dictionary / Abbreviation Manager",
-    "Clipboard History (Ctrl + Win + V)", "Show Clipboard History (farolkey-clipboard)",
+    "Clipboard History", "Show Clipboard History (farolkey-clipboard)",
     "Underline while composing",
     "Settings (v" FAROLKEY_VERSION ")", "FarolKey Settings (v" FAROLKEY_VERSION ")",
     "Input Method: Telex", "Input Method: VNI", "Input Method: VIQR", "Input Method: VIQR*",
@@ -88,7 +88,7 @@ static constexpr UIStrings kStringsVi {
     "VI", "EN",
     "Tiếng Việt (FarolKey)", "Tiếng Anh (FarolKey)",
     "Quản lý từ điển", "Mở quản lý từ điển / từ viết tắt",
-    "Lịch sử Clipboard (Ctrl + Win + V)", "Hiển thị lịch sử clipboard",
+    "Lịch sử Clipboard", "Hiển thị lịch sử clipboard",
     "Gạch chân khi gõ",
     "Cài đặt (v" FAROLKEY_VERSION ")", "Cài đặt FarolKey (v" FAROLKEY_VERSION ")",
     "Phương thức: Telex", "Phương thức: VNI", "Phương thức: VIQR", "Phương thức: VIQR*",
@@ -1054,6 +1054,33 @@ private:
         screenshotAction_.setLongText(uiStrings_.screenshotLong);
     }
 
+    // Read clipboard_hotkey from ~/.config/farolkey/clipboard.conf and update label.
+    void refreshClipboardLabel() {
+        const char* xdgCfg = getenv("XDG_CONFIG_HOME");
+        std::string cfgDir = xdgCfg ? std::string(xdgCfg)
+                                     : std::string(getenv("HOME")) + "/.config";
+        std::ifstream f(cfgDir + "/farolkey/clipboard.conf");
+        std::string hotkey = "Ctrl+Win+V";
+        for (std::string line; std::getline(f, line); ) {
+            if (line.rfind("clipboard_hotkey=", 0) == 0) {
+                hotkey = line.substr(17);
+                bool cap = true;
+                for (char& c : hotkey) {
+                    if (c == '+') { cap = true; }
+                    else if (cap) { c = static_cast<char>(toupper(c)); cap = false; }
+                }
+                for (std::string::size_type pos = 0;
+                     (pos = hotkey.find("Super", pos)) != std::string::npos; ) {
+                    hotkey.replace(pos, 5, "Win");
+                    pos += 3;
+                }
+                break;
+            }
+        }
+        clipboardAction_.setShortText(std::string(uiStrings_.clipboardShort) + " (" + hotkey + ")");
+        clipboardAction_.setLongText(uiStrings_.clipboardLong);
+    }
+
     void refreshActionStates() {
         using M = farolkey::adapter::fcitx5::FarolKeyMethod;
         const auto m = config_.method.value();
@@ -1075,9 +1102,10 @@ private:
             screenshotAction_.setLongText(uiStrings_.screenshotLong);
         }
         if (enableClipboard_) {
-            clipboardAction_.setShortText(uiStrings_.clipboardShort);
+            refreshClipboardLabel();
         } else {
             clipboardAction_.setShortText(uiStrings_.clipboardDisabled);
+            clipboardAction_.setLongText(uiStrings_.clipboardLong);
         }
     }
 

@@ -420,7 +420,7 @@ def expand_template_preview(test_input: str):
 
 # ── Clipboard conf helpers ─────────────────────────────────────────────────────
 
-_CB_DEFAULTS = {'popup_position': 'mouse', 'close_on_click_outside': 'true'}
+_CB_DEFAULTS = {'popup_position': 'mouse', 'close_on_click_outside': 'true', 'clipboard_hotkey': 'ctrl+super+v'}
 
 def load_clipboard_conf() -> dict:
     conf = dict(_CB_DEFAULTS)
@@ -1787,6 +1787,21 @@ class SettingsWindow(Gtk.Window):
             lbl.set_margin_start(4)
             return lbl
 
+        # ── Hotkeys ──────────────────────────────────────────────────────────
+        _c.pack_start(section(_('Hotkeys')), False, False, 0)
+        hk_row = Gtk.Box(spacing=12)
+        hk_lbl = Gtk.Label(label=_('Clipboard hotkey'), xalign=0)
+        self._cb_hotkey_entry = Gtk.Entry()
+        self._cb_hotkey_entry.set_text(conf.get('clipboard_hotkey', 'ctrl+super+v'))
+        self._cb_hotkey_entry.set_width_chars(20)
+        self._cb_hotkey_entry.set_halign(Gtk.Align.END)
+        hk_row.pack_start(hk_lbl, True, True, 0)
+        hk_row.pack_start(self._cb_hotkey_entry, False, False, 0)
+        _c.pack_start(hk_row, False, False, 6)
+        _c.pack_start(hint(_('Use + to combine keys. Valid modifiers: super, ctrl, alt, shift')), False, False, 2)
+        _c.pack_start(Gtk.Separator(), False, False, 8)
+
+        # ── Popup display ────────────────────────────────────────────────────
         _c.pack_start(section(_('Popup display')), False, False, 0)
         self._cb_radio_mouse  = Gtk.RadioButton.new_with_label(None, _('🖱  Near cursor (default)'))
         self._cb_radio_corner = Gtk.RadioButton.new_with_label_from_widget(
@@ -1845,10 +1860,35 @@ class SettingsWindow(Gtk.Window):
 
     def _on_clipboard_save(self, _btn):
         conf = load_clipboard_conf()
+        old_hotkey = conf.get('clipboard_hotkey', 'ctrl+super+v')
+        new_hotkey = self._cb_hotkey_entry.get_text().strip() or old_hotkey
         conf['popup_position']         = 'corner' if self._cb_radio_corner.get_active() else 'mouse'
         conf['close_on_click_outside'] = 'true' if self._cb_close_switch.get_active() else 'false'
+        conf['clipboard_hotkey']       = new_hotkey
         save_clipboard_conf(conf)
+        if new_hotkey != old_hotkey:
+            self._restart_clipboard_daemon_for_hotkey()
         self._show_info(_('Clipboard History settings saved.\nChanges will take effect on next popup open.'))
+
+    def _restart_clipboard_daemon_for_hotkey(self):
+        """Restart daemon so it picks up the new hotkey, or re-register on GNOME."""
+        daemon = shutil.which('farolkey-clipboard')
+        if not daemon:
+            return
+        import subprocess as _sp
+        # On GNOME, --register-hotkey updates gsettings without restarting daemon
+        import os as _os
+        if 'GNOME' in _os.environ.get('XDG_CURRENT_DESKTOP', '').upper():
+            _sp.Popen([daemon, '--register-hotkey'],
+                      start_new_session=True,
+                      stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+        else:
+            # Non-GNOME: restart daemon so X11 grab / pynput re-registers
+            _sp.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
+            GLib.timeout_add(300, lambda: [
+                _sp.Popen([daemon, '--daemon'], start_new_session=True),
+                False,
+            ][-1])
 
     def _on_cb_enable_toggled(self, switch, state):
         if not state:
