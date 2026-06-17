@@ -882,8 +882,9 @@ private:
         // Clipboard History — launches farolkey-clipboard --show as a detached process.
         clipboardAction_.setShortText(uiStrings_.clipboardShort);
         clipboardAction_.setLongText(uiStrings_.clipboardLong);
-        clipboardAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
+        clipboardAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
+            if (!enableClipboard_) return;
             if (const pid_t pid = fork(); pid == 0) {
                 execlp("farolkey-clipboard", "farolkey-clipboard", "--show", nullptr);
                 _exit(1);
@@ -894,8 +895,9 @@ private:
         // Screenshot — double-fork with a short delay so the systray popup fully
         // closes before the capture starts (avoids the menu appearing in the shot).
         refreshScreenshotLabel();
-        screenshotAction_.connect<fcitx::SimpleAction::Activated>([](fcitx::InputContext* ic) {
+        screenshotAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
+            if (!enableScreenshot_) return;
             if (const pid_t pid = fork(); pid == 0) {
                 // Grandchild is re-parented to init; first child exits immediately.
                 if (fork() == 0) {

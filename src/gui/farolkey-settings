@@ -1852,42 +1852,54 @@ class SettingsWindow(Gtk.Window):
 
     def _on_cb_enable_toggled(self, switch, state):
         if not state:
-            dlg = Gtk.MessageDialog(
-                transient_for=self, modal=True,
-                message_type=Gtk.MessageType.WARNING,
-                buttons=Gtk.ButtonsType.NONE,
-                text=_('Disable Clipboard History?'))
-            dlg.format_secondary_text(
-                _('Disabling will stop the daemon. Continue?'))
-            dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
-            dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
-            resp = dlg.run(); dlg.destroy()
-            if resp != Gtk.ResponseType.OK:
-                return True
-            dlg2 = Gtk.MessageDialog(
-                transient_for=self, modal=True,
-                message_type=Gtk.MessageType.QUESTION,
-                buttons=Gtk.ButtonsType.NONE,
-                text=_('Clear clipboard history?'))
-            dlg2.format_secondary_text(
-                _('Do you want to clear all clipboard history?'))
-            dlg2.add_button(_('Keep'), Gtk.ResponseType.NO)
-            dlg2.add_button(_('Clear'), Gtk.ResponseType.YES)
-            resp2 = dlg2.run(); dlg2.destroy()
-            if resp2 == Gtk.ResponseType.YES:
-                self._clear_clipboard_history()
-            subprocess.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
-        else:
+            # Defer dialog — dlg.run() inside state-set causes GTK deadlock
+            GLib.idle_add(self._ask_cb_disable)
+            return True   # block state change until dialog confirms
+        self._apply_cb_enable(True)
+        return False
+
+    def _ask_cb_disable(self):
+        dlg = Gtk.MessageDialog(
+            transient_for=self, modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text=_('Disable Clipboard History?'))
+        dlg.format_secondary_text(_('Disabling will stop the daemon. Continue?'))
+        dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
+        dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
+        resp = dlg.run(); dlg.destroy()
+        if resp != Gtk.ResponseType.OK:
+            return False
+        dlg2 = Gtk.MessageDialog(
+            transient_for=self, modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text=_('Clear clipboard history?'))
+        dlg2.format_secondary_text(_('Do you want to clear all clipboard history?'))
+        dlg2.add_button(_('Keep'), Gtk.ResponseType.NO)
+        dlg2.add_button(_('Clear'), Gtk.ResponseType.YES)
+        resp2 = dlg2.run(); dlg2.destroy()
+        if resp2 == Gtk.ResponseType.YES:
+            self._clear_clipboard_history()
+        self._apply_cb_enable(False)
+        self._cb_enable_switch.handler_block_by_func(self._on_cb_enable_toggled)
+        self._cb_enable_switch.set_active(False)
+        self._cb_enable_switch.handler_unblock_by_func(self._on_cb_enable_toggled)
+        return False
+
+    def _apply_cb_enable(self, enabled):
+        if enabled:
             daemon = shutil.which('farolkey-clipboard')
             if daemon:
                 subprocess.Popen([daemon, '--daemon'], start_new_session=True)
-        save_general_conf({'enable_clipboard': 'true' if state else 'false'})
+        else:
+            subprocess.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
+        save_general_conf({'enable_clipboard': 'true' if enabled else 'false'})
         try:
             subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
         except Exception:
             pass
-        self._cb_content_box.set_sensitive(state)
-        return False
+        self._cb_content_box.set_sensitive(enabled)
 
     def _clear_clipboard_history(self):
         history_file = Path.home() / '.local/share/farolkey/clipboard_history.json'
@@ -2095,25 +2107,36 @@ class SettingsWindow(Gtk.Window):
 
     def _on_ss_enable_toggled(self, switch, state):
         if not state:
-            dlg = Gtk.MessageDialog(
-                transient_for=self, modal=True,
-                message_type=Gtk.MessageType.WARNING,
-                buttons=Gtk.ButtonsType.NONE,
-                text=_('Disable Screenshot?'))
-            dlg.format_secondary_text(
-                _('Disabling will deactivate the hotkey and stop the feature. Continue?'))
-            dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
-            dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
-            resp = dlg.run(); dlg.destroy()
-            if resp != Gtk.ResponseType.OK:
-                return True
-        save_general_conf({'enable_screenshot': 'true' if state else 'false'})
+            GLib.idle_add(self._ask_ss_disable)
+            return True
+        self._apply_ss_enable(True)
+        return False
+
+    def _ask_ss_disable(self):
+        dlg = Gtk.MessageDialog(
+            transient_for=self, modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text=_('Disable Screenshot?'))
+        dlg.format_secondary_text(
+            _('Disabling will deactivate the hotkey and stop the feature. Continue?'))
+        dlg.add_button(_('Cancel'), Gtk.ResponseType.CANCEL)
+        dlg.add_button(_('Disable'), Gtk.ResponseType.OK)
+        resp = dlg.run(); dlg.destroy()
+        if resp == Gtk.ResponseType.OK:
+            self._apply_ss_enable(False)
+            self._ss_enable_switch.handler_block_by_func(self._on_ss_enable_toggled)
+            self._ss_enable_switch.set_active(False)
+            self._ss_enable_switch.handler_unblock_by_func(self._on_ss_enable_toggled)
+        return False
+
+    def _apply_ss_enable(self, enabled):
+        save_general_conf({'enable_screenshot': 'true' if enabled else 'false'})
         try:
             subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
         except Exception:
             pass
-        self._ss_content_box.set_sensitive(state)
-        return False
+        self._ss_content_box.set_sensitive(enabled)
 
     def _on_ss_test(self, _btn):
         tool = shutil.which('farolkey-screenshot')
