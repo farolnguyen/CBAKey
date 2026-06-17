@@ -277,6 +277,9 @@ msgstr "Tắt"
 msgid "Clipboard hotkey"
 msgstr "Phím tắt clipboard"
 
+msgid "⚠ On GNOME: super+key alone (no ctrl/alt/shift) may not work — GNOME Shell intercepts it."
+msgstr "⚠ Trên GNOME: super+key đơn lẻ (không có ctrl/alt/shift) có thể không hoạt động — GNOME Shell chặn nó."
+
 msgid "Popup display"
 msgstr "Hiển thị popup"
 

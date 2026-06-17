@@ -1194,19 +1194,30 @@ def _start_x11_hotkey(on_trigger, hotkey: str = 'ctrl+super+v'):
         if not key_char:
             print('X11 hotkey: no key character found in hotkey string', flush=True)
             return
+        from Xlib import error as Xerror
         disp = Display()
         root = disp.screen().root
         kc = disp.keysym_to_keycode(ord(key_char[0]))
-        for extra in (0, X.Mod2Mask):
-            root.grab_key(kc, mod | extra, True, X.GrabModeAsync, X.GrabModeAsync)
-        disp.sync()
+        grabbed = 0
+        # Grab with common lock-key combinations so the hotkey fires regardless
+        # of NumLock / CapsLock state. Ignore BadAccess (already grabbed by another client).
+        for extra in (0, X.Mod2Mask, X.LockMask, X.Mod2Mask | X.LockMask):
+            try:
+                root.grab_key(kc, mod | extra, True, X.GrabModeAsync, X.GrabModeAsync)
+                disp.sync()
+                grabbed += 1
+            except Xerror.BadAccess:
+                pass
+        if not grabbed:
+            print(f'X11 hotkey: all grabs failed for {hotkey} (key already grabbed)', flush=True)
+            return
         def _loop():
             while True:
                 ev = disp.next_event()
                 if ev.type == X.KeyPress:
                     GLib.idle_add(on_trigger)
         threading.Thread(target=_loop, daemon=True).start()
-        print(f'X11 hotkey: {hotkey} active', flush=True)
+        print(f'X11 hotkey: {hotkey} active ({grabbed}/4 grabs OK)', flush=True)
     except ImportError:
         print('X11 hotkey unavailable: python3-xlib not installed. '
               'Run: sudo apt install python3-xlib', flush=True)
@@ -1265,12 +1276,17 @@ def run_daemon():
     server.start()
 
     hotkey_str = load_clipboard_conf().get('clipboard_hotkey', 'ctrl+super+v')
-    if _IS_GNOME:
-        _gnome_register_clipboard_hotkey(hotkey_str)
-    elif not _is_wayland():
-        _start_x11_hotkey(server.show_popup, hotkey_str)
+    if _is_wayland():
+        if _IS_GNOME:
+            # Wayland: no XGrabKey — use GNOME gsettings custom keybinding
+            _gnome_register_clipboard_hotkey(hotkey_str)
+        else:
+            _start_pynput_hotkey(server.show_popup, hotkey_str)
     else:
-        _start_pynput_hotkey(server.show_popup, hotkey_str)
+        # X11 (GNOME or not): use XGrabKey directly.
+        # On GNOME X11, gsettings custom keybindings cannot override GNOME Shell's
+        # Super key handling — XGrabKey is more reliable for all modifier combos.
+        _start_x11_hotkey(server.show_popup, hotkey_str)
 
     def _init():
         # Capture current clipboard once GTK main loop is running
@@ -1379,8 +1395,9 @@ if __name__ == '__main__':
     if mode == '--daemon':
         run_daemon()
     elif mode == '--register-hotkey':
+        # Only needed on Wayland where daemon cannot re-grab X11 keys at runtime.
         hotkey_str = load_clipboard_conf().get('clipboard_hotkey', 'ctrl+super+v')
-        if _IS_GNOME:
+        if _is_wayland() and _IS_GNOME:
             _gnome_register_clipboard_hotkey(hotkey_str)
     else:
         run_show()
