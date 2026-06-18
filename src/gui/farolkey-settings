@@ -446,6 +446,7 @@ _SS_DEFAULTS = {
     'capture_mode':    'all',
     'hotkey_action':   'menu',
     'show_notification': 'true',
+    'enable_markup':   'false',
 }
 
 def load_screenshot_conf() -> dict:
@@ -2093,6 +2094,16 @@ class SettingsWindow(Gtk.Window):
         notify_row.pack_start(self._ss_notify_switch, False, False, 0)
         _c.pack_start(notify_row, False, False, 6)
 
+        markup_row = Gtk.Box(spacing=12)
+        markup_lbl = Gtk.Label(label=_('Allow drawing on screenshot before saving'), xalign=0)
+        self._ss_markup_switch = Gtk.Switch()
+        self._ss_markup_switch.set_active(conf.get('enable_markup', 'false').lower() == 'true')
+        self._ss_markup_switch.set_valign(Gtk.Align.CENTER)
+        markup_row.pack_start(markup_lbl, True, True, 0)
+        markup_row.pack_start(self._ss_markup_switch, False, False, 0)
+        _c.pack_start(markup_row, False, False, 6)
+        _c.pack_start(hint(_('After capture, opens a small editor to draw arrows, boxes, text, or highlights before copy/save.')), False, False, 0)
+
         _c.pack_start(Gtk.Separator(), False, False, 8)
         _c.pack_start(section(_('Storage')), False, False, 0)
         path_row = Gtk.Box(spacing=8)
@@ -2173,6 +2184,7 @@ class SettingsWindow(Gtk.Window):
             f'\n• {_("Capture")}: {d["capture_mode"]}'
             f'\n• {_("Capture immediately on mouse release")}: {d["instant_capture"]}'
             f'\n• {_("Show notification after capture")}: {d["show_notification"]}'
+            f'\n• {_("Allow drawing on screenshot before saving")}: {d["enable_markup"]}'
             f'\n• {_("Save folder")}: {d["save_path"]}'
             f'\n• {_("Ask before saving")}: {d["ask_before_save"]}'
             f'\n• {_("Auto-save (no prompt)")}: {d["auto_save"]}')
@@ -2191,6 +2203,7 @@ class SettingsWindow(Gtk.Window):
         self._ss_cap_cursor_radio.set_active(d['capture_mode'] == 'cursor')
         self._ss_instant_switch.set_active(d['instant_capture'] == 'true')
         self._ss_notify_switch.set_active(d['show_notification'] == 'true')
+        self._ss_markup_switch.set_active(d['enable_markup'] == 'true')
         self._ss_path_entry.set_text(d['save_path'])
         self._ss_ask_switch.set_active(d['ask_before_save'] == 'true')
         self._ss_auto_switch.set_active(d['auto_save'] == 'true')
@@ -2222,6 +2235,7 @@ class SettingsWindow(Gtk.Window):
             'capture_mode':    'cursor' if self._ss_cap_cursor_radio.get_active() else 'all',
             'instant_capture': 'true' if self._ss_instant_switch.get_active() else 'false',
             'show_notification': 'true' if self._ss_notify_switch.get_active() else 'false',
+            'enable_markup':   'true' if self._ss_markup_switch.get_active() else 'false',
             'hotkey_action':   self._ss_action_combo.get_active_id() or 'menu',
             'save_path':       self._ss_path_entry.get_text().strip(),
             'ask_before_save': 'true' if self._ss_ask_switch.get_active() else 'false',

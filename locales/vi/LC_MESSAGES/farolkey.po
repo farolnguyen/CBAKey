@@ -416,6 +416,33 @@ msgstr "Đã lưu cài đặt chụp màn hình."
 msgid "Select screenshot folder"
 msgstr "Chọn thư mục lưu ảnh"
 
+msgid "Allow drawing on screenshot before saving"
+msgstr "Cho phép vẽ lên ảnh trước khi lưu"
+
+msgid "After capture, opens a small editor to draw arrows, boxes, text, or highlights before copy/save."
+msgstr "Sau khi chụp, mở trình soạn vẽ mũi tên, khung, chữ hoặc highlight trước khi lưu/copy."
+
+msgid "Draw on screenshot"
+msgstr "Vẽ lên ảnh chụp"
+
+msgid "🖊  Pen"
+msgstr "🖊  Bút vẽ"
+
+msgid "➜  Arrow"
+msgstr "➜  Mũi tên"
+
+msgid "🖍  Highlight"
+msgstr "🖍  Highlight"
+
+msgid "🔤  Text"
+msgstr "🔤  Chữ"
+
+msgid "↶ Undo"
+msgstr "↶ Hoàn tác"
+
+msgid "✓ Done"
+msgstr "✓ Xong"
+
 # ── Screenshot overlay (capture review) ──────────────────────────────────────────
 msgid "Screenshot copied"
 msgstr "Đã chụp ảnh màn hình"

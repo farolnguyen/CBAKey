@@ -407,6 +407,33 @@ msgstr ""
 msgid "Select screenshot folder"
 msgstr ""
 
+msgid "Allow drawing on screenshot before saving"
+msgstr ""
+
+msgid "After capture, opens a small editor to draw arrows, boxes, text, or highlights before copy/save."
+msgstr ""
+
+msgid "Draw on screenshot"
+msgstr ""
+
+msgid "🖊  Pen"
+msgstr ""
+
+msgid "➜  Arrow"
+msgstr ""
+
+msgid "🖍  Highlight"
+msgstr ""
+
+msgid "🔤  Text"
+msgstr ""
+
+msgid "↶ Undo"
+msgstr ""
+
+msgid "✓ Done"
+msgstr ""
+
 # ── Screenshot overlay (capture review) ──────────────────────────────────────────
 msgid "Screenshot copied"
 msgstr ""
