@@ -896,10 +896,12 @@ private:
         ui.registerAction("farolkey-dict", &dictAction_);
 
         // Clipboard History — launches farolkey-clipboard --show as a detached process.
+        // Always spawn even when disabled: farolkey-clipboard's own __main__ checks
+        // enable_clipboard and shows a "disabled" notification before exiting — returning
+        // early here would silently swallow that notification.
         refreshClipboardLabel();
         clipboardAction_.connect<fcitx::SimpleAction::Activated>([this](fcitx::InputContext* ic) {
             FCITX_UNUSED(ic);
-            if (!enableClipboard_) return;
             if (const pid_t pid = fork(); pid == 0) {
                 execlp("farolkey-clipboard", "farolkey-clipboard", "--show", nullptr);
                 _exit(1);
