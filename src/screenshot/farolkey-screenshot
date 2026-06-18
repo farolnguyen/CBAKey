@@ -1411,6 +1411,7 @@ class DrawOverlay(Gtk.Window):
         self._current_color = (1.0, 0.0, 0.0, 1.0)  # red
         self._current_width = 4.0
         self._text_popover_entry: Optional[Gtk.Entry] = None
+        self._text_popover_cancel: Optional[Callable] = None
 
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_resizable(False)
@@ -1527,6 +1528,11 @@ class DrawOverlay(Gtk.Window):
     def _on_press(self, _widget, event):
         if event.button != 1:
             return False
+        if self._text_popover_cancel is not None:
+            # Clicking elsewhere on the canvas discards the pending text box
+            # (it's a separate widget on top of the canvas, so a press here
+            # means the click landed outside it).
+            self._text_popover_cancel()
         x, y = self._to_image_coords(event.x, event.y)
         if self._current_tool == 'text':
             self._start_text_entry(event.x, event.y, x, y)
@@ -1569,17 +1575,27 @@ class DrawOverlay(Gtk.Window):
     def _start_text_entry(self, disp_x, disp_y, img_x, img_y):
         if self._text_popover_entry is not None:
             return  # an entry is already open
+
         entry = Gtk.Entry()
-        entry.set_size_request(160, -1)
-        self._fixed.put(entry, int(disp_x), int(disp_y))
-        entry.show()
+        entry.set_size_request(140, -1)
+        confirm_btn = Gtk.Button(label='✓')
+        cancel_btn  = Gtk.Button(label='✕')
+
+        box = Gtk.Box(spacing=2)
+        box.pack_start(entry, False, False, 0)
+        box.pack_start(confirm_btn, False, False, 0)
+        box.pack_start(cancel_btn, False, False, 0)
+
+        self._fixed.put(box, int(disp_x), int(disp_y))
+        box.show_all()
         entry.grab_focus()
         self._text_popover_entry = entry
 
-        def _finish(_widget=None):
+        def _confirm(_widget=None):
             text = entry.get_text().strip()
-            self._fixed.remove(entry)
+            self._fixed.remove(box)
             self._text_popover_entry = None
+            self._text_popover_cancel = None
             if text:
                 self._annotations.append({
                     'kind': 'text', 'color': self._current_color,
@@ -1588,16 +1604,22 @@ class DrawOverlay(Gtk.Window):
                 })
                 self._canvas.queue_draw()
 
+        def _cancel(_widget=None):
+            self._fixed.remove(box)
+            self._text_popover_entry = None
+            self._text_popover_cancel = None
+
         def _on_entry_key(_widget, event):
             if event.keyval == Gdk.KEY_Escape:
-                self._fixed.remove(entry)
-                self._text_popover_entry = None
+                _cancel()
                 return True
             return False
 
-        entry.connect('activate', _finish)
-        entry.connect('focus-out-event', lambda w, e: _finish())
+        entry.connect('activate', _confirm)
+        confirm_btn.connect('clicked', _confirm)
+        cancel_btn.connect('clicked', _cancel)
         entry.connect('key-press-event', _on_entry_key)
+        self._text_popover_cancel = _cancel
 
     # ── Rendering ────────────────────────────────────────────────────────────
 
