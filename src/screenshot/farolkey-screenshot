@@ -1358,6 +1358,9 @@ button.dtool {
 }
 button.dtool:hover  { background-color: rgba(255,255,255,0.15); }
 button.dtool.active { background-color: rgba(60,140,255,0.45); }
+drawingarea.draw-canvas {
+    border: 2px solid rgba(255,255,255,0.35);
+}
 """
 
 # (id, label) — shown in the Draw toolbar in this order.
@@ -1420,7 +1423,10 @@ class DrawOverlay(Gtk.Window):
         vbox.pack_start(self._build_toolbar(), False, False, 0)
 
         self._fixed = Gtk.Fixed()
+        self._fixed.set_halign(Gtk.Align.CENTER)
+        self._fixed.set_margin_top(8); self._fixed.set_margin_bottom(8)
         self._canvas = Gtk.DrawingArea()
+        self._canvas.get_style_context().add_class('draw-canvas')
         self._canvas.set_size_request(disp_w, disp_h)
         self._canvas.add_events(
             Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK |
@@ -1787,6 +1793,7 @@ class CaptureReviewOverlay:
                 finish(final_png, self._conf, **finish_kwargs)
             def _on_cancel():
                 log.info('markup cancelled — capture discarded')
+                Gtk.main_quit()
             DrawOverlay(png, on_done=_on_done, on_cancel=_on_cancel).show_all()
         else:
             finish(png, self._conf, **finish_kwargs)
