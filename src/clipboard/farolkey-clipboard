@@ -118,16 +118,25 @@ def _acquire_daemon_lock() -> bool:
     to the socket, another still holding a stale hotkey grab — which would
     make hotkey-triggered and systray-triggered popups diverge (different
     history, different UI state).
+
+    Retries briefly: when Settings disables then re-enables Clipboard in
+    quick succession, the old daemon (just `pkill`ed) may not have fully
+    exited and released the lock yet — a hard first-try failure here would
+    make the new daemon silently give up, leaving no daemon running at all
+    (hotkey appears completely dead) instead of just starting a beat later.
     """
     global _daemon_lock_fd
-    try:
-        _daemon_lock_fd = open(_DAEMON_LOCK_PATH, 'w')
-        fcntl.flock(_daemon_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        _daemon_lock_fd.write(str(os.getpid()))
-        _daemon_lock_fd.flush()
-        return True
-    except OSError:
-        return False
+    import time as _time
+    for _ in range(10):  # up to ~1s total
+        try:
+            _daemon_lock_fd = open(_DAEMON_LOCK_PATH, 'w')
+            fcntl.flock(_daemon_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _daemon_lock_fd.write(str(os.getpid()))
+            _daemon_lock_fd.flush()
+            return True
+        except OSError:
+            _time.sleep(0.1)
+    return False
 
 MAX_ITEMS    = 50
 THUMB_HEIGHT = 72
