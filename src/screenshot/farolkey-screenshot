@@ -1416,6 +1416,7 @@ class DrawOverlay(Gtk.Window):
         self.set_resizable(False)
         self.get_style_context().add_class('draw-win')
         self.connect('key-press-event', self._on_key)
+        self.connect('delete-event', self._on_delete)
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(vbox)
@@ -1684,6 +1685,12 @@ class DrawOverlay(Gtk.Window):
     def _do_cancel(self):
         self.destroy()
         self._on_cancel()
+
+    def _on_delete(self, _widget, _event):
+        """Window manager close button (X) — treat exactly like the in-app Cancel
+        button, so the capture is discarded and the process still exits cleanly."""
+        self._do_cancel()
+        return True
 
 
 class CaptureReviewOverlay:
