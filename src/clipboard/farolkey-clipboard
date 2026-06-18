@@ -13,6 +13,7 @@ gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 
+import fcntl
 import hashlib
 import json
 import os
@@ -105,6 +106,28 @@ def _images_dir() -> Path:
 
 HISTORY_FILE = _data_dir() / 'clipboard_history.json'
 SOCKET_PATH  = _data_dir() / 'clipboard.sock'
+_DAEMON_LOCK_PATH = '/tmp/farolkey-clipboard-daemon.lock'
+_daemon_lock_fd = None   # kept open for the lifetime of the daemon process
+
+
+def _acquire_daemon_lock() -> bool:
+    """Return True if this process is the sole --daemon instance.
+
+    Prevents two daemons running at once (e.g. autostart + manual restart
+    racing) from ever splitting into two independent processes — one bound
+    to the socket, another still holding a stale hotkey grab — which would
+    make hotkey-triggered and systray-triggered popups diverge (different
+    history, different UI state).
+    """
+    global _daemon_lock_fd
+    try:
+        _daemon_lock_fd = open(_DAEMON_LOCK_PATH, 'w')
+        fcntl.flock(_daemon_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _daemon_lock_fd.write(str(os.getpid()))
+        _daemon_lock_fd.flush()
+        return True
+    except OSError:
+        return False
 
 MAX_ITEMS    = 50
 THUMB_HEIGHT = 72
@@ -1272,12 +1295,21 @@ def _start_pynput_hotkey(on_trigger, hotkey: str = 'ctrl+super+v'):
 def run_daemon():
     """Persistent background daemon: monitors clipboard + serves SHOW."""
     global _active_monitor
+    if not _acquire_daemon_lock():
+        log.warning('another --daemon instance is already running, exiting')
+        sys.exit(0)
     history = ClipboardHistory()
     _active_monitor = ClipboardMonitor(history)
     log.info('daemon started, history: %d items', len(history._entries))
 
     server = PopupServer(history)
-    server.start()
+    try:
+        server.start()
+    except RuntimeError:
+        # The daemon-lock above should make this unreachable in practice, but
+        # fail loudly-but-safely instead of an unhandled crash if it ever races.
+        log.warning('socket already bound by another process, exiting')
+        sys.exit(0)
 
     hotkey_str = load_clipboard_conf().get('clipboard_hotkey', 'ctrl+super+v')
     if _is_wayland():
