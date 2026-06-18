@@ -437,6 +437,12 @@ msgstr "🖍  Highlight"
 msgid "🔤  Text"
 msgstr "🔤  Chữ"
 
+msgid "✥  Move"
+msgstr "✥  Di chuyển"
+
+msgid "🧽  Eraser"
+msgstr "🧽  Cục gôm"
+
 msgid "↶ Undo"
 msgstr "↶ Hoàn tác"
 

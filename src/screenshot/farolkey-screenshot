@@ -22,6 +22,7 @@ from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 import cairo
 gi.require_foreign('cairo')
 
+import copy
 import io
 import math
 import os
@@ -1372,8 +1373,39 @@ _DRAW_TOOLS = [
     ('text',      _('🔤  Text')),
 ]
 
+# (id, label) — shown next to the Undo button, separate from the draw tools above.
+_DRAW_EDIT_TOOLS = [
+    ('move',   _('✥  Move')),
+    ('eraser', _('🧽  Eraser')),
+]
+
 _HIGHLIGHT_ALPHA = 0.35
 _ARROWHEAD_ANGLE = math.radians(25)
+_MOVE_HANDLE = 10       # px tolerance (image-space) for resize-handle hit-testing
+_HIT_TOLERANCE = 6      # px tolerance (image-space) for selecting a thin stroke
+
+
+def _remap_point(p, old_bbox, new_bbox):
+    """Map point p from old_bbox to the equivalent relative position in new_bbox."""
+    ox0, oy0, ox1, oy1 = old_bbox
+    nx0, ny0, nx1, ny1 = new_bbox
+    ow, oh = max(ox1 - ox0, 1e-6), max(oy1 - oy0, 1e-6)
+    rx, ry = (p[0] - ox0) / ow, (p[1] - oy0) / oh
+    return nx0 + rx * (nx1 - nx0), ny0 + ry * (ny1 - ny0)
+
+
+def _point_near_segment(px, py, a, b, tol):
+    """True if (px, py) is within `tol` of the line segment a→b."""
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    length_sq = dx * dx + dy * dy
+    if length_sq < 1e-9:
+        t = 0.0
+    else:
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length_sq))
+    cx, cy = ax + t * dx, ay + t * dy
+    return math.hypot(px - cx, py - cy) <= tol
 
 
 class DrawOverlay(Gtk.Window):
@@ -1412,6 +1444,10 @@ class DrawOverlay(Gtk.Window):
         self._current_width = 4.0
         self._text_popover_entry: Optional[Gtk.Entry] = None
         self._text_popover_cancel: Optional[Callable] = None
+        self._selected_index: Optional[int] = None
+        self._drag: Optional[dict] = None
+        self._erasing = False
+        self._undo_stack: list = []
 
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_resizable(False)
@@ -1474,6 +1510,17 @@ class DrawOverlay(Gtk.Window):
 
         bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 6)
 
+        for tool_id, label in _DRAW_EDIT_TOOLS:
+            btn = Gtk.Button(label=label)
+            btn.get_style_context().add_class('dtool')
+            if tool_id == self._current_tool:
+                btn.get_style_context().add_class('active')
+            btn.connect('clicked', self._on_tool_clicked, tool_id)
+            self._tool_buttons[tool_id] = btn
+            bar.pack_start(btn, False, False, 0)
+
+        bar.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 6)
+
         undo_btn = Gtk.Button(label=_('↶ Undo'))
         undo_btn.get_style_context().add_class('dtool')
         undo_btn.connect('clicked', lambda _b: self._undo())
@@ -1501,24 +1548,127 @@ class DrawOverlay(Gtk.Window):
         self._tool_buttons[self._current_tool].get_style_context().remove_class('active')
         self._current_tool = tool_id
         self._tool_buttons[tool_id].get_style_context().add_class('active')
+        if tool_id != 'move':
+            self._selected_index = None
+            self._drag = None
+            self._canvas.queue_draw()
 
     def _on_color_set(self, btn):
         rgba = btn.get_rgba()
-        self._current_color = (rgba.red, rgba.green, rgba.blue, rgba.alpha)
+        new_color = (rgba.red, rgba.green, rgba.blue, rgba.alpha)
+        if self._selected_index is not None:
+            ann = self._annotations[self._selected_index]
+            self._push_undo({'type': 'modify', 'index': self._selected_index,
+                              'before': copy.deepcopy(ann)})
+            ann['color'] = new_color
+            self._canvas.queue_draw()
+        else:
+            self._current_color = new_color
 
     def _on_width_changed(self, scale):
-        self._current_width = scale.get_value()
+        new_width = scale.get_value()
+        if self._selected_index is not None:
+            ann = self._annotations[self._selected_index]
+            if ann['kind'] in ('pen', 'arrow', 'rect'):
+                self._push_undo({'type': 'modify', 'index': self._selected_index,
+                                  'before': copy.deepcopy(ann)})
+                ann['width'] = new_width
+                self._canvas.queue_draw()
+        else:
+            self._current_width = new_width
 
     def _on_key(self, _widget, event):
         if (event.state & Gdk.ModifierType.CONTROL_MASK) and event.keyval in (Gdk.KEY_z, Gdk.KEY_Z):
             self._undo()
             return True
+        if event.keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace) and self._selected_index is not None:
+            self._erase_at(self._selected_index)
+            self._canvas.queue_draw()
+            return True
         return False
 
     def _undo(self):
-        if self._annotations:
-            self._annotations.pop()
-            self._canvas.queue_draw()
+        if not self._undo_stack:
+            return
+        action = self._undo_stack.pop()
+        if action['type'] == 'add':
+            if action['index'] < len(self._annotations):
+                del self._annotations[action['index']]
+        elif action['type'] == 'erase':
+            self._annotations.insert(action['index'], action['annotation'])
+        elif action['type'] == 'modify':
+            self._annotations[action['index']] = action['before']
+        if self._selected_index is not None and self._selected_index >= len(self._annotations):
+            self._selected_index = None
+        self._canvas.queue_draw()
+
+    def _push_undo(self, action: dict):
+        self._undo_stack.append(action)
+
+    # ── Bounding box / hit-testing (image-space coords) ──────────────────────
+
+    def _annotation_bbox(self, ann):
+        kind = ann['kind']
+        if kind == 'pen':
+            xs = [p[0] for p in ann['points']]
+            ys = [p[1] for p in ann['points']]
+            return min(xs), min(ys), max(xs), max(ys)
+        if kind == 'text':
+            surface = cairo.ImageSurface(cairo.FORMAT_A8, 1, 1)
+            cr = cairo.Context(surface)
+            cr.select_font_face('Sans', cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+            cr.set_font_size(ann['font_size'])
+            xb, yb, w, h, _xa, _ya = cr.text_extents(ann['text'])
+            x, y = ann['pos']
+            return x + xb, y + yb, x + xb + w, y + yb + h
+        # arrow / rect / highlight
+        (x0, y0), (x1, y1) = ann['start'], ann['end']
+        return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
+
+    def _hit_test_annotation(self, x, y) -> Optional[int]:
+        """Topmost annotation under (x, y), or None."""
+        for i in reversed(range(len(self._annotations))):
+            ann = self._annotations[i]
+            kind = ann['kind']
+            if kind == 'arrow':
+                if _point_near_segment(x, y, ann['start'], ann['end'],
+                                        _HIT_TOLERANCE + ann['width'] / 2):
+                    return i
+            elif kind == 'pen':
+                pts = ann['points']
+                tol = _HIT_TOLERANCE + ann['width'] / 2
+                for j in range(len(pts) - 1):
+                    if _point_near_segment(x, y, pts[j], pts[j + 1], tol):
+                        return i
+            else:  # rect / highlight / text
+                x0, y0, x1, y1 = self._annotation_bbox(ann)
+                if x0 - _HIT_TOLERANCE <= x <= x1 + _HIT_TOLERANCE and \
+                   y0 - _HIT_TOLERANCE <= y <= y1 + _HIT_TOLERANCE:
+                    return i
+        return None
+
+    def _resize_hit_test(self, x, y, bbox):
+        """Return one of 'tl'/'tr'/'bl'/'br'/'t'/'b'/'l'/'r' or None."""
+        x0, y0, x1, y1 = bbox
+        H = _MOVE_HANDLE
+        if abs(x - x0) <= H and abs(y - y0) <= H: return 'tl'
+        if abs(x - x1) <= H and abs(y - y0) <= H: return 'tr'
+        if abs(x - x0) <= H and abs(y - y1) <= H: return 'bl'
+        if abs(x - x1) <= H and abs(y - y1) <= H: return 'br'
+        if x0 <= x <= x1 and abs(y - y0) <= H: return 't'
+        if x0 <= x <= x1 and abs(y - y1) <= H: return 'b'
+        if y0 <= y <= y1 and abs(x - x0) <= H: return 'l'
+        if y0 <= y <= y1 and abs(x - x1) <= H: return 'r'
+        return None
+
+    def _erase_at(self, idx):
+        ann = self._annotations[idx]
+        self._push_undo({'type': 'erase', 'index': idx, 'annotation': copy.deepcopy(ann)})
+        del self._annotations[idx]
+        if self._selected_index == idx:
+            self._selected_index = None
+        elif self._selected_index is not None and self._selected_index > idx:
+            self._selected_index -= 1
 
     # ── Mouse handling (coords here are display-space; / self._scale → image-space) ──
 
@@ -1534,6 +1684,17 @@ class DrawOverlay(Gtk.Window):
             # means the click landed outside it).
             self._text_popover_cancel()
         x, y = self._to_image_coords(event.x, event.y)
+
+        if self._current_tool == 'move':
+            self._handle_move_press(x, y)
+            return True
+        if self._current_tool == 'eraser':
+            self._erasing = True
+            idx = self._hit_test_annotation(x, y)
+            if idx is not None:
+                self._erase_at(idx)
+                self._canvas.queue_draw()
+            return True
         if self._current_tool == 'text':
             self._start_text_entry(event.x, event.y, x, y)
             return True
@@ -1549,12 +1710,76 @@ class DrawOverlay(Gtk.Window):
             }
         return True
 
+    def _handle_move_press(self, x, y):
+        if self._selected_index is not None and self._selected_index < len(self._annotations):
+            ann = self._annotations[self._selected_index]
+            if ann['kind'] != 'pen':
+                bbox = self._annotation_bbox(ann)
+                handle = self._resize_hit_test(x, y, bbox)
+                if handle is not None:
+                    self._drag = {'mode': handle, 'index': self._selected_index,
+                                  'before': copy.deepcopy(ann), 'bbox': bbox}
+                    return
+        idx = self._hit_test_annotation(x, y)
+        if idx is not None:
+            self._selected_index = idx
+            ann = self._annotations[idx]
+            self._drag = {'mode': 'move', 'index': idx,
+                          'before': copy.deepcopy(ann), 'start': (x, y)}
+        else:
+            self._selected_index = None
+            self._drag = None
+
+    def _apply_drag(self, x, y):
+        drag = self._drag
+        ann = self._annotations[drag['index']]
+        before = drag['before']
+        if drag['mode'] == 'move':
+            sx, sy = drag['start']
+            dx, dy = x - sx, y - sy
+            if ann['kind'] == 'pen':
+                ann['points'] = [(p[0] + dx, p[1] + dy) for p in before['points']]
+            elif ann['kind'] == 'text':
+                bx, by = before['pos']
+                ann['pos'] = (bx + dx, by + dy)
+            else:
+                (bx0, by0), (bx1, by1) = before['start'], before['end']
+                ann['start'] = (bx0 + dx, by0 + dy)
+                ann['end']   = (bx1 + dx, by1 + dy)
+        else:
+            x0, y0, x1, y1 = drag['bbox']
+            nx0, ny0, nx1, ny1 = x0, y0, x1, y1
+            mode = drag['mode']
+            if 'l' in mode: nx0 = x
+            if 'r' in mode: nx1 = x
+            if 't' in mode: ny0 = y
+            if 'b' in mode: ny1 = y
+            new_bbox = (min(nx0, nx1), min(ny0, ny1), max(nx0, nx1), max(ny0, ny1))
+            old_bbox = drag['bbox']
+            if ann['kind'] == 'text':
+                scale = (new_bbox[3] - new_bbox[1]) / max(old_bbox[3] - old_bbox[1], 1e-6)
+                ann['pos'] = _remap_point(before['pos'], old_bbox, new_bbox)
+                ann['font_size'] = max(6.0, before['font_size'] * scale)
+            else:
+                ann['start'] = _remap_point(before['start'], old_bbox, new_bbox)
+                ann['end']   = _remap_point(before['end'], old_bbox, new_bbox)
+
     def _on_motion(self, _widget, event):
-        if not self._in_progress:
-            return False
         if not (event.state & Gdk.ModifierType.BUTTON1_MASK):
             return False
         x, y = self._to_image_coords(event.x, event.y)
+        if self._current_tool == 'move' and self._drag is not None:
+            self._apply_drag(x, y)
+            self._canvas.queue_draw()
+            return True
+        if self._current_tool == 'eraser' and self._erasing:
+            idx = self._hit_test_annotation(x, y)
+            if idx is not None:
+                self._erase_at(idx)
+                self._canvas.queue_draw()
+            return True
+        if not self._in_progress:
+            return False
         if self._in_progress['kind'] == 'pen':
             self._in_progress['points'].append((x, y))
         else:
@@ -1563,9 +1788,23 @@ class DrawOverlay(Gtk.Window):
         return True
 
     def _on_release(self, _widget, event):
-        if event.button != 1 or not self._in_progress:
+        if event.button != 1:
+            return False
+        if self._current_tool == 'move' and self._drag is not None:
+            drag = self._drag
+            ann = self._annotations[drag['index']]
+            if ann != drag['before']:
+                self._push_undo({'type': 'modify', 'index': drag['index'],
+                                  'before': drag['before']})
+            self._drag = None
+            return True
+        if self._current_tool == 'eraser':
+            self._erasing = False
+            return True
+        if not self._in_progress:
             return False
         self._annotations.append(self._in_progress)
+        self._push_undo({'type': 'add', 'index': len(self._annotations) - 1})
         self._in_progress = None
         self._canvas.queue_draw()
         return True
@@ -1602,6 +1841,7 @@ class DrawOverlay(Gtk.Window):
                     'font_size': 10 + self._current_width * 2,
                     'pos': (img_x, img_y), 'text': text,
                 })
+                self._push_undo({'type': 'add', 'index': len(self._annotations) - 1})
                 self._canvas.queue_draw()
 
         def _cancel(_widget=None):
@@ -1676,6 +1916,28 @@ class DrawOverlay(Gtk.Window):
             cr.move_to(x, y)
             cr.show_text(ann['text'])
 
+    def _draw_selection_box(self, cr, ann):
+        x0, y0, x1, y1 = self._annotation_bbox(ann)
+        cr.save()
+        cr.set_dash([4, 4])
+        cr.set_source_rgba(1, 1, 1, 0.85)
+        cr.set_line_width(1.5)
+        cr.rectangle(x0 - 3, y0 - 3, (x1 - x0) + 6, (y1 - y0) + 6)
+        cr.stroke()
+        cr.set_dash([])
+        if ann['kind'] != 'pen':
+            hs = 4  # half handle size, in image-space px
+            for hx, hy in ((x0, y0), (x1, y0), (x0, y1), (x1, y1),
+                           ((x0 + x1) / 2, y0), ((x0 + x1) / 2, y1),
+                           (x0, (y0 + y1) / 2), (x1, (y0 + y1) / 2)):
+                cr.set_source_rgba(1, 1, 1, 0.95)
+                cr.rectangle(hx - hs, hy - hs, hs * 2, hs * 2)
+                cr.fill()
+                cr.set_source_rgba(0, 0, 0, 0.6)
+                cr.rectangle(hx - hs, hy - hs, hs * 2, hs * 2)
+                cr.stroke()
+        cr.restore()
+
     def _on_draw(self, _widget, cr):
         cr.save()
         cr.scale(self._scale, self._scale)
@@ -1685,6 +1947,9 @@ class DrawOverlay(Gtk.Window):
             self._render_annotation(cr, ann)
         if self._in_progress:
             self._render_annotation(cr, self._in_progress)
+        if self._current_tool == 'move' and self._selected_index is not None \
+                and self._selected_index < len(self._annotations):
+            self._draw_selection_box(cr, self._annotations[self._selected_index])
         cr.restore()
         return False
 

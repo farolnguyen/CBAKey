@@ -428,6 +428,12 @@ msgstr ""
 msgid "🔤  Text"
 msgstr ""
 
+msgid "✥  Move"
+msgstr ""
+
+msgid "🧽  Eraser"
+msgstr ""
+
 msgid "↶ Undo"
 msgstr ""
 
