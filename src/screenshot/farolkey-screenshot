@@ -89,7 +89,7 @@ _DEFAULTS = {
     'instant_capture':  'false', # 'true' = confirm on mouse release; 'false' = review mode
     'hotkey_action':    'menu',  # 'menu' = show capture menu | 'fullscreen' | 'region'
     'show_notification': 'true',
-    'enable_markup':    'false', # 'true' = open draw/markup editor before save/copy
+    'enable_markup':    'true', # 'true' = open draw/markup editor before save/copy
 }
 
 def load_conf() -> dict:
@@ -2082,7 +2082,7 @@ class CaptureReviewOverlay:
 
     def _maybe_draw_then_finish(self, png, **finish_kwargs):
         """If markup is enabled, open DrawOverlay before finish(); else finish() now."""
-        if self._conf.get('enable_markup', 'false').lower() == 'true':
+        if self._conf.get('enable_markup', 'true').lower() == 'true':
             def _on_done(final_png):
                 finish(final_png, self._conf, **finish_kwargs)
             def _on_cancel():

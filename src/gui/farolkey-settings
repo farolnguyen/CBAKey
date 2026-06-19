@@ -446,7 +446,7 @@ _SS_DEFAULTS = {
     'capture_mode':    'all',
     'hotkey_action':   'menu',
     'show_notification': 'true',
-    'enable_markup':   'false',
+    'enable_markup':   'true',
 }
 
 def load_screenshot_conf() -> dict:
@@ -2101,7 +2101,7 @@ class SettingsWindow(Gtk.Window):
         markup_row = Gtk.Box(spacing=12)
         markup_lbl = Gtk.Label(label=_('Allow drawing on screenshot before saving'), xalign=0)
         self._ss_markup_switch = Gtk.Switch()
-        self._ss_markup_switch.set_active(conf.get('enable_markup', 'false').lower() == 'true')
+        self._ss_markup_switch.set_active(conf.get('enable_markup', 'true').lower() == 'true')
         self._ss_markup_switch.set_valign(Gtk.Align.CENTER)
         markup_row.pack_start(markup_lbl, True, True, 0)
         markup_row.pack_start(self._ss_markup_switch, False, False, 0)
