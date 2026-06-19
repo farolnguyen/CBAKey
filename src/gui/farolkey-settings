@@ -1972,13 +1972,17 @@ class SettingsWindow(Gtk.Window):
         return False
 
     def _apply_cb_enable(self, enabled, daemon_already_killed=False):
+        # Write the new flag BEFORE starting the daemon: the daemon reads this
+        # file at startup (__main__) to decide whether to exit immediately —
+        # starting it first risks a race where it reads the still-stale
+        # 'false' value and silently exits before the write below lands.
+        save_general_conf({'enable_clipboard': 'true' if enabled else 'false'})
         if enabled:
             daemon = shutil.which('farolkey-clipboard')
             if daemon:
                 subprocess.Popen([daemon, '--daemon'], start_new_session=True)
         elif not daemon_already_killed:
             subprocess.run(['pkill', '-f', 'farolkey-clipboard'], capture_output=True)
-        save_general_conf({'enable_clipboard': 'true' if enabled else 'false'})
         try:
             subprocess.run(['farolkey-reload'], capture_output=True, timeout=3)
         except Exception:
