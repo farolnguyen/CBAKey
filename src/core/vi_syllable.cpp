@@ -237,7 +237,8 @@ std::size_t longestCodaLength(const std::u32string& base) {
 
 std::optional<SyllableSpan> parseSingleSyllableRange(const std::u32string& buffer,
                                                      std::size_t begin,
-                                                     std::size_t end) {
+                                                     std::size_t end,
+                                                     bool allowToneOnGlide = false) {
     if (begin >= end || end > buffer.size()) {
         return std::nullopt;
     }
@@ -294,7 +295,13 @@ std::optional<SyllableSpan> parseSingleSyllableRange(const std::u32string& buffe
     // Typo "chủân" / "chủấn" / NFD "chu\u0309a\u0302n": nucleus is u-bucket vowel with tone + a letter
     // from the **â** tone-set row (â ấ ầ …). That is not a legal single Vietnamese syllable (cf. "thuần"
     // where the leading u is toneless). Plain "a" row (without circumflex) is still allowed (e.g. "thúa").
-    if (coreEnd - nucleusBegin == 2) {
+    // allowToneOnGlide bypasses this guard: live tone-normalization (M17.4, see
+    // normalizeSyllableTonePlacement) needs to recognize this exact pattern as a
+    // syllable-in-progress — e.g. Telex "xuâ" + tone key 's' (applied while the coda
+    // is still unknown) produces transient "xúât" before coda 't' arrives — in order
+    // to fix it (move the tone from 'ú' to 'â'). Rejecting the span here would prevent
+    // findLastSyllable from ever handing back a fixable span.
+    if (!allowToneOnGlide && coreEnd - nucleusBegin == 2) {
         const char32_t v0 = buffer[begin + nucleusBegin];
         const char32_t v1 = buffer[begin + nucleusBegin + 1];
         std::size_t t0 = 0;
@@ -541,10 +548,10 @@ std::optional<std::vector<SyllableSpan>> segmentWholeBufferPreferMaxSyllables(co
     return segmentWholeBufferWithPreference(buffer, false);
 }
 
-std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer) {
+std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer, bool allowToneOnGlide) {
     std::optional<SyllableSpan> best;
     for (std::size_t begin = 0; begin < buffer.size(); ++begin) {
-        const auto span = parseSingleSyllableRange(buffer, begin, buffer.size());
+        const auto span = parseSingleSyllableRange(buffer, begin, buffer.size(), allowToneOnGlide);
         if (!span) {
             continue;
         }

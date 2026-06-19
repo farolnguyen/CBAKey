@@ -21,7 +21,14 @@ struct StableComposeSplit {
 };
 
 // Returns the longest valid syllable suffix that ends at buffer.back().
-std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer);
+//
+// allowToneOnGlide: when true, relaxes the "tone stuck on a toneless u/i/y
+// glide" typo guard (e.g. rejects "chủân" as one syllable by default). Live
+// preedit tone-normalization needs this relaxed so it can recognize and fix
+// an intermediate composing state like "xúât" (tone applied to 'u' before
+// the coda confirms the nucleus is "uâ") — see normalizeSyllableTonePlacement.
+std::optional<SyllableSpan> findLastSyllable(const std::u32string& buffer,
+                                              bool allowToneOnGlide = false);
 
 // Returns a conservative split when the whole buffer can be segmented into
 // multiple valid syllables and the final editable suffix already looks like a

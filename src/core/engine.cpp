@@ -685,7 +685,7 @@ ProcessResult Engine::processVietnameseKey(const KeyEvent& event) {
     // Moves misplaced tones and strips invalid glide diacritics in the oaGlide pattern.
     // Modifies decoded in-place so maybeAutoCommitStablePrefix sees the corrected form.
     const auto applyPreeditNormalize = [&](std::u32string& dec) {
-        if (const auto span = vi_syllable::findLastSyllable(dec)) {
+        if (const auto span = vi_syllable::findLastSyllable(dec, /*allowToneOnGlide=*/true)) {
             if (vi_syllable::normalizeSyllableTonePlacement(dec, *span)) {
                 preeditBuffer_ = encodeUtf8(dec);
             }
