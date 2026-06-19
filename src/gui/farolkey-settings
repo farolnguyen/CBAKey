@@ -2837,7 +2837,11 @@ class SettingsWindow(Gtk.Window):
         time.sleep(0.4)
         daemon_path = shutil.which(daemon_name)
         if daemon_path:
-            subprocess.Popen([daemon_path], start_new_session=True)
+            # farolkey-clipboard is multi-mode (--daemon/--show/--register-hotkey);
+            # with no args it defaults to --show, which opens a transient popup and
+            # exits shortly after instead of running as a persistent daemon.
+            args = [daemon_path, '--daemon'] if daemon_name == 'farolkey-clipboard' else [daemon_path]
+            subprocess.Popen(args, start_new_session=True)
             time.sleep(0.6)
             self._refresh_status()
         else:
