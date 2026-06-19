@@ -2821,7 +2821,11 @@ class SettingsWindow(Gtk.Window):
         checks = {
             'fcitx5':            'pgrep -x fcitx5',
             'farolkey_plugin':   'pgrep -x fcitx5',
-            'clipboard_daemon':  'pgrep -f farolkey-clipboard',
+            # Match only the persistent --daemon process — a transient `--show`
+            # popup also contains "farolkey-clipboard" in its argv and would
+            # otherwise be mistaken for the daemon being "Running". Pattern has
+            # no spaces so cmd.split() below keeps it as a single -f argument.
+            'clipboard_daemon':  'pgrep -f farolkey-clipboard.*--daemon',
             'screenshot_daemon': 'pgrep -f farolkey-screenshot-daemon',
         }
         for key, cmd in checks.items():
